@@ -147,6 +147,9 @@ test passwords.
 | `seed.sh` | Adds the test platforms, connections, users and group to a fresh database, through the REST API |
 | `stop.sh` | Stops all of the above |
 
+Tests are described in [tests/README.md](tests/README.md): unit tests run
+with every build, and `tests/run.sh` runs the live suites against this setup.
+
 Recreating the SSH, LDAP, AD or KDC containers generates new host keys and
 certificates, and resets their passwords. Pin the new fingerprints and reset the
 stored passwords afterwards.
