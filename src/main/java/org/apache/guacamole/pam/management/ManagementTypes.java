@@ -20,6 +20,7 @@ public final class ManagementTypes {
         register(new SshManagementType());
         register(new LdapManagementType());
         register(new KerberosManagementType());
+        register(new WinRmManagementType());
     }
 
     private ManagementTypes() {

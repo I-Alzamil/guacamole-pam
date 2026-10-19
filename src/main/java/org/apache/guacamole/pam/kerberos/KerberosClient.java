@@ -197,7 +197,11 @@ public class KerberosClient {
             return false;
 
         try {
-            newClient(target).requestTgt(target.getPrincipal(), password);
+            KOptions options = new KOptions();
+            options.add(KrbOption.USE_PASSWD, true);
+            options.add(KrbOption.CLIENT_PRINCIPAL, target.getPrincipal());
+            options.add(KrbOption.USER_PASSWD, password);
+            newClient(target).requestTgt(options);
             return true;
         }
         catch (KrbException e) {
@@ -208,14 +212,19 @@ public class KerberosClient {
 
     }
 
-    private static KrbClient newClient(KerberosTarget target) throws KrbException {
-        KrbClient client = new KrbClient(new KrbConfig());
-        client.setKdcRealm(target.getRealm());
-        client.setKdcHost(target.getKdc());
-        client.setKdcTcpPort(target.getKdcPort());
-        client.setAllowTcp(true);
-        client.setAllowUdp(false);
-        client.setTimeout(TIMEOUT_MS);
+    /**
+     * A client for the target's KDC that derives keys with the salt the KDC
+     * advertises. KrbClient only gathers the settings here.
+     */
+    private static SaltAwareKrbClient newClient(KerberosTarget target) throws KrbException {
+        KrbClient settings = new KrbClient(new KrbConfig());
+        settings.setKdcRealm(target.getRealm());
+        settings.setKdcHost(target.getKdc());
+        settings.setKdcTcpPort(target.getKdcPort());
+        settings.setAllowTcp(true);
+        settings.setAllowUdp(false);
+        settings.setTimeout(TIMEOUT_MS);
+        SaltAwareKrbClient client = new SaltAwareKrbClient(settings.getSetting());
         client.init();
         return client;
     }

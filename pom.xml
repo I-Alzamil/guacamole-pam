@@ -131,6 +131,38 @@
                                     <artifact>org.apache.kerby:*</artifact>
                                     <excludes>
                                         <exclude>META-INF/MANIFEST.MF</exclude>
+                                        <exclude>META-INF/DEPENDENCIES</exclude>
+                                    </excludes>
+                                </filter>
+                                <!-- Every Kerby module has the same Apache license: keep kerb-client's -->
+                                <filter>
+                                    <artifact>org.apache.kerby:kerby-*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/LICENSE</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <artifact>org.apache.kerby:kerb-co*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/LICENSE</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <artifact>org.apache.kerby:kerb-crypto</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/LICENSE</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <artifact>org.apache.kerby:kerb-util</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/LICENSE</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <artifact>com.hierynomus:smbj</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
                                     </excludes>
                                 </filter>
                                 <filter>
@@ -140,6 +172,12 @@
                                     </excludes>
                                 </filter>
                             </filters>
+                            <transformers>
+                                <!-- Merge the NOTICE files of Apache-licensed dependencies -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+                                    <addHeader>false</addHeader>
+                                </transformer>
+                            </transformers>
                         </configuration>
                     </execution>
                 </executions>
@@ -199,7 +237,42 @@
                     <groupId>org.apache.kerby</groupId>
                     <artifactId>token-provider</artifactId>
                 </exclusion>
+                <!-- Only used for keytab and credential cache files, not here -->
+                <exclusion>
+                    <groupId>commons-io</groupId>
+                    <artifactId>commons-io</artifactId>
+                </exclusion>
             </exclusions>
+        </dependency>
+
+        <!-- NTLM messages and responses (only), to log in to WinRM -->
+        <dependency>
+            <groupId>com.hierynomus</groupId>
+            <artifactId>smbj</artifactId>
+            <version>0.15.0</version>
+            <exclusions>
+                <!-- SMB transport only; the NTLM code uses the JCE -->
+                <exclusion>
+                    <groupId>org.bouncycastle</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>net.engio</groupId>
+                    <artifactId>mbassador</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.hierynomus</groupId>
+                    <artifactId>asn-one</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- Provided by Guacamole, so not bundled from the libraries above -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>2.0.17</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- JUnit -->

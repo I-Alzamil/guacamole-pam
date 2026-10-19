@@ -21,6 +21,9 @@
         "FIELD_HEADER_PAM_LDAP_DN": "Account DN:",
         "SECTION_HEADER_PAM_TYPE_KERBEROS": "Kerberos account",
         "FIELD_HEADER_PAM_KERBEROS_PRINCIPAL": "Principal (default: connection username, in the platform's realm):",
+        "SECTION_HEADER_PAM_TYPE_WINRM": "WinRM host",
+        "FIELD_HEADER_PAM_WINRM_HOSTNAME": "WinRM hostname (default: connection hostname):",
+        "FIELD_HEADER_PAM_WINRM_CERTIFICATE": "Trusted certificate (SHA-256 fingerprint, empty: trust the first one seen):",
         "SECTION_HEADER_PAM_CHECKOUT": "Access requests",
         "FIELD_HEADER_PAM_CHECKOUT_DURATION": "Access time limit (minutes, default 60):",
         "FIELD_HEADER_PAM_CHECKOUT_EXCLUSIVE": "Only one holder at a time:",
@@ -68,6 +71,7 @@
         "HELP_SYNTAX_SEND_EMPTY": "Press Enter (or \"@send text\" to send text)",
         "HELP_SYNTAX_TIMEOUT": "Seconds each following expect may wait (default 10)",
         "HELP_TYPE_KERBEROS": "Change Kerberos principal passwords with kpasswd (RFC 3244), as an admin principal or as the principal itself. Works with MIT Kerberos, Heimdal and Active Directory.",
+        "HELP_TYPE_WINRM": "Set local Windows account passwords over WinRM (HTTPS), as an administrator or as the account itself (which must then be an administrator). Works whatever the host's channel binding setting (CbtHardeningLevel).",
         "HELP_TYPE_LDAP": "Change directory account passwords over LDAPS or StartTLS, as an administrator or as the account itself. Works with OpenLDAP and Active Directory.",
         "HELP_TYPE_SSH": "Log in over SSH and change the password with a send/expect script, such as passwd on Linux or net user on Windows.",
         "INFO_ACTIVE": "Active",
@@ -129,6 +133,7 @@
         "TYPE_KERBEROS": "Kerberos",
         "TYPE_LDAP": "LDAP / Active Directory",
         "TYPE_SSH": "SSH",
+        "TYPE_WINRM": "WinRM (Windows local accounts)",
         "HOME": {
             "HELP_MANAGE": "Open the request (to release it, or cancel it)",
             "TEXT_ACCESS_HELD": "Your access until {EXPIRES}",
@@ -216,6 +221,13 @@
         "FIELD_HEADER_KERBEROS_KPASSWD_PORT": "Password change port (default 464):",
         "FIELD_HEADER_KERBEROS_ADMIN_PRINCIPAL": "Admin principal (empty: each principal changes its own password):",
         "FIELD_HEADER_KERBEROS_ADMIN_PASSWORD": "Admin principal password:"
+    },
+    "PAM_TYPE_WINRM": {
+        "SECTION_HEADER_WINRM": "WinRM (HTTPS)",
+        "SECTION_HEADER_WINRM_ROTATION": "Administrator (optional)",
+        "FIELD_HEADER_WINRM_PORT": "HTTPS port (default 5986):",
+        "FIELD_HEADER_WINRM_ADMIN_USERNAME": "Local administrator (empty: each account sets its own password):",
+        "FIELD_HEADER_WINRM_ADMIN_PASSWORD": "Administrator password:"
     },
     "PAM_POLICY": {
         "SECTION_HEADER_POLICY": "Rotation policy",

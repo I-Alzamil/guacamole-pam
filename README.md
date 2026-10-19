@@ -4,8 +4,9 @@ Privileged access management for [Apache Guacamole](https://guacamole.apache.org
 
 - **Password rotation.** Each connection's password is either just stored, or
   managed by a *platform*. A platform describes how passwords are changed: over
-  SSH with a send/expect script, over LDAP / Active Directory, or over Kerberos
-  (kpasswd, for MIT Kerberos, Heimdal and Active Directory realms). It also sets
+  SSH with a send/expect script, over LDAP / Active Directory, over Kerberos
+  (kpasswd, for MIT Kerberos, Heimdal and Active Directory realms), or over
+  WinRM (local Windows accounts). It also sets
   when they're changed: never, after each use, or periodically. The new password
   is only stored once the target accepts it.
 - **Accounts.** An "Account" connection type holds a password that users check
@@ -114,6 +115,15 @@ connection needs in its *Access requests* section.
   (port 88, TCP) and kpasswd (port 464, TCP) need to be reachable. Without an
   admin principal, each principal changes its own password, which needs its
   current one.
+- **WinRM needs HTTPS, and pins each host's certificate.** WinRM platforms
+  connect to port 5986 only, and log in with NTLM bound to the TLS channel, so
+  they work whatever the host's `CbtHardeningLevel` (`Strict` recommended).
+  Like SSH host keys, the certificate is trusted on first contact and required
+  from then on; pin it in the connection's **Trusted certificate** field to
+  skip that first contact. Passwords are sent on PowerShell's input, never on a
+  command line. Without an administrator on the platform, each account sets its
+  own password, so it must be a local administrator. Only local accounts are
+  supported: manage domain accounts with an LDAP or Kerberos platform.
 
 ## Development
 
