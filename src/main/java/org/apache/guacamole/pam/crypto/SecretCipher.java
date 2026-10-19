@@ -160,7 +160,7 @@ public final class SecretCipher {
             System.err.println("Usage: PAM_ENCRYPTION_KEY=<key> java -cp guacamole-pam-1.6.0.jar "
                     + SecretCipher.class.getName() + " <purpose> < value");
             System.err.println("Purposes: " + Secrets.PLATFORM_SECRETS + ", " + Secrets.PENDING_PASSWORD + ", "
-                    + Secrets.CONNECTION_PASSWORD);
+                    + Secrets.CONNECTION_PASSWORD + ", " + Secrets.MANAGED_PASSWORD + ":<connection id>");
             System.exit(2);
         }
 

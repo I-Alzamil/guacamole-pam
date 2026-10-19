@@ -63,7 +63,7 @@ check "managed: another parameter" 204 "$(status_of "$(edit_connection "$EDITOR"
 check "stored: username" 204 "$(status_of "$(edit_connection "$EDITOR" "$UNMANAGED" '{"username":"svc-stored-2"}')")"
 R=$(api POST "$DATA/connections" "$EDITOR" '{"name":"t2 editor stored","parentIdentifier":"ROOT","protocol":"pam-account","parameters":{"username":"x"},"attributes":{}}')
 check "creating a stored connection" 200 "$(status_of "$R")"
-CREATED=$(json_get "${R#* }" "d.get('identifier')"); [ -n "$CREATED" ] && on_cleanup "api DELETE '$DATA/connections/$CREATED' '$ADMIN'"
+CREATED=$(json_get "${R#* }" "d.get('identifier')"); [ -n "$CREATED" ] && on_cleanup "api DELETE '$DATA/connections/$CREATED' \"\$ADMIN\""
 check "an administrator may change a managed connection's username" "204 204" \
     "$(status_of "$(edit_connection "$ADMIN" "$MANAGED" '{"username":"t2victim"}')") $(status_of "$(edit_connection "$ADMIN" "$MANAGED" '{"username":"t2sec"}')")"
 

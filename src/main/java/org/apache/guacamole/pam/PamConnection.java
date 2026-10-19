@@ -7,25 +7,30 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
+import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.net.DelegatingGuacamoleTunnel;
 import org.apache.guacamole.net.GuacamoleTunnel;
 import org.apache.guacamole.net.auth.Connection;
 import org.apache.guacamole.net.auth.DelegatingConnection;
 import org.apache.guacamole.pam.checkout.CheckoutService;
+import org.apache.guacamole.pam.db.PasswordStore;
 import org.apache.guacamole.pam.rotation.RotationService;
 import org.apache.guacamole.protocol.GuacamoleClientInformation;
 
 /**
  * Connection which refuses sessions without the checkout its access
- * requires, reports when its tunnels open and close (so the rotation service
- * knows when it is in use, and can close them when a checkout ends), and
- * always exposes its password management attributes to the editor.
+ * requires, gives its password when kept apart (see {@link PasswordStore}),
+ * reports when its tunnels open and close (so the rotation service knows
+ * when it is in use, and can close them when a checkout ends), and always
+ * exposes its password management attributes to the editor.
  */
 public class PamConnection extends DelegatingConnection {
 
     private final RotationService rotationService;
 
     private final CheckoutService checkoutService;
+
+    private final PasswordStore passwords;
 
     /**
      * The user this connection is presented to, and whether they are an
@@ -36,10 +41,11 @@ public class PamConnection extends DelegatingConnection {
     private final boolean administrator;
 
     public PamConnection(Connection connection, RotationService rotationService,
-            CheckoutService checkoutService, String username, boolean administrator) {
+            CheckoutService checkoutService, PasswordStore passwords, String username, boolean administrator) {
         super(connection);
         this.rotationService = rotationService;
         this.checkoutService = checkoutService;
+        this.passwords = passwords;
         this.username = username;
         this.administrator = administrator;
     }
@@ -116,7 +122,23 @@ public class PamConnection extends DelegatingConnection {
         final String identifier = getIdentifier();
         checkoutService.requireAccess(identifier, username, administrator);
 
-        GuacamoleTunnel tunnel = getDelegateConnection().connect(info, tokens);
+        // A password kept apart replaces its token, in the password only.
+        // Guacamole shows users no detail of a server error, only logs it
+        Map<String, String> withPassword = tokens;
+        String password;
+        try {
+            password = toId(identifier) == null ? null : passwords.getForConnect(toId(identifier));
+        }
+        catch (GuacamoleServerException e) {
+            throw new GuacamoleServerException("Connection \"" + getName() + "\" cannot be opened: "
+                    + e.getMessage(), e);
+        }
+        if (password != null) {
+            withPassword = new HashMap<>(tokens);
+            withPassword.put(PasswordStore.TOKEN_NAME, password);
+        }
+
+        GuacamoleTunnel tunnel = getDelegateConnection().connect(info, withPassword);
 
         GuacamoleTunnel tracked = new DelegatingGuacamoleTunnel(tunnel) {
 
@@ -138,6 +160,15 @@ public class PamConnection extends DelegatingConnection {
         rotationService.sessionStarted(identifier, username, tracked);
         return tracked;
 
+    }
+
+    private static Integer toId(String identifier) {
+        try {
+            return identifier == null ? null : Integer.valueOf(identifier);
+        }
+        catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /**

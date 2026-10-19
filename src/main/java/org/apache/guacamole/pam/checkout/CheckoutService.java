@@ -144,7 +144,7 @@ public class CheckoutService {
         boolean account = isAccount(target);
 
         if (account) {
-            String password = target.getParameters().get(AccountProtocol.PASSWORD);
+            String password = target.getPassword();
             if (password == null || password.isEmpty())
                 throw new GuacamoleClientException("No password is stored for this account yet.");
         }
@@ -316,7 +316,7 @@ public class CheckoutService {
         if (!isAccount(target))
             return new PasswordGrant(checkout, null, null, null);
         return new PasswordGrant(checkout, accountName(target), accountDetail(target, platformOf(target)),
-                target.getParameters().get(AccountProtocol.PASSWORD));
+                target.getPassword());
     }
 
     private static String validateReason(String reason) throws GuacamoleClientException {

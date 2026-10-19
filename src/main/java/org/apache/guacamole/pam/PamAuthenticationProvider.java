@@ -23,6 +23,7 @@ import org.apache.guacamole.pam.crypto.SecretMigration;
 import org.apache.guacamole.pam.crypto.Secrets;
 import org.apache.guacamole.pam.db.ConnectionRepository;
 import org.apache.guacamole.pam.db.PamDatabase;
+import org.apache.guacamole.pam.db.PasswordStore;
 import org.apache.guacamole.pam.platform.PlatformRepository;
 import org.apache.guacamole.pam.rotation.RotationService;
 import org.apache.guacamole.properties.BooleanGuacamoleProperty;
@@ -80,6 +81,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     private final SecretMigration secretMigration;
 
+    private final PasswordStore passwordStore;
+
     /**
      * The PostgreSQL UserContext of each session, used for permission checks.
      * Keys are weak and compared by identity, so entries vanish with their
@@ -111,6 +114,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             checkoutService = null;
             approvalService = null;
             secretMigration = null;
+            passwordStore = null;
             return;
         }
 
@@ -119,9 +123,10 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
         PamDatabase database = new PamDatabase(environment);
         CheckoutRepository checkouts = new CheckoutRepository(database);
+        passwordStore = new PasswordStore(database, secrets);
         platforms = new PlatformRepository(database, secrets);
-        connections = new ConnectionRepository(database, secrets);
-        secretMigration = new SecretMigration(database, platforms, connections, secrets);
+        connections = new ConnectionRepository(database, secrets, passwordStore);
+        secretMigration = new SecretMigration(database, platforms, connections, passwordStore, secrets);
         rotationService = new RotationService(database, platforms, connections, checkouts);
         approvals = new ApprovalRepository(database);
         badgePreferences = new BadgePreferences(database);
@@ -172,7 +177,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             return context;
 
         dataSourceContexts.put(authenticatedUser, context);
-        return new PamUserContextDecorator(context, rotationService, checkoutService, connections);
+        return new PamUserContextDecorator(context, rotationService, checkoutService, passwordStore);
 
     }
 

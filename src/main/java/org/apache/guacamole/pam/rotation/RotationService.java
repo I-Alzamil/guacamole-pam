@@ -455,6 +455,10 @@ public class RotationService {
      */
     private PasswordChanger createChanger(Target target) throws GuacamoleException {
 
+        // Never try a target with a password that is not its own
+        if (target.getPasswordError() != null)
+            throw new IllegalArgumentException("The stored password cannot be read: " + target.getPasswordError());
+
         String platformId = target.getAttribute(PamAttributes.PLATFORM);
         if (platformId == null)
             throw new IllegalArgumentException("This connection is stored only, not managed, so its password"

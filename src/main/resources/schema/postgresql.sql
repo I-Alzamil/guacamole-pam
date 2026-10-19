@@ -207,7 +207,22 @@ CREATE TABLE IF NOT EXISTS pam_session (
 CREATE INDEX IF NOT EXISTS pam_checkout_released
   ON pam_checkout (released);
 
+-- Version 3: passwords of managed connections, kept apart (and encrypted)
+-- while an encryption key is set. Their "password" parameter is then
+-- ${PAM_PASSWORD}, which the extension replaces when they open
+CREATE TABLE IF NOT EXISTS pam_connection_password (
+
+  connection_id integer NOT NULL,
+  password      text    NOT NULL,
+
+  PRIMARY KEY (connection_id),
+  CONSTRAINT pam_connection_password_connection
+    FOREIGN KEY (connection_id)
+    REFERENCES guacamole_connection (connection_id) ON DELETE CASCADE
+
+);
+
 -- Last, so the default platforms above are only added to a fresh install, and
 -- so the extension can tell the schema is complete (PamDatabase.SCHEMA_VERSION)
-INSERT INTO pam_schema_version (version) VALUES (1), (2)
+INSERT INTO pam_schema_version (version) VALUES (1), (2), (3)
 ON CONFLICT (version) DO NOTHING;

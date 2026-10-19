@@ -69,7 +69,7 @@ public class PamDatabase {
      * Version the schema script records once it has run, which must match
      * the version it inserts into "pam_schema_version".
      */
-    private static final int SCHEMA_VERSION = 2;
+    private static final int SCHEMA_VERSION = 3;
 
     /**
      * The first version, whose tables are enough to run on a single server.
@@ -98,6 +98,8 @@ public class PamDatabase {
     private volatile boolean schemaReady = false;
 
     private volatile boolean sessionTable = false;
+
+    private volatile boolean passwordTable = false;
 
     /**
      * Returns why this extension cannot use the Guacamole database here, or
@@ -209,14 +211,17 @@ public class PamDatabase {
 
                 logger.warn("The database user \"{}\" may not upgrade the PAM extension's tables ({}). Until"
                         + " schema/postgresql.sql from the extension's jar is run again as the database owner,"
-                        + " and the new table \"pam_session\" granted to Guacamole's user, servers sharing this"
-                        + " database do not see each other's sessions: run a single server.",
+                        + " and its new tables granted to Guacamole's user, the extension works as its earlier"
+                        + " versions: without \"pam_session\", servers sharing this database do not see each"
+                        + " other's sessions (run a single server); without \"pam_connection_password\", the"
+                        + " passwords of managed connections are not encrypted.",
                         username, firstLine(e.getMessage()));
 
             }
         }
 
         sessionTable = hasTable(connection, "pam_session");
+        passwordTable = hasTable(connection, "pam_connection_password");
         schemaReady = true;
         logger.info("PAM database schema is ready.");
 
@@ -251,6 +256,15 @@ public class PamDatabase {
      */
     public boolean hasSessionTable() {
         return sessionTable;
+    }
+
+    /**
+     * Whether "pam_connection_password" exists, letting the passwords of
+     * managed connections be kept encrypted. Known once the database was
+     * first used.
+     */
+    public boolean hasPasswordTable() {
+        return passwordTable;
     }
 
     /**

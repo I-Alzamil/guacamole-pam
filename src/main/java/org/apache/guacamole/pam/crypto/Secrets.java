@@ -15,7 +15,8 @@ import org.apache.guacamole.properties.StringGuacamoleProperty;
 
 /**
  * Encryption at rest of the secrets this extension stores: platform secrets,
- * passwords kept from unconfirmed rotations, and Account passwords.
+ * passwords kept from unconfirmed rotations, Account passwords, and the
+ * passwords of managed connections (see PasswordStore).
  *
  * Without "pam-encryption-key", values are stored as plaintext, as before.
  * With it, new values are encrypted, and existing ones are encrypted by
@@ -36,6 +37,12 @@ public final class Secrets {
     public static final String PLATFORM_SECRETS = "platform-secrets";
     public static final String PENDING_PASSWORD = "pending-password";
     public static final String CONNECTION_PASSWORD = "connection-password";
+
+    /**
+     * Followed by ":" and the connection's identifier: a managed connection's
+     * password is bound to its connection.
+     */
+    public static final String MANAGED_PASSWORD = "managed-password";
 
     private static final StringGuacamoleProperty KEY = new StringGuacamoleProperty() {
         @Override

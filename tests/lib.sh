@@ -46,9 +46,21 @@ check_contains() { case "$3" in *"$2"*) pass "$1";; *) fail "$1" "expected to co
 
 T2_CLEANUP=()
 on_cleanup() { T2_CLEANUP+=("$*"); }
+# Runs the cleanup, newest first, logged in again: Guacamole ends a session
+# by itself when guacd reports a connection's login rejected. API calls not
+# answered with success are reported, so a suite cannot silently leave test
+# data behind. (Cleanup commands use "$ADMIN" as it is then.)
 run_cleanup() {
-    local i
-    for ((i = ${#T2_CLEANUP[@]} - 1; i >= 0; i--)); do eval "${T2_CLEANUP[$i]}" >/dev/null 2>&1; done
+    local i result
+    ADMIN=$(admin_token)
+    for ((i = ${#T2_CLEANUP[@]} - 1; i >= 0; i--)); do
+        result=$(eval "${T2_CLEANUP[$i]}" 2>&1)
+        case "${T2_CLEANUP[$i]}" in
+            api\ *) case "$result" in 2[0-9][0-9]\ *|2[0-9][0-9]) ;; *)
+                printf '  CLEANUP FAILED  %s\n        %s\n' "${T2_CLEANUP[$i]}" "${result:0:200}";;
+            esac;;
+        esac
+    done
     T2_CLEANUP=()
 }
 
@@ -100,7 +112,7 @@ print(m[0] if m else '')" "$1"
 create_platform() {
     local id
     id=$(json_get "$(api POST "$PAM/platforms" "$ADMIN" "$2" | cut -d' ' -f2-)" "d.get('id')")
-    [ -n "$id" ] && on_cleanup "api DELETE '$PAM/platforms/$id' '$ADMIN'"
+    [ -n "$id" ] && on_cleanup "api DELETE '$PAM/platforms/$id' \"\$ADMIN\""
     printf -v "$1" '%s' "$id"
     [ -n "$id" ] || fail "creating platform for \$$1" "$(cat "$T2_TMP/body")"
 }
@@ -109,7 +121,7 @@ create_platform() {
 create_connection() {
     local id
     id=$(json_get "$(api POST "$DATA/connections" "$ADMIN" "$2" | cut -d' ' -f2-)" "d.get('identifier')")
-    [ -n "$id" ] && on_cleanup "api DELETE '$DATA/connections/$id' '$ADMIN'"
+    [ -n "$id" ] && on_cleanup "api DELETE '$DATA/connections/$id' \"\$ADMIN\""
     printf -v "$1" '%s' "$id"
     [ -n "$id" ] || fail "creating connection for \$$1" "$(cat "$T2_TMP/body")"
 }
@@ -118,7 +130,7 @@ create_connection() {
 create_group() {
     local id
     id=$(json_get "$(api POST "$DATA/connectionGroups" "$ADMIN" "$2" | cut -d' ' -f2-)" "d.get('identifier')")
-    [ -n "$id" ] && on_cleanup "api DELETE '$DATA/connectionGroups/$id' '$ADMIN'"
+    [ -n "$id" ] && on_cleanup "api DELETE '$DATA/connectionGroups/$id' \"\$ADMIN\""
     printf -v "$1" '%s' "$id"
     [ -n "$id" ] || fail "creating group for \$$1" "$(cat "$T2_TMP/body")"
 }
@@ -127,7 +139,7 @@ create_group() {
 create_user() {
     local attributes=${3:-'{}'}
     api POST "$DATA/users" "$ADMIN" "{\"username\":\"$1\",\"password\":\"$2\",\"attributes\":$attributes}" >/dev/null
-    on_cleanup "api DELETE '$DATA/users/$1' '$ADMIN'"
+    on_cleanup "api DELETE '$DATA/users/$1' \"\$ADMIN\""
 }
 
 # create_user_group NAME ATTRIBUTES-JSON MEMBER... (removed at cleanup)
@@ -135,7 +147,7 @@ create_user_group() {
     local name=$1 attributes=$2 member
     shift 2
     api POST "$DATA/userGroups" "$ADMIN" "{\"identifier\":\"$name\",\"attributes\":$attributes}" >/dev/null
-    on_cleanup "api DELETE '$DATA/userGroups/$name' '$ADMIN'"
+    on_cleanup "api DELETE '$DATA/userGroups/$name' \"\$ADMIN\""
     for member in "$@"; do
         api PATCH "$DATA/userGroups/$name/memberUsers" "$ADMIN" "[{\"op\":\"add\",\"path\":\"/\",\"value\":\"$member\"}]" >/dev/null
     done
@@ -146,11 +158,17 @@ grant() { api PATCH "$DATA/users/$1/permissions" "$ADMIN" "$2" >/dev/null; }
 
 grant_read() { grant "$1" "[{\"op\":\"add\",\"path\":\"/connectionPermissions/$2\",\"value\":\"READ\"}]"; }
 
-# parameter ID NAME: a connection parameter; passwords as plaintext
+# parameter ID NAME: a connection parameter; passwords as plaintext, also
+# when kept apart by the extension (the parameter is then ${PAM_PASSWORD})
 parameter() {
     local value
     value=$(json_get "$(curl -s "$DATA/connections/$1/parameters?token=$ADMIN")" "d.get('$2')")
-    [ "$2" = password ] && value=$(reveal connection-password "$value")
+    if [ "$2" = password ] && [ "$value" = '${PAM_PASSWORD}' ]; then
+        value=$(reveal "managed-password:$1" "$(podman exec myguacdbtest psql -U postgres -tAc \
+            "SELECT password FROM pam_connection_password WHERE connection_id = $1")")
+    elif [ "$2" = password ]; then
+        value=$(reveal connection-password "$value")
+    fi
     printf '%s\n' "$value"
 }
 

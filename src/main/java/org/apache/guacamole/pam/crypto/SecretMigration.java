@@ -13,6 +13,7 @@ import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.pam.db.ConnectionRepository;
 import org.apache.guacamole.pam.db.PamDatabase;
+import org.apache.guacamole.pam.db.PasswordStore;
 import org.apache.guacamole.pam.db.SchemaUnavailableException;
 import org.apache.guacamole.pam.platform.PlatformRepository;
 import org.slf4j.Logger;
@@ -47,6 +48,8 @@ public class SecretMigration {
 
     private final ConnectionRepository connections;
 
+    private final PasswordStore passwords;
+
     private final Secrets secrets;
 
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
@@ -56,10 +59,11 @@ public class SecretMigration {
     });
 
     public SecretMigration(PamDatabase database, PlatformRepository platforms, ConnectionRepository connections,
-            Secrets secrets) {
+            PasswordStore passwords, Secrets secrets) {
         this.database = database;
         this.platforms = platforms;
         this.connections = connections;
+        this.passwords = passwords;
         this.secrets = secrets;
         scheduler.schedule(this::migrate, FIRST_RUN_SECONDS, TimeUnit.SECONDS);
     }
@@ -84,6 +88,7 @@ public class SecretMigration {
             MigrationReport report = new MigrationReport();
             platforms.migrateSecrets(report);
             connections.migrateSecrets(report);
+            passwords.migrate(report);
             return report;
 
         }

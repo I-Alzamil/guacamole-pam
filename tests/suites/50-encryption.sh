@@ -1,8 +1,9 @@
 #!/bin/bash
 # Encryption at rest: what the database holds (platform secrets, Account
-# passwords and pending passwords encrypted; other connections' passwords
-# plaintext, as guacd needs them), what the API returns, and saving
-# connections from the editor. Skipped when the test setup has no key.
+# passwords and pending passwords encrypted; managed connections' passwords
+# kept apart, encrypted, behind ${PAM_PASSWORD}; other connections'
+# passwords plaintext), what the API returns, saving connections from the
+# editor, and sessions. Skipped when the test setup has no key.
 
 if [ -z "$PAM_TEST_KEY" ]; then
     section "Skipped: build.sh was run without an encryption key"
@@ -73,9 +74,11 @@ R=$(edit_connection "$ADMIN" "$ACCOUNT" '{"password":"pam:v1:0badc0de:AAAAAAAAAA
 check_contains "a value encrypted with an unknown key is refused" "not configured" "$(message_of "$R")"
 check "...and the stored password is unchanged" "T2-Enc-Typed1!" "$(checkout_password "$ACCOUNT")"
 
+# Stored decrypted, an editor could read it back: a decryption oracle
 R=$(edit_connection "$ADMIN" "$SSH" "{\"password\":\"$(raw_parameter "$ACCOUNT")\"}")
-check "an Account's encrypted password pasted into another connection is saved" 204 "$(status_of "$R")"
-check "...as plaintext, for guacd" "T2-Enc-Typed1!" "$(stored_password "$SSH")"
+check "an Account's encrypted password pasted into another connection is refused" 400 "$(status_of "$R")"
+check_contains "...as encrypted passwords are not copied" "cannot be copied" "$(message_of "$R")"
+check "...and that connection's password is unchanged" "T2-Ssh-Plain1!" "$(stored_password "$SSH")"
 
 # ---------------------------------------------------------------- rotation
 section "Rotation"
@@ -97,8 +100,13 @@ create_platform SLOW '{"name":"t2 enc slow passwd","type":"ssh","settings":{"scr
 create_connection SLOW_C "{\"name\":\"t2 enc slow\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",
     \"parameters\":{\"hostname\":\"mysshtest\",\"port\":\"22\",\"username\":\"mysshtest\",\"password\":\"$SSH_PASSWORD\"},
     \"attributes\":{\"pam-platform\":\"$SLOW\",\"pam-request-exempt\":\"true\"}}"
+# The connection that last changed mysshtest's password
+LAST_SSH=$SLOW_C
 sync_seeded_ssh() {
-    [ -n "$SEEDED" ] && edit_connection "$ADMIN" "$SEEDED" "{\"password\":\"$(parameter "$SLOW_C" password)\"}" >/dev/null
+    local password
+    password=$(parameter "$LAST_SSH" password)
+    [ -n "$SEEDED" ] && [ -n "$password" ] \
+        && edit_connection "$ADMIN" "$SEEDED" "{\"password\":\"$password\"}" >/dev/null
 }
 on_cleanup sync_seeded_ssh
 
@@ -110,6 +118,80 @@ wait $ROTATION
 check "during a rotation, the password about to be set is stored encrypted" yes "$(is_encrypted "$PENDING")"
 check "...the rotation succeeds" SUCCESS "$(cut -d: -f1 "$T2_TMP/slow")"
 check "...the pending password was the new password" "$(parameter "$SLOW_C" password)" "$(reveal pending-password "$PENDING")"
-check "...which is plaintext once stored for guacd" "$(parameter "$SLOW_C" password)" "$(stored_password "$SLOW_C")"
-check "...and the SSH server accepts" yes "$(ssh_accepts mysshtest "$(stored_password "$SLOW_C")")"
+check "...and the SSH server accepts" yes "$(ssh_accepts mysshtest "$(parameter "$SLOW_C" password)")"
 check "...and the pending password is gone" "" "$(sql "SELECT pending_password FROM pam_rotation_state WHERE connection_id = $SLOW_C")"
+
+# ---------------------------------------------------------------- managed connections
+section "Managed connections: passwords kept apart"
+guacd_logged_in_since() { # TIME: whether guacd logged an SSH login since then
+    podman logs --since "$1" myguacdtest 2>&1 | grep -q 'SSH connection successful' && echo yes || echo no
+}
+# With its own login: Guacamole may end the session whose connection guacd
+# reports a login rejected
+session_of() { # ID: opens a session for a few seconds; prints guacd's verdict
+    local since file
+    since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    file="$T2_TMP/session-$1"
+    python3 -I ./session.py "$GUAC_URL" "$(admin_token)" "$1" >"$file" 2>&1 &
+    sleep 6
+    kill $! 2>/dev/null
+    guacd_logged_in_since "$since"
+}
+create_connection WRONG "{\"name\":\"t2 enc wrong\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",
+    \"parameters\":{\"hostname\":\"mysshtest\",\"port\":\"22\",\"username\":\"mysshtest\",\"password\":\"T2-Wrong-1!\"},
+    \"attributes\":{\"pam-request-exempt\":\"true\"}}"
+check "control: with a wrong password, guacd logs no SSH login" no "$(session_of "$WRONG")"
+
+LINUX=$(platform_id "Linux (passwd)")
+CURRENT=$(parameter "$SLOW_C" password)
+create_connection MANAGED "{\"name\":\"t2 enc managed\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",
+    \"parameters\":{\"hostname\":\"mysshtest\",\"port\":\"22\",\"username\":\"mysshtest\",\"password\":\"$CURRENT\"},
+    \"attributes\":{\"pam-platform\":\"$LINUX\",\"pam-request-exempt\":\"true\"}}"
+LAST_SSH=$MANAGED
+on_cleanup sync_seeded_ssh
+kept() { sql "SELECT password FROM pam_connection_password WHERE connection_id = $1"; }
+
+check "the password parameter of a managed connection is the token" '${PAM_PASSWORD}' "$(stored_password "$MANAGED")"
+KEPT=$(kept "$MANAGED")
+check "...the password is kept encrypted" yes "$(is_encrypted "$KEPT")"
+check "...for this connection alone" "$CURRENT" "$(reveal "managed-password:$MANAGED" "$KEPT")"
+check "...and the API shows editors only the token" '${PAM_PASSWORD}' "$(raw_parameter "$MANAGED")"
+check "a session logs in with the kept password" yes "$(session_of "$MANAGED")"
+
+check "rotation succeeds" SUCCESS "$(rotate "$MANAGED" | cut -d: -f1)"
+check "...the parameter is still the token" '${PAM_PASSWORD}' "$(stored_password "$MANAGED")"
+check "...the SSH server accepts the new kept password" yes "$(ssh_accepts mysshtest "$(parameter "$MANAGED" password)")"
+check "...and refuses the previous one" no "$(ssh_accepts mysshtest "$CURRENT")"
+check "...and a session logs in with it" yes "$(session_of "$MANAGED")"
+
+KEPT=$(kept "$MANAGED")
+edit_connection "$ADMIN" "$MANAGED" '' '' "t2 enc managed renamed" >/dev/null
+check "saved unchanged (the editor sends the token back), the kept password is unchanged" "$KEPT" "$(kept "$MANAGED")"
+
+R=$(edit_connection "$ADMIN" "$MANAGED" '{"command":"echo ${PAM_PASSWORD}"}')
+check "the token in another parameter, where Guacamole would replace it too, is refused" 400 "$(status_of "$R")"
+check_contains "...as it can only be the password" "can only be used as the password" "$(message_of "$R")"
+R=$(edit_connection "$ADMIN" "$SSH" "{\"password\":\"$KEPT\"}")
+check_contains "a kept password pasted into another connection is refused" "cannot be copied" "$(message_of "$R")"
+R=$(edit_connection "$ADMIN" "$SSH" '{"password":"${PAM_PASSWORD}"}')
+check_contains "the token typed into a connection without a kept password is refused" "has none" "$(message_of "$R")"
+
+# Moved in the database, a kept password does not decrypt for another connection
+sql "UPDATE pam_connection_password SET password = (SELECT password FROM pam_connection_password
+     WHERE connection_id = $SLOW_C) WHERE connection_id = $MANAGED" >/dev/null
+check "another connection's kept password, moved in the database, is refused" 500 "$(tunnel "$ADMIN" "$MANAGED" c | cut -d' ' -f1)"
+check_contains "...and the log says why" 'Connection "t2 enc managed renamed" cannot be opened: A secret could not be decrypted' \
+    "$(podman logs --since 1m myguactest 2>&1 | grep 'cannot be opened')"
+R=$(rotate "$MANAGED")
+check "...and a rotation fails before trying the SSH server with it" FAILED "${R%%:*}"
+check_contains "...saying why" "stored password cannot be read" "$R"
+sql "UPDATE pam_connection_password SET password = '$KEPT' WHERE connection_id = $MANAGED" >/dev/null
+
+PASSWORD=$(parameter "$MANAGED" password)
+edit_connection "$ADMIN" "$MANAGED" '' '{"pam-platform":null}' >/dev/null
+check "once no longer managed, the password is back in its parameter" "$PASSWORD" "$(stored_password "$MANAGED")"
+check "...and no longer kept" "" "$(kept "$MANAGED")"
+edit_connection "$ADMIN" "$MANAGED" '' "{\"pam-platform\":\"$LINUX\"}" >/dev/null
+check "managed again, it is kept apart again" '${PAM_PASSWORD}' "$(stored_password "$MANAGED")"
+check "...with the same password" "$PASSWORD" "$(parameter "$MANAGED" password)"
+check "...and a session logs in" yes "$(session_of "$MANAGED")"
