@@ -19,6 +19,8 @@ import org.apache.guacamole.pam.approval.Approver;
 import org.apache.guacamole.pam.approval.ApprovalService;
 import org.apache.guacamole.pam.checkout.CheckoutRepository;
 import org.apache.guacamole.pam.checkout.CheckoutService;
+import org.apache.guacamole.pam.crypto.SecretMigration;
+import org.apache.guacamole.pam.crypto.Secrets;
 import org.apache.guacamole.pam.db.ConnectionRepository;
 import org.apache.guacamole.pam.db.PamDatabase;
 import org.apache.guacamole.pam.platform.PlatformRepository;
@@ -76,6 +78,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     private final ApprovalService approvalService;
 
+    private final SecretMigration secretMigration;
+
     /**
      * The PostgreSQL UserContext of each session, used for permission checks.
      * Keys are weak and compared by identity, so entries vanish with their
@@ -106,13 +110,18 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             badgePreferences = null;
             checkoutService = null;
             approvalService = null;
+            secretMigration = null;
             return;
         }
 
+        Secrets secrets = Secrets.fromEnvironment(environment);
+        logEncryption(secrets);
+
         PamDatabase database = new PamDatabase(environment);
         CheckoutRepository checkouts = new CheckoutRepository(database);
-        platforms = new PlatformRepository(database);
-        connections = new ConnectionRepository(database);
+        platforms = new PlatformRepository(database, secrets);
+        connections = new ConnectionRepository(database, secrets);
+        secretMigration = new SecretMigration(database, platforms, connections, secrets);
         rotationService = new RotationService(database, platforms, connections, checkouts);
         approvals = new ApprovalRepository(database);
         badgePreferences = new BadgePreferences(database);
@@ -123,6 +132,18 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         // Offer the Account connection type in the connection editor
         environment.getProtocols().putIfAbsent(AccountProtocol.NAME, AccountProtocol.PROTOCOL);
 
+    }
+
+    private static void logEncryption(Secrets secrets) {
+        if (secrets.getError() != null)
+            logger.error("Stored secrets cannot be encrypted or decrypted: {} Secrets stored as plaintext still"
+                    + " work; encrypted ones do not until this is fixed.", secrets.getError());
+        else if (secrets.isEncrypting())
+            logger.info("Stored secrets are encrypted with key {}.", secrets.getKeyIds().get(0));
+        else if (!secrets.getKeyIds().isEmpty())
+            logger.warn("Decrypting every stored secret to plaintext (\"pam-encryption-decrypt\" is set).");
+        else
+            logger.info("Stored secrets are not encrypted: set \"pam-encryption-key\" to encrypt them.");
     }
 
     @Override
@@ -151,7 +172,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             return context;
 
         dataSourceContexts.put(authenticatedUser, context);
-        return new PamUserContextDecorator(context, rotationService, checkoutService);
+        return new PamUserContextDecorator(context, rotationService, checkoutService, connections);
 
     }
 
@@ -229,6 +250,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
     public void shutdown() {
         if (rotationService != null)
             rotationService.shutdown();
+        if (secretMigration != null)
+            secretMigration.shutdown();
     }
 
 }

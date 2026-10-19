@@ -75,6 +75,12 @@ public class RotationService {
      */
     private static final long RETRY_DELAY_MS = TimeUnit.MINUTES.toMillis(15);
 
+    /**
+     * Where the pending password can be read, in messages.
+     */
+    private static final String PENDING_HINT = " (encrypted if \"pam-encryption-key\" is set: see \"Reading an"
+            + " encrypted secret\" in the README)";
+
     private final PlatformRepository platforms;
 
     private final ConnectionRepository connections;
@@ -454,7 +460,7 @@ public class RotationService {
             throw new IllegalArgumentException("This connection is stored only, not managed, so its password"
                     + " is never rotated. Choose a platform to manage it.");
 
-        Platform platform = platforms.get(platformId);
+        Platform platform = platforms.getWithSecrets(platformId);
         if (platform == null)
             throw new IllegalArgumentException("The platform of this connection no longer exists.");
 
@@ -501,7 +507,7 @@ public class RotationService {
                 else if (!changer.accepts(changer.getCurrentPassword()))
                     return configurationError(id, "An earlier rotation could not be confirmed, and the target"
                             + " accepts neither the stored nor the pending password. Resolve this manually"
-                            + " using pam_rotation_state.pending_password.");
+                            + " using pam_rotation_state.pending_password" + PENDING_HINT + ".");
             }
             catch (Exception e) {
                 return configurationError(id, "Could not reach the target to resolve an earlier unconfirmed"
@@ -539,13 +545,13 @@ public class RotationService {
                         + (detail == null ? "Check the profile against the transcript." : detail), outcome, false);
 
             return fail(id, RotationResult.UNKNOWN, "The target accepts neither the old nor the new password."
-                    + " The new password was kept in pam_rotation_state.pending_password. "
+                    + " The new password was kept in pam_rotation_state.pending_password" + PENDING_HINT + ". "
                     + (detail == null ? "" : detail), outcome, true);
 
         }
         catch (Exception e) {
             return fail(id, RotationResult.UNKNOWN, "Could not verify the new password (" + e.getMessage()
-                    + "). It was kept in pam_rotation_state.pending_password. "
+                    + "). It was kept in pam_rotation_state.pending_password" + PENDING_HINT + ". "
                     + (detail == null ? "" : detail), outcome, true);
         }
 

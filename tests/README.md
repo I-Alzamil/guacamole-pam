@@ -49,7 +49,7 @@ extension (OpenSSH, `ldapwhoami`, Samba's `ldapsearch`, MIT `kinit`).
 ### Running
 
 ```
-tests/run.sh                 # every suite (about 30 seconds, 3 minutes with 40-servers)
+tests/run.sh                 # every suite (about 1 minute, 3.5 minutes with 40-servers)
 tests/run.sh rotation        # suites whose name contains "rotation"
 tests/run.sh access security
 ```
@@ -66,6 +66,7 @@ defaults (`http://localhost:8080`, `guacadmin` / `guacadmin`).
 | `20-access` | Requests and reasons; two approvals, directly and through a group; non-approvers; self-approval; denials with reasons; cancellations; checkouts of Accounts and of connections, release and revocation; what administrators skip |
 | `30-security` | What editors who are not administrators cannot change (password management, access requests, and the username, hostname and port of managed connections), the original account-takeover attack end to end; balancing groups; administrator endpoints; platform secrets |
 | `40-servers` | Two servers sharing the database (skipped without `startguac2.sh`): sessions counted by every server; a checkout revoked on one server closing the session on the other; after-use rotation waiting for sessions on the other server; one rotation at a time, and no checkout during it, across servers; records of a stopped server ignored once stale, removed, then the connection rotated. Sessions are held open by `session.py`, as a browser would |
+| `50-encryption` | Stored secrets with the test key of `build.sh` (skipped without one): platform secrets, Account passwords and pending passwords encrypted at rest, other connections' passwords plaintext; the API showing Accounts' passwords only encrypted; editor saves keeping, replacing or refusing values (a value of another field, or of an unknown key); rotation of an encrypted Account. Suites read encrypted values with the jar's own decryption tool |
 
 ### Test data
 
@@ -80,7 +81,8 @@ is written back to the seeded "PAM test (Linux)" connection.
 Each security-relevant test was checked to fail when the code it protects is
 broken on purpose: the SHA-384 channel binding, certificate pinning, the
 Kerberos salt handling, the protection of managed connections' parameters,
-the balancing group check, and each part of the two-server support (shared
+the balancing group check, each part of the two-server support (shared
 rotation claims, sessions counted across servers, stale records, closing
-sessions of checkouts ended elsewhere). Do the same when adding a test for
+sessions of checkouts ended elsewhere), and encryption at rest (editor saves,
+rotated Account passwords, pending passwords). Do the same when adding a test for
 a fix: a test that cannot fail proves nothing.

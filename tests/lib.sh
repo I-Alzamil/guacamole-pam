@@ -13,6 +13,10 @@ PAM="$API/session/ext/pam"
 GUAC_ADMIN="${GUAC_ADMIN:-guacadmin}"
 GUAC_ADMIN_PASSWORD="${GUAC_ADMIN_PASSWORD:-guacadmin}"
 
+# The key build.sh encrypts stored secrets with, and the jar that decrypts them
+PAM_TEST_KEY="${PAM_ENCRYPTION_KEY-um/hqZa6cc89CtHmc9vYOuoDd8S1jY8IaASlz5S00iY=}"
+T2_JAR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/target/guacamole-pam-1.6.0.jar"
+
 T2_PASSED=${T2_PASSED:-0}
 T2_FAILED=${T2_FAILED:-0}
 T2_FAILURES=()
@@ -142,8 +146,22 @@ grant() { api PATCH "$DATA/users/$1/permissions" "$ADMIN" "$2" >/dev/null; }
 
 grant_read() { grant "$1" "[{\"op\":\"add\",\"path\":\"/connectionPermissions/$2\",\"value\":\"READ\"}]"; }
 
+# parameter ID NAME: a connection parameter; passwords as plaintext
 parameter() {
-    json_get "$(curl -s "$DATA/connections/$1/parameters?token=$ADMIN")" "d.get('$2')"
+    local value
+    value=$(json_get "$(curl -s "$DATA/connections/$1/parameters?token=$ADMIN")" "d.get('$2')")
+    [ "$2" = password ] && value=$(reveal connection-password "$value")
+    printf '%s\n' "$value"
+}
+
+# reveal PURPOSE VALUE: the value, decrypted if the extension encrypted it
+# (with the key build.sh gives the test setup), by the extension's own tool
+reveal() {
+    case "$2" in
+        pam:v1:*) printf '%s\n' "$2" | PAM_ENCRYPTION_KEY="$PAM_TEST_KEY" java -cp "$T2_JAR" \
+                      org.apache.guacamole.pam.crypto.SecretCipher "$1";;
+        *) printf '%s\n' "$2";;
+    esac
 }
 
 # edit_connection TOKEN ID PARAMS-PATCH-JSON ATTRS-PATCH-JSON [NEW-NAME] -> "STATUS BODY"

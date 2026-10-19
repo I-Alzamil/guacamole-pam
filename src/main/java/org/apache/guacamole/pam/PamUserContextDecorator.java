@@ -8,8 +8,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleSecurityException;
+import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.form.Form;
 import org.apache.guacamole.net.GuacamoleTunnel;
 import org.apache.guacamole.net.auth.Connection;
@@ -25,8 +27,10 @@ import org.apache.guacamole.net.auth.UserContext;
 import org.apache.guacamole.net.auth.UserGroup;
 import org.apache.guacamole.net.auth.permission.SystemPermission;
 import org.apache.guacamole.pam.checkout.CheckoutService;
+import org.apache.guacamole.pam.db.ConnectionRepository;
 import org.apache.guacamole.pam.rotation.RotationService;
 import org.apache.guacamole.protocol.GuacamoleClientInformation;
+import org.apache.guacamole.protocol.GuacamoleConfiguration;
 
 /**
  * Decorates the PostgreSQL UserContext: adds password management to the
@@ -37,7 +41,9 @@ import org.apache.guacamole.protocol.GuacamoleClientInformation;
  * passwords are managed, who must request access, or who approves, nor the
  * account and host of a managed connection (see {@link ProtectedFields}).
  * Balancing connection groups, which Guacamole connects through without
- * this extension's connections, refuse connections it must check.
+ * this extension's connections, refuse connections it must check. Account
+ * passwords are stored encrypted when a key is set, wherever the connection
+ * is saved from.
  */
 public class PamUserContextDecorator extends DelegatingUserContext {
 
@@ -51,11 +57,46 @@ public class PamUserContextDecorator extends DelegatingUserContext {
 
     private final CheckoutService checkoutService;
 
+    private final ConnectionRepository connectionRepository;
+
     public PamUserContextDecorator(UserContext context, RotationService rotationService,
-            CheckoutService checkoutService) {
+            CheckoutService checkoutService, ConnectionRepository connectionRepository) {
         super(context);
         this.rotationService = rotationService;
         this.checkoutService = checkoutService;
+        this.connectionRepository = connectionRepository;
+    }
+
+    /**
+     * Stores the connection's password as its protocol requires: encrypted
+     * for an Account, plaintext for connections whose password guacd needs.
+     * A value copied from another field is refused, as it cannot be
+     * decrypted as a connection password.
+     */
+    private void storePasswordAsRequired(Connection object) throws GuacamoleException {
+
+        GuacamoleConfiguration configuration = object.getConfiguration();
+        if (configuration == null)
+            return;
+
+        String password = configuration.getParameter(PASSWORD_PARAMETER);
+        if (password == null || password.isEmpty())
+            return;
+
+        String stored;
+        try {
+            stored = connectionRepository.storedPassword(configuration.getProtocol(), password);
+        }
+        catch (GuacamoleServerException e) {
+            throw new GuacamoleClientException("The password cannot be saved. " + e.getMessage(), e);
+        }
+        if (stored.equals(password))
+            return;
+
+        GuacamoleConfiguration changed = new GuacamoleConfiguration(configuration);
+        changed.setParameter(PASSWORD_PARAMETER, stored);
+        object.setConfiguration(changed);
+
     }
 
     @Override
@@ -76,6 +117,7 @@ public class PamUserContextDecorator extends DelegatingUserContext {
             public void add(Connection object) throws GuacamoleException {
                 requireUnchanged(PamAttributes.CONNECTION_ATTRIBUTE_NAMES, null, object.getAttributes(),
                         CONNECTION_CHANGE_REFUSED);
+                storePasswordAsRequired(object);
                 super.add(object);
             }
 
@@ -93,6 +135,8 @@ public class PamUserContextDecorator extends DelegatingUserContext {
                                 stored.getConfiguration().getParameters(), object.getConfiguration().getParameters())
                         && !isAdministrator())
                     throw new GuacamoleSecurityException(MANAGED_PARAMETERS_REFUSED);
+
+                storePasswordAsRequired(object);
 
                 // Connections created through the REST API are never decorated
                 if (object instanceof PamConnection)
@@ -159,6 +203,8 @@ public class PamUserContextDecorator extends DelegatingUserContext {
         }
 
     }
+
+    private static final String PASSWORD_PARAMETER = "password";
 
     private static final String CONNECTION_CHANGE_REFUSED =
             "Only administrators can change password management or access requests.";

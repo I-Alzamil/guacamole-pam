@@ -82,6 +82,65 @@ Guacamole itself needs). Nothing needs configuring:
   ending it closes the holder's sessions at once. Other servers close theirs
   within 15 seconds.
 
+With encrypted secrets, every server needs the same keys.
+
+### Encrypting stored secrets
+
+The secrets the extension stores can be encrypted (AES-256-GCM) with a key
+that is never stored in the database:
+
+- platform secrets, such as an LDAP, Kerberos or WinRM administrator's
+  password;
+- Account passwords;
+- passwords kept from rotations that could not be confirmed.
+
+Other connections' passwords stay unencrypted, as Guacamole sends them to
+guacd.
+
+Generate a key once with `openssl rand -base64 32` and set it in
+`guacamole.properties` (or `PAM_ENCRYPTION_KEY` in the Docker image), then
+restart Guacamole:
+
+```
+pam-encryption-key: <the key>
+```
+
+Existing secrets are encrypted shortly after the start, and new ones as
+they're saved. Without a key, secrets are stored unencrypted, as in earlier
+versions.
+
+**Back up the key.** Without it, encrypted secrets can't be recovered. For
+Accounts whose password is rotated, the extension is the only holder of the
+password, so losing the key means resetting those accounts by other means.
+
+- **Changing the key.** Set the new key, and list the earlier one under
+  `pam-encryption-old-keys` (`PAM_ENCRYPTION_OLD_KEYS`; several are separated
+  by commas). Secrets are encrypted again with the new key shortly after the
+  start; once the log no longer reports secrets under the old key, remove it.
+- **Before removing the key, or the extension, or installing an earlier
+  version**, set `pam-encryption-decrypt: true` (`PAM_ENCRYPTION_DECRYPT`) with
+  the key and restart: every secret is decrypted. Then remove both settings.
+- **If the key is missing or wrong**, the extension still loads and access
+  rules still apply. Unencrypted secrets keep working, and what needs an
+  encrypted secret fails, saying which key it needs. The log says the same at
+  start.
+
+#### Reading an encrypted secret
+
+To read a value by hand, such as a password kept in
+`pam_rotation_state.pending_password` after a rotation that couldn't be
+confirmed, decrypt it with the extension's jar. The key is passed in the
+environment and the value on input, so neither appears in the process list:
+
+```sh
+psql -tAc "SELECT pending_password FROM pam_rotation_state WHERE connection_id = 42" \
+  | PAM_ENCRYPTION_KEY=<the key> java -cp guacamole-pam-1.6.0.jar \
+      org.apache.guacamole.pam.crypto.SecretCipher pending-password
+```
+
+The last argument is the kind of value: `pending-password`,
+`connection-password` (an Account's password) or `platform-secrets`.
+
 ## After installing
 
 - **Every connection requires a request by default**, including connections
@@ -124,11 +183,14 @@ connection needs in its *Access requests* section.
 
 - **Secrets stay on the server.** Platform secrets, such as an LDAP rotation
   account's password, are never sent to the browser. They're stored unencrypted
-  in the database, like Guacamole's own connection passwords, so protect
+  in the database unless a key is set (see
+  [Encrypting stored secrets](#encrypting-stored-secrets)). Other connections'
+  passwords are always stored unencrypted, like in Guacamole itself, so protect
   database access accordingly.
 - **Editors can read passwords.** Users with *edit* permission on a connection
-  can read its parameters, including an Account's password. Give edit
-  permission on managed connections and Accounts to administrators only.
+  can read its parameters, including its password. With a key set, an
+  Account's password is only shown to them encrypted. Give edit permission on
+  managed connections and Accounts to administrators only.
 - **SSH hosts are pinned.** The host key is trusted on first contact and
   required from then on, like SSH's `known_hosts`. If a host's key changes on
   purpose, paste the new fingerprint (shown in the error) into the connection's
@@ -160,7 +222,7 @@ test passwords.
 | Script | What it does |
 |---|---|
 | `reset.sh` | Recreates the Guacamole database from `podman/init/initdb.sql` (Guacamole's schema, with `guacadmin` / `guacadmin`) |
-| `build.sh` | Builds the jar and (re)starts PostgreSQL, guacd and Guacamole with the extension, on http://localhost:8080 |
+| `build.sh` | Builds the jar and (re)starts PostgreSQL, guacd and Guacamole with the extension, on http://localhost:8080. Stored secrets are encrypted with a fixed test key; run `PAM_ENCRYPTION_KEY= ./build.sh` to store them unencrypted |
 | `startssh.sh` | SSH server `mysshtest` on port 22, user `mysshtest` / `P@ssw0rd` |
 | `startldap.sh` | OpenLDAP server `myldaptest`, test user `uid=ldaptest,ou=people,dc=example,dc=org` |
 | `startad.sh` | Samba Active Directory `myadtest` (LDAPS and Kerberos), test user `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`. Prints the certificate fingerprint to pin |

@@ -22,15 +22,18 @@ import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.form.Field;
 import org.apache.guacamole.form.Form;
 import org.apache.guacamole.pam.PamAttributes;
+import org.apache.guacamole.pam.crypto.MigrationReport;
+import org.apache.guacamole.pam.crypto.Secrets;
 import org.apache.guacamole.pam.db.PamDatabase;
 import org.apache.guacamole.pam.management.ManagementType;
 import org.apache.guacamole.pam.management.ManagementTypes;
 
 /**
  * Storage of platforms in "pam_platform". Settings, secrets and policy are
- * stored as JSON objects, secrets in their own column. Platforms returned
- * here carry their secrets for server-side use; {@link Platform} never
- * serializes them, so they cannot reach a client.
+ * stored as JSON objects, secrets in their own column, encrypted if a key is
+ * set (see {@link Secrets}). Platforms returned here carry their secrets for
+ * server-side use; {@link Platform} never serializes them, so they cannot
+ * reach a client.
  */
 public class PlatformRepository {
 
@@ -51,8 +54,11 @@ public class PlatformRepository {
 
     private final PamDatabase database;
 
-    public PlatformRepository(PamDatabase database) {
+    private final Secrets secrets;
+
+    public PlatformRepository(PamDatabase database, Secrets secrets) {
         this.database = database;
+        this.secrets = secrets;
     }
 
     /**
@@ -68,7 +74,8 @@ public class PlatformRepository {
              ResultSet results = statement.executeQuery()) {
 
             while (results.next()) {
-                Platform platform = toPlatform(results);
+                // Only the editor shows which secrets are stored (getWithSecrets)
+                Platform platform = toPlatform(results, false);
                 if (!includeSettings) {
                     platform.setSettings(null);
                     platform.setPolicy(null);
@@ -88,7 +95,7 @@ public class PlatformRepository {
     }
 
     /**
-     * Returns every platform by identifier, with secrets, for server-side use.
+     * Returns every platform by identifier, without secrets.
      */
     public Map<String, Platform> getAll() throws GuacamoleException {
 
@@ -99,7 +106,7 @@ public class PlatformRepository {
              ResultSet results = statement.executeQuery()) {
 
             while (results.next()) {
-                Platform platform = toPlatform(results);
+                Platform platform = toPlatform(results, false);
                 platforms.put(Integer.toString(platform.getId()), platform);
             }
 
@@ -113,16 +120,38 @@ public class PlatformRepository {
     }
 
     /**
-     * Returns the platform with the given identifier, with secrets, or null.
+     * Returns the platform with the given identifier, without secrets, or
+     * null.
      */
     public Platform get(int id) throws GuacamoleException {
+        return get(id, false);
+    }
+
+    /**
+     * Returns the platform with the given identifier, with its secrets
+     * decrypted for server-side use, or null.
+     */
+    public Platform getWithSecrets(int id) throws GuacamoleException {
+        return get(id, true);
+    }
+
+    /**
+     * Returns the platform named by a connection attribute value, with its
+     * secrets, or null.
+     */
+    public Platform getWithSecrets(String id) throws GuacamoleException {
+        Integer number = parseId(id);
+        return number == null ? null : get(number, true);
+    }
+
+    private Platform get(int id, boolean withSecrets) throws GuacamoleException {
 
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(SELECT + " WHERE platform_id = ?")) {
 
             statement.setInt(1, id);
             try (ResultSet results = statement.executeQuery()) {
-                return results.next() ? toPlatform(results) : null;
+                return results.next() ? toPlatform(results, withSecrets) : null;
             }
 
         }
@@ -133,11 +162,17 @@ public class PlatformRepository {
     }
 
     /**
-     * Returns the platform named by a connection attribute value, or null.
+     * Returns the platform named by a connection attribute value, without
+     * secrets, or null.
      */
     public Platform get(String id) throws GuacamoleException {
+        Integer number = parseId(id);
+        return number == null ? null : get(number, false);
+    }
+
+    private static Integer parseId(String id) {
         try {
-            return id == null ? null : get(Integer.parseInt(id.trim()));
+            return id == null ? null : Integer.valueOf(id.trim());
         }
         catch (NumberFormatException e) {
             return null;
@@ -157,12 +192,12 @@ public class PlatformRepository {
             statement.setString(2, clean.getDescription());
             statement.setString(3, clean.getType());
             statement.setString(4, toJson(clean.getSettings()));
-            statement.setString(5, toJson(clean.getSecrets()));
+            statement.setString(5, secrets.protect(Secrets.PLATFORM_SECRETS, toJson(clean.getSecrets())));
             statement.setString(6, toJson(clean.getPolicy()));
 
             try (ResultSet results = statement.executeQuery()) {
                 results.next();
-                return get(results.getInt(1));
+                return getWithSecrets(results.getInt(1));
             }
 
         }
@@ -178,7 +213,7 @@ public class PlatformRepository {
      */
     public Platform update(int id, Platform platform) throws GuacamoleException {
 
-        Platform existing = get(id);
+        Platform existing = getWithSecrets(id);
         if (existing == null)
             throw new GuacamoleResourceNotFoundException("No such platform.");
 
@@ -198,7 +233,7 @@ public class PlatformRepository {
             statement.setString(1, clean.getName());
             statement.setString(2, clean.getDescription());
             statement.setString(3, toJson(clean.getSettings()));
-            statement.setString(4, toJson(clean.getSecrets()));
+            statement.setString(4, secrets.protect(Secrets.PLATFORM_SECRETS, toJson(clean.getSecrets())));
             statement.setString(5, toJson(clean.getPolicy()));
             statement.setInt(6, id);
             statement.executeUpdate();
@@ -208,7 +243,7 @@ public class PlatformRepository {
             throw translate(e, clean);
         }
 
-        return get(id);
+        return getWithSecrets(id);
 
     }
 
@@ -363,14 +398,56 @@ public class PlatformRepository {
         return new GuacamoleServerException("Unable to save platform.", e);
     }
 
-    private static Platform toPlatform(ResultSet results) throws SQLException {
+    /**
+     * Stores every platform's secrets in the form {@link Secrets} requires
+     * now. A platform saved meanwhile is left as saved; secrets that cannot
+     * be decrypted here are skipped, and reported.
+     */
+    public void migrateSecrets(MigrationReport report) throws GuacamoleException {
+
+        try (Connection connection = database.getConnection()) {
+
+            Map<Integer, String> stored = new HashMap<>();
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT platform_id, secrets FROM pam_platform");
+                 ResultSet results = statement.executeQuery()) {
+                while (results.next())
+                    stored.put(results.getInt(1), results.getString(2));
+            }
+
+            for (Map.Entry<Integer, String> entry : stored.entrySet()) {
+                if (!secrets.canReveal(entry.getValue())) {
+                    report.unreadable(entry.getValue());
+                    continue;
+                }
+                if (!secrets.needsMigration(entry.getValue()))
+                    continue;
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "UPDATE pam_platform SET secrets = ? WHERE platform_id = ? AND secrets = ?")) {
+                    statement.setString(1, secrets.protect(Secrets.PLATFORM_SECRETS, entry.getValue()));
+                    statement.setInt(2, entry.getKey());
+                    statement.setString(3, entry.getValue());
+                    report.changed(statement.executeUpdate());
+                }
+            }
+
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to migrate platform secrets.", e);
+        }
+
+    }
+
+    private Platform toPlatform(ResultSet results, boolean withSecrets) throws SQLException, GuacamoleException {
         Platform platform = new Platform();
         platform.setId(results.getInt("platform_id"));
         platform.setName(results.getString("name"));
         platform.setDescription(results.getString("description"));
         platform.setType(results.getString("type"));
         platform.setSettings(fromJson(results.getString("settings")));
-        platform.setSecrets(fromJson(results.getString("secrets")));
+        platform.setSecrets(withSecrets
+                ? fromJson(secrets.reveal(Secrets.PLATFORM_SECRETS, results.getString("secrets")))
+                : new HashMap<String, String>());
         platform.setPolicy(fromJson(results.getString("policy")));
         platform.setLastModified(results.getTimestamp("last_modified").getTime());
         return platform;

@@ -188,7 +188,7 @@ public class PamREST {
     @Path("platforms/{id}")
     public Platform getPlatform(@PathParam("id") String id) throws GuacamoleException {
         requireAdministrator();
-        Platform platform = provider.getPlatforms().get(parseId(id));
+        Platform platform = provider.getPlatforms().getWithSecrets(parseId(id));
         if (platform == null)
             throw new GuacamoleResourceNotFoundException("No such platform.");
         return platform;
