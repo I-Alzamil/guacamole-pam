@@ -19,6 +19,8 @@
         "FIELD_HEADER_PAM_SSH_HOST_KEY": "Trusted SSH host key (SHA256 fingerprint):",
         "SECTION_HEADER_PAM_TYPE_LDAP": "Directory account",
         "FIELD_HEADER_PAM_LDAP_DN": "Account DN:",
+        "SECTION_HEADER_PAM_TYPE_KERBEROS": "Kerberos account",
+        "FIELD_HEADER_PAM_KERBEROS_PRINCIPAL": "Principal (default: connection username, in the platform's realm):",
         "SECTION_HEADER_PAM_CHECKOUT": "Access requests",
         "FIELD_HEADER_PAM_CHECKOUT_DURATION": "Access time limit (minutes, default 60):",
         "FIELD_HEADER_PAM_CHECKOUT_EXCLUSIVE": "Only one holder at a time:",
@@ -65,6 +67,7 @@
         "HELP_SYNTAX_SEND": "Any other line is sent exactly as typed (spaces included), followed by Enter",
         "HELP_SYNTAX_SEND_EMPTY": "Press Enter (or \"@send text\" to send text)",
         "HELP_SYNTAX_TIMEOUT": "Seconds each following expect may wait (default 10)",
+        "HELP_TYPE_KERBEROS": "Change Kerberos principal passwords with kpasswd (RFC 3244), as an admin principal or as the principal itself. Works with MIT Kerberos, Heimdal and Active Directory.",
         "HELP_TYPE_LDAP": "Change directory account passwords over LDAPS or StartTLS, as an administrator or as the account itself. Works with OpenLDAP and Active Directory.",
         "HELP_TYPE_SSH": "Log in over SSH and change the password with a send/expect script, such as passwd on Linux or net user on Windows.",
         "INFO_ACTIVE": "Active",
@@ -123,6 +126,7 @@
         "TEXT_LINE": "Line {LINE}:",
         "TEXT_MORE_ERRORS": "(and {COUNT} more, hover for all)",
         "TEXT_SCRIPT_VALID": "Valid, {COUNT} steps.",
+        "TYPE_KERBEROS": "Kerberos",
         "TYPE_LDAP": "LDAP / Active Directory",
         "TYPE_SSH": "SSH",
         "HOME": {
@@ -201,6 +205,17 @@
         "FIELD_OPTION_LDAP_DIRECTORY_TYPE_ACTIVE_DIRECTORY": "Active Directory",
         "FIELD_HEADER_LDAP_ADMIN_DN": "Rotation account DN (empty: each account changes its own password):",
         "FIELD_HEADER_LDAP_ADMIN_PASSWORD": "Rotation account password:"
+    },
+    "PAM_TYPE_KERBEROS": {
+        "SECTION_HEADER_KERBEROS_SERVER": "Realm",
+        "SECTION_HEADER_KERBEROS_ROTATION": "Admin principal (optional)",
+        "FIELD_HEADER_KERBEROS_REALM": "Realm (usually upper case, such as EXAMPLE.ORG):",
+        "FIELD_HEADER_KERBEROS_KDC": "KDC hostname:",
+        "FIELD_HEADER_KERBEROS_KDC_PORT": "KDC port (default 88):",
+        "FIELD_HEADER_KERBEROS_KPASSWD_SERVER": "Password change server (default: the KDC):",
+        "FIELD_HEADER_KERBEROS_KPASSWD_PORT": "Password change port (default 464):",
+        "FIELD_HEADER_KERBEROS_ADMIN_PRINCIPAL": "Admin principal (empty: each principal changes its own password):",
+        "FIELD_HEADER_KERBEROS_ADMIN_PASSWORD": "Admin principal password:"
     },
     "PAM_POLICY": {
         "SECTION_HEADER_POLICY": "Rotation policy",

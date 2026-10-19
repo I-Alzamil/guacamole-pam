@@ -1,7 +1,8 @@
 #!/bin/bash
 # Fill a fresh database with the test platforms, connections, users and group,
 # through the REST API of the running Guacamole (start it with build.sh, and
-# the test servers with startssh.sh, startldap.sh and startad.sh first).
+# the test servers with startssh.sh, startldap.sh, startad.sh and startkdc.sh
+# first).
 # Anything that already exists (by name) is left as it is.
 #
 #   Users (password = name + "pass"):
@@ -11,10 +12,12 @@
 #   Platforms:
 #     MYTEST_LDAP (myldaptest), MYTEST_AD (myadtest); certificates are pinned
 #     from the running containers
+#     MYTEST_KERBEROS (MIT KDC mykdctest, realm EXAMPLE.ORG)
 #   Connections:
 #     PAM test (Linux)  ssh to mysshtest, rotated by "Linux (passwd)", no request needed
 #     LDAP: ldaptest    account on MYTEST_LDAP
 #     AD: adtest        account on MYTEST_AD
+#     Kerberos: kdctest account on MYTEST_KERBEROS
 #     Vendor portal     stored-only account, 2 approvals
 #     test              stored-only account, 1 approval
 
@@ -74,6 +77,10 @@ for p in [
                   "ldap-admin-dn": "CN=Administrator,CN=Users,DC=ad,DC=example,DC=org",
                   "ldap-admin-password": "AdAdm1n-Pass"},
      "policy": {"rotation-mode": "after-use"}},
+    {"name": "MYTEST_KERBEROS", "description": "MIT Kerberos test realm EXAMPLE.ORG (startkdc.sh)", "type": "kerberos",
+     "settings": {"kerberos-realm": "EXAMPLE.ORG", "kerberos-kdc": "mykdctest",
+                  "kerberos-admin-principal": "admin/admin", "kerberos-admin-password": "KdcAdm1n-Pass"},
+     "policy": {"rotation-mode": "after-use"}},
 ]:
     if p["name"] in platforms:
         print("platform exists:", p["name"])
@@ -97,6 +104,9 @@ for c in [
      "parameters": {"username": "adtest", "password": "P@ssw0rd-AD1"},
      "attributes": {"pam-platform": str(platforms["MYTEST_AD"]),
                     "pam-ldap-dn": "CN=adtest,CN=Users,DC=ad,DC=example,DC=org", "pam-checkout-duration": "30"}},
+    {"name": "Kerberos: kdctest", "protocol": "pam-account",
+     "parameters": {"username": "kdctest", "password": "P@ssw0rd-KDC1"},
+     "attributes": {"pam-platform": str(platforms["MYTEST_KERBEROS"]), "pam-checkout-duration": "30"}},
     {"name": "Vendor portal", "protocol": "pam-account",
      "parameters": {"username": "svc-vendor", "password": "Vend0r-Pass!",
                     "account-url": "https://vendor.example.com/login",

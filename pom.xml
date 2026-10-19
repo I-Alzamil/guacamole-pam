@@ -128,6 +128,12 @@
                                     </excludes>
                                 </filter>
                                 <filter>
+                                    <artifact>org.apache.kerby:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
                                     <artifact>com.github.mwiede:jsch</artifact>
                                     <excludes>
                                         <exclude>META-INF/MANIFEST.MF</exclude>
@@ -180,6 +186,20 @@
             <groupId>com.unboundid</groupId>
             <artifactId>unboundid-ldapsdk</artifactId>
             <version>7.0.3</version>
+        </dependency>
+
+        <!-- Kerberos client used to change passwords over kpasswd (RFC 3244) -->
+        <dependency>
+            <groupId>org.apache.kerby</groupId>
+            <artifactId>kerb-client</artifactId>
+            <version>2.1.2</version>
+            <exclusions>
+                <!-- Token support (JWT), not used here -->
+                <exclusion>
+                    <groupId>org.apache.kerby</groupId>
+                    <artifactId>token-provider</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- JUnit -->

@@ -4,7 +4,8 @@ Privileged access management for [Apache Guacamole](https://guacamole.apache.org
 
 - **Password rotation.** Each connection's password is either just stored, or
   managed by a *platform*. A platform describes how passwords are changed: over
-  SSH with a send/expect script, or over LDAP / Active Directory. It also sets
+  SSH with a send/expect script, over LDAP / Active Directory, or over Kerberos
+  (kpasswd, for MIT Kerberos, Heimdal and Active Directory realms). It also sets
   when they're changed: never, after each use, or periodically. The new password
   is only stored once the target accepts it.
 - **Accounts.** An "Account" connection type holds a password that users check
@@ -108,6 +109,11 @@ connection needs in its *Access requests* section.
 - **LDAP must be encrypted with a rotation account.** LDAP platforms with a
   rotation account require LDAPS or StartTLS. Pin the server certificate's
   fingerprint, or use a certificate the JVM trusts that matches the hostname.
+- **Kerberos needs no certificate.** Kerberos itself proves both the KDC and
+  the password change server genuine, from the password's key. Only the KDC
+  (port 88, TCP) and kpasswd (port 464, TCP) need to be reachable. Without an
+  admin principal, each principal changes its own password, which needs its
+  current one.
 
 ## Development
 
@@ -121,9 +127,11 @@ test passwords.
 | `build.sh` | Builds the jar and (re)starts PostgreSQL, guacd and Guacamole with the extension, on http://localhost:8080 |
 | `startssh.sh` | SSH server `mysshtest` on port 22, user `mysshtest` / `P@ssw0rd` |
 | `startldap.sh` | OpenLDAP server `myldaptest`, test user `uid=ldaptest,ou=people,dc=example,dc=org` |
-| `startad.sh` | Samba Active Directory `myadtest`, test user `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`. Prints the certificate fingerprint to pin |
+| `startad.sh` | Samba Active Directory `myadtest` (LDAPS and Kerberos), test user `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`. Prints the certificate fingerprint to pin |
+| `startkdc.sh` | MIT Kerberos KDC `mykdctest`, realm `EXAMPLE.ORG`, admin `admin/admin`, test user `kdctest` |
+| `seed.sh` | Adds the test platforms, connections, users and group to a fresh database, through the REST API |
 | `stop.sh` | Stops all of the above |
 
-Recreating the SSH, LDAP or AD containers generates new host keys and
+Recreating the SSH, LDAP, AD or KDC containers generates new host keys and
 certificates, and resets their passwords. Pin the new fingerprints and reset the
 stored passwords afterwards.
