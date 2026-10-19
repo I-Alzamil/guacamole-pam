@@ -1,0 +1,40 @@
+{
+    "guacamoleVersion": "1.6.0",
+    "name": "Privileged Access Management",
+    "namespace": "pam",
+    "authProviders": [
+        "org.apache.guacamole.pam.PamAuthenticationProvider"
+    ],
+    "js": [
+        "pam.min.js"
+    ],
+    "css": [
+        "pam.min.css"
+    ],
+    "html": [
+        "templates/settingsPamTab.html",
+        "templates/pamManagementSections.html",
+        "templates/pamApprovalPermissionsPatch.html",
+        "templates/pamApproveChoiceConnection.html",
+        "templates/pamApproveChoiceGroup.html",
+        "templates/pamBadgeUserMenu.html",
+        "templates/pamBadgePageList.html",
+        "templates/pamConnectionStatus.html",
+        "templates/pamBadgePreferencesPatch.html"
+    ],
+    "translations": [
+        "translations/en.json"
+    ],
+    "resources": {
+        "templates/settingsPamPlatforms.html": "text/html",
+        "templates/settingsPamRotation.html": "text/html",
+        "templates/settingsPamCheckouts.html": "text/html",
+        "templates/pamScriptEditor.html": "text/html",
+        "templates/pamRequestDialog.html": "text/html",
+        "templates/pamPlatformField.html": "text/html",
+        "templates/pamScriptField.html": "text/html",
+        "templates/settingsPamHistory.html": "text/html",
+        "templates/settingsPamApprovals.html": "text/html",
+        "templates/pamApprovalPermissions.html": "text/html"
+    }
+}

@@ -1,0 +1,103 @@
+<div class="pam-settings">
+
+    <!-- Platforms -->
+    <div class="settings section pam-platforms">
+        <p>{{ 'PAM.HELP_PLATFORMS' | translate }}</p>
+
+        <div class="pam-platform-layout">
+
+            <!-- Platform list, to switch between platforms while one is open -->
+            <div class="pam-platform-list" ng-if="editing">
+                <ul ng-class="{loading: !platforms}">
+                    <li ng-repeat="platform in platforms"
+                        ng-class="{selected: editing.id === platform.id}"
+                        ng-click="selectPlatform(platform)">
+                        <span class="pam-platform-name">
+                            {{ platform.name }}
+                            <span class="pam-type-badge">{{ 'PAM.TYPE_' + (platform.type | uppercase) | translate }}</span>
+                        </span>
+                        <span class="pam-platform-description">{{ platform.description }}</span>
+                    </li>
+                    <li class="pam-empty" ng-show="platforms && !platforms.length">{{ 'PAM.INFO_NO_PLATFORMS' | translate }}</li>
+                </ul>
+            </div>
+
+            <!-- Overview, while no platform is open -->
+            <div class="pam-platform-overview" ng-if="!editing">
+
+                <div class="pam-platform-cards" ng-show="platforms.length">
+                    <div class="pam-platform-card" ng-repeat="platform in platforms"
+                         role="button" tabindex="0" ng-click="selectPlatform(platform)"
+                         ng-keydown="($event.key === 'Enter' || $event.key === ' ') && selectPlatform(platform)">
+                        <div class="pam-platform-card-title">
+                            {{ platform.name }}
+                            <span class="pam-type-badge">{{ 'PAM.TYPE_' + (platform.type | uppercase) | translate }}</span>
+                        </div>
+                        <div class="pam-platform-description" ng-show="platform.description">{{ platform.description }}</div>
+                        <div class="pam-platform-card-facts">
+                            <span>{{ policyKey(platform) | translate:{ HOURS: platform.policy['rotation-interval'] || '?' } }}</span>
+                            <span>{{ 'PAM.INFO_PLATFORM_CONNECTIONS' | translate:{ COUNT: getUsage(platform).connections } }}</span>
+                            <span class="pam-platform-failing" ng-show="getUsage(platform).failing">
+                                {{ 'PAM.INFO_PLATFORM_FAILING' | translate:{ COUNT: getUsage(platform).failing } }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="pam-platform-create-header">{{ 'PAM.SECTION_HEADER_CREATE_PLATFORM' | translate }}</h3>
+                <div class="pam-platform-cards">
+                    <div class="pam-platform-card pam-platform-create" ng-repeat="type in platformTypes"
+                         role="button" tabindex="0" ng-click="newPlatform(type.name)"
+                         ng-keydown="($event.key === 'Enter' || $event.key === ' ') && newPlatform(type.name)">
+                        <div class="pam-platform-card-title">+ {{ 'PAM.TYPE_' + (type.name | uppercase) | translate }}</div>
+                        <div class="pam-platform-description">{{ 'PAM.HELP_TYPE_' + (type.name | uppercase) | translate }}</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Editor -->
+            <div class="pam-platform-editor" ng-if="editing">
+
+                <div class="form">
+                    <table class="fields">
+                        <tr>
+                            <th>{{ 'PAM.FIELD_HEADER_NAME' | translate }}</th>
+                            <td><input type="text" ng-model="editing.name" maxlength="128"/></td>
+                        </tr>
+                        <tr>
+                            <th class="pam-top">{{ 'PAM.FIELD_HEADER_DESCRIPTION' | translate }}</th>
+                            <td><div class="text-area-field"><textarea ng-model="editing.description" maxlength="1024"
+                                    autocorrect="off" autocapitalize="off"></textarea></div></td>
+                        </tr>
+                        <tr>
+                            <th>{{ 'PAM.FIELD_HEADER_TYPE' | translate }}</th>
+                            <td>{{ 'PAM.TYPE_' + (editing.type | uppercase) | translate }}</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <!-- Settings of the type -->
+                <guac-form namespace="'PAM_TYPE_' + (editing.type | uppercase)"
+                           content="getType(editing.type).forms"
+                           model="editing.settings"></guac-form>
+
+                <p class="pam-secrets-hint" ng-show="editing.storedSecrets.length">
+                    {{ 'PAM.HELP_STORED_SECRETS' | translate }}
+                </p>
+
+                <!-- Rotation policy -->
+                <guac-form namespace="'PAM_POLICY'" content="policyForms" model="editing.policy"></guac-form>
+
+                <div class="action-buttons">
+                    <button class="save" ng-click="savePlatform()" ng-disabled="!isDirty()">{{ 'PAM.ACTION_SAVE' | translate }}</button>
+                    <button class="cancel" ng-click="cancelEdit()">{{ 'PAM.ACTION_CLOSE' | translate }}</button>
+                    <button class="delete danger" ng-show="editing.id" ng-click="deletePlatform()">{{ 'PAM.ACTION_DELETE' | translate }}</button>
+                    <span class="pam-saved" ng-show="saved">{{ 'PAM.INFO_SAVED' | translate }}</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>

@@ -1,0 +1,70 @@
+<div class="settings section connectionHistory pam-history">
+
+    <p>{{ 'PAM_HISTORY.HELP_HISTORY' | translate }}</p>
+
+    <!-- Search controls -->
+    <form class="filter" ng-submit="search()">
+        <input class="search-string" type="text" placeholder="{{ 'PAM_HISTORY.FIELD_PLACEHOLDER_FILTER' | translate }}" ng-model="searchString">
+        <input class="search-button" type="submit" value="{{ 'PAM_HISTORY.ACTION_SEARCH' | translate }}">
+        <button type="button" ng-click="downloadCSV()" ng-disabled="!isLoaded()">{{ 'PAM_HISTORY.ACTION_DOWNLOAD' | translate }}</button>
+    </form>
+
+    <!-- Search results -->
+    <div class="results">
+
+        <table class="sorted history-list">
+            <thead>
+                <tr>
+                    <th guac-sort-order="order" guac-sort-property="'entry.username'">
+                        {{ 'PAM.TABLE_HEADER_USER' | translate }}
+                    </th>
+                    <th guac-sort-order="order" guac-sort-property="'entry.connectionName'">
+                        {{ 'PAM.TABLE_HEADER_CONNECTION' | translate }}
+                    </th>
+                    <th>{{ 'PAM.TABLE_HEADER_REASON' | translate }}</th>
+                    <th>{{ 'PAM_HISTORY.TABLE_HEADER_APPROVED_BY' | translate }}</th>
+                    <th guac-sort-order="order" guac-sort-property="'entry.checkedOut'">
+                        {{ 'PAM.TABLE_HEADER_CHECKED_OUT' | translate }}
+                    </th>
+                    <th guac-sort-order="order" guac-sort-property="'duration'">
+                        {{ 'PAM_HISTORY.TABLE_HEADER_DURATION' | translate }}
+                    </th>
+                    <th guac-sort-order="order" guac-sort-property="'ended'">
+                        {{ 'PAM.TABLE_HEADER_ENDED' | translate }}
+                    </th>
+                    <th guac-sort-order="order" guac-sort-property="'entry.revealCount'">
+                        {{ 'PAM.TABLE_HEADER_VIEWS' | translate }}
+                    </th>
+                </tr>
+            </thead>
+            <tbody ng-class="{loading: !isLoaded()}">
+                <tr ng-repeat="checkout in page" class="history">
+                    <td><guac-user-item username="checkout.entry.username"></guac-user-item></td>
+                    <td>{{ checkout.entry.connectionName }}</td>
+                    <td class="pam-history-truncate" title="{{ checkout.entry.reason }}">{{ checkout.entry.reason }}</td>
+                    <td class="pam-history-truncate" title="{{ checkout.entry.approvedBy.join(', ') }}">{{ checkout.entry.approvedBy.join(', ') }}</td>
+                    <td>{{ checkout.entry.checkedOut | date : dateFormat }}</td>
+                    <td>{{ formatDuration(checkout.duration) }}</td>
+                    <td>
+                        {{ endKey(checkout.entry) | translate }}
+                        <span ng-if="checkout.entry.released">{{ checkout.entry.released | date : dateFormat }}</span>
+                        <span class="pam-ended-by" ng-if="checkout.entry.releasedBy && checkout.entry.releasedBy !== checkout.entry.username">
+                            ({{ 'PAM_HISTORY.TEXT_ENDED_BY' | translate:{ USER: checkout.entry.releasedBy } }})
+                        </span>
+                    </td>
+                    <td>{{ checkout.entry.revealCount }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Text displayed if nothing matches -->
+        <p class="placeholder" ng-show="isEmpty()">
+            {{ 'PAM_HISTORY.INFO_NO_HISTORY' | translate }}
+        </p>
+
+        <guac-pager page="page" page-size="25"
+                    items="checkouts | orderBy : order.predicate"></guac-pager>
+
+    </div>
+
+</div>

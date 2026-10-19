@@ -1,0 +1,63 @@
+<div class="pam-settings">
+
+    <div class="settings section pam-connections">
+        <p>{{ 'PAM.HELP_CONNECTIONS' | translate }}</p>
+
+        <table class="pam-connection-table" ng-class="{loading: !connections}">
+            <thead>
+                <tr>
+                    <th>{{ 'PAM.TABLE_HEADER_CONNECTION' | translate }}</th>
+                    <th>{{ 'PAM.TABLE_HEADER_MODE' | translate }}</th>
+                    <th>{{ 'PAM.TABLE_HEADER_PLATFORM' | translate }}</th>
+                    <th>{{ 'PAM.TABLE_HEADER_LAST_ROTATED' | translate }}</th>
+                    <th>{{ 'PAM.TABLE_HEADER_STATUS' | translate }}</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr ng-repeat="connection in connections">
+                    <td>
+                        {{ connection.name }}
+                        <span class="pam-protocol">{{ connection.protocol }}</span>
+                        <span class="pam-active" ng-show="connection.activeSessions">
+                            {{ 'PAM.INFO_ACTIVE_SESSIONS' | translate:{ COUNT: connection.activeSessions } }}
+                        </span>
+                    </td>
+                    <td>
+                        {{ modeKey(connection.mode) | translate }}
+                        <span ng-show="connection.mode === 'periodic'">
+                            ({{ 'PAM.INFO_INTERVAL_HOURS' | translate:{ HOURS: connection.interval || '?' } }})
+                        </span>
+                        <span class="pam-override" ng-show="connection.overridden">{{ 'PAM.INFO_OVERRIDDEN' | translate }}</span>
+                    </td>
+                    <td>
+                        {{ connection.platformName || ('PAM.INFO_MISSING_PLATFORM' | translate) }}
+                        <span class="pam-type-badge" ng-show="connection.platformType">{{ 'PAM.TYPE_' + (connection.platformType | uppercase) | translate }}</span>
+                    </td>
+                    <td>{{ connection.lastSuccess ? (connection.lastSuccess | date:'medium') : ('PAM.INFO_NEVER' | translate) }}</td>
+                    <td class="pam-status">
+                        <span class="pam-status-badge {{ connection.status | lowercase }}" ng-show="connection.status">
+                            {{ 'PAM.STATUS_' + connection.status | translate }}
+                        </span>
+                        <details ng-if="connection.message">
+                            <summary>{{ 'PAM.ACTION_SHOW_DETAILS' | translate }}</summary>
+                            <pre>{{ connection.message }}</pre>
+                        </details>
+                        <div class="pam-host-key" ng-show="connection.hostKey" title="{{ 'PAM.HELP_HOST_KEY' | translate }}">
+                            {{ connection.hostKey }}
+                        </div>
+                    </td>
+                    <td>
+                        <button ng-click="rotate(connection)" ng-disabled="connection.rotating">
+                            {{ 'PAM.ACTION_ROTATE_NOW' | translate }}
+                        </button>
+                    </td>
+                </tr>
+                <tr ng-show="connections && !connections.length">
+                    <td colspan="6" class="pam-empty">{{ 'PAM.INFO_NO_CONNECTIONS' | translate }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>

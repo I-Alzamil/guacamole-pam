@@ -1,0 +1,39 @@
+<div class="pam-script-field">
+
+    <!-- Validation status, always taking the same space -->
+    <div class="pam-script-status"
+         ng-class="{valid: validation && !validation.errors.length, invalid: validation.errors.length}"
+         title="{{ describeErrors() }}">
+        <span ng-if="validation && !validation.errors.length">
+            {{ 'PAM.TEXT_SCRIPT_VALID' | translate:{ COUNT: validation.stepCount } }}
+        </span>
+        <span ng-if="validation.errors.length">
+            <span ng-if="validation.errors[0].line">{{ 'PAM.TEXT_LINE' | translate:{ LINE: validation.errors[0].line } }}</span>
+            {{ validation.errors[0].message }}
+            <span ng-if="validation.errors.length > 1">{{ 'PAM.TEXT_MORE_ERRORS' | translate:{ COUNT: validation.errors.length - 1 } }}</span>
+        </span>
+    </div>
+
+    <pam-script-editor script="model" errors="validation.errors"></pam-script-editor>
+
+    <!-- Syntax reference -->
+    <details class="pam-syntax-help">
+        <summary>{{ 'PAM.SECTION_HEADER_SYNTAX' | translate }}</summary>
+        <table>
+            <tr><td><code>passwd</code></td><td>{{ 'PAM.HELP_SYNTAX_SEND' | translate }}</td></tr>
+            <tr><td><code>@expect text</code></td><td>{{ 'PAM.HELP_SYNTAX_EXPECT' | translate }}</td></tr>
+            <tr><td><code>@regex (?i)done</code></td><td>{{ 'PAM.HELP_SYNTAX_REGEX' | translate }}</td></tr>
+            <tr><td><code>@timeout 20</code></td><td>{{ 'PAM.HELP_SYNTAX_TIMEOUT' | translate }}</td></tr>
+            <tr><td><code>@send</code></td><td>{{ 'PAM.HELP_SYNTAX_SEND_EMPTY' | translate }}</td></tr>
+            <tr><td><code>\@text</code></td><td>{{ 'PAM.HELP_SYNTAX_ESCAPE' | translate }}</td></tr>
+            <tr><td><code># note</code></td><td>{{ 'PAM.HELP_SYNTAX_COMMENT' | translate }}</td></tr>
+        </table>
+        <table>
+            <tr><td><code>&lt;USER&gt;</code></td><td>{{ 'PAM.HELP_PLACEHOLDER_USER' | translate }}</td></tr>
+            <tr><td><code>&lt;HOST&gt;</code></td><td>{{ 'PAM.HELP_PLACEHOLDER_HOST' | translate }}</td></tr>
+            <tr><td><code>&lt;OLDPASS&gt;</code></td><td>{{ 'PAM.HELP_PLACEHOLDER_OLDPASS' | translate }}</td></tr>
+            <tr><td><code>&lt;NEWPASS&gt;</code></td><td>{{ 'PAM.HELP_PLACEHOLDER_NEWPASS' | translate }}</td></tr>
+        </table>
+    </details>
+
+</div>

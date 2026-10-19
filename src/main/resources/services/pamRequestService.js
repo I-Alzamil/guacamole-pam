@@ -1,0 +1,175 @@
+/**
+ * Knows which connections need a request (Accounts, and connections
+ * requiring access requests), so that opening one shows the request dialog
+ * instead of starting a remote session, unless the user holds access to it.
+ */
+angular.module('guacPam').factory('pamRequestService', ['$injector', function pamRequestService($injector) {
+
+    // Required services
+    var $location  = $injector.get('$location');
+    var $q         = $injector.get('$q');
+    var $rootScope = $injector.get('$rootScope');
+    var $timeout   = $injector.get('$timeout');
+    var pamService = $injector.get('pamService');
+
+    // Required types
+    var ClientIdentifier = $injector.get('ClientIdentifier');
+
+    /**
+     * Data source whose connections can need a request.
+     */
+    var DATA_SOURCE = 'postgresql';
+
+    var service = {};
+
+    /**
+     * Connections needing a request that the user may request, by
+     * identifier, as {account, mine}, or null until loaded.
+     */
+    var requestable = null;
+
+    /**
+     * Promise of the latest refresh, or null if none is running.
+     */
+    var refreshing = null;
+
+    /**
+     * How often requests awaiting approval are checked, in milliseconds, so
+     * an approval shows up on the home screen.
+     */
+    var PENDING_POLL_INTERVAL = 15000;
+
+    /**
+     * Timer of the next automatic refresh, or null.
+     */
+    var nextRefresh = null;
+
+    /**
+     * Refreshes again when held access ends, or soon if a request awaits
+     * approval, so the home screen labels stay current.
+     */
+    var scheduleRefresh = function scheduleRefresh() {
+
+        $timeout.cancel(nextRefresh);
+        nextRefresh = null;
+
+        var delay = null;
+        angular.forEach(requestable, function checkEntry(entry) {
+            var wait = null;
+            if (entry.mine && entry.expires)
+                wait = Math.max(0, entry.expires - Date.now()) + 1000;
+            else if (entry.pending)
+                wait = PENDING_POLL_INTERVAL;
+            if (wait !== null && (delay === null || wait < delay))
+                delay = wait;
+        });
+
+        if (delay !== null)
+            nextRefresh = $timeout(service.refresh, delay);
+
+    };
+
+    /**
+     * Reloads the set of request connections. Resolves once loaded, even if
+     * loading fails (the server refuses sessions for them anyway).
+     */
+    service.refresh = function refresh() {
+
+        if (refreshing)
+            return refreshing;
+
+        refreshing = pamService.getRequests().then(function requestsRetrieved(requests) {
+            var identifiers = {};
+            angular.forEach(requests, function addRequest(request) {
+                identifiers[request.identifier] = {
+                    account : request.account,
+                    mine    : request.mine,
+                    bypass  : request.bypass,
+                    expires : request.mine ? request.expires : null,
+                    pending : !!request.pending,
+                    holders : (request.holders ? request.holders.length : 0) + (request.mine ? 1 : 0)
+                };
+            });
+            requestable = identifiers;
+            scheduleRefresh();
+        }, function requestsFailed() {
+            requestable = requestable || {};
+        })['finally'](function refreshDone() {
+            refreshing = null;
+        });
+
+        return refreshing;
+
+    };
+
+    /**
+     * Whether the set of request connections has been loaded.
+     */
+    service.isLoaded = function isLoaded() {
+        return requestable !== null;
+    };
+
+    /**
+     * Whether opening the connection with the given identifier must show the
+     * request dialog: it needs a request, and is an Account (whose password
+     * is shown there), or is neither held by the user nor bypassed by them as
+     * an administrator. Only meaningful once loaded.
+     */
+    service.mustRequest = function mustRequest(identifier) {
+        var entry = requestable && requestable[identifier];
+        return !!entry && (entry.account || (!entry.mine && !entry.bypass));
+    };
+
+    /**
+     * What is known of a connection needing a request ({account, mine,
+     * bypass, expires, pending, holders}), or null.
+     */
+    service.getEntry = function getEntry(identifier) {
+        return (requestable && requestable[identifier]) || null;
+    };
+
+    /**
+     * Number of users currently holding the password of the given Account,
+     * or 0 for anything else.
+     */
+    service.getAccountHolders = function getAccountHolders(identifier) {
+        var entry = requestable && requestable[identifier];
+        return entry && entry.account ? entry.holders : 0;
+    };
+
+    /**
+     * Opens a session on a connection the user holds access to.
+     */
+    service.connect = function connect(identifier) {
+        if (requestable && requestable[identifier])
+            requestable[identifier].mine = true;
+        $location.url('/client/' + ClientIdentifier.toString({
+            dataSource : DATA_SOURCE,
+            type       : ClientIdentifier.Types.CONNECTION,
+            id         : identifier
+        }));
+    };
+
+    /**
+     * Opens the request dialog for the given connection.
+     */
+    service.open = function open(identifier) {
+        $rootScope.$broadcast('pamRequestOpen', identifier);
+    };
+
+    service.clear = function clear() {
+        $timeout.cancel(nextRefresh);
+        nextRefresh = null;
+        requestable = null;
+    };
+
+    /**
+     * Returns a promise resolved once loaded.
+     */
+    service.whenLoaded = function whenLoaded() {
+        return requestable !== null ? $q.resolve() : service.refresh();
+    };
+
+    return service;
+
+}]);

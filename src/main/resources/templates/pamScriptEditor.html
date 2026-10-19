@@ -1,0 +1,12 @@
+<div class="pam-script-editor">
+    <div class="pam-script-scroll">
+        <div class="pam-script-content">
+            <div class="pam-script-gutter" aria-hidden="true">
+                <div ng-repeat="line in lines track by $index" ng-class="{error: hasError(line)}"
+                     title="{{ errorText(line) }}">{{ line }}</div>
+            </div>
+            <textarea ng-model="script" ng-trim="false" spellcheck="false" wrap="off"
+                      autocomplete="off" autocapitalize="off"></textarea>
+        </div>
+    </div>
+</div>

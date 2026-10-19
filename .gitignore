@@ -1,1 +1,3 @@
 target/
+podman/db/*
+!podman/db/.gitkeep

@@ -1,0 +1,728 @@
+/* Profile list, editor and syntax reference side by side */
+.pam-platform-layout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5em;
+    align-items: flex-start;
+}
+
+.pam-platform-list {
+    flex: 0 0 16em;
+}
+
+.pam-platform-list ul {
+    list-style: none;
+    margin: 0 0 0.75em;
+    padding: 0;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    min-height: 3em;
+}
+
+.pam-platform-list li {
+    padding: 0.5em 0.75em;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.pam-platform-list li:last-child {
+    border-bottom: none;
+}
+
+.pam-platform-list li:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.pam-platform-list li.selected {
+    background: rgba(0, 0, 0, 0.1);
+    font-weight: bold;
+}
+
+.pam-platform-list li.pam-empty {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.pam-platform-name,
+.pam-platform-description {
+    display: block;
+}
+
+.pam-platform-description {
+    font-size: 0.8em;
+    font-weight: normal;
+    opacity: 0.7;
+    margin-top: 0.2em;
+    white-space: pre-line;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+}
+
+.pam-platform-editor {
+    flex: 1 1 28em;
+    min-width: 0;
+}
+
+/* Platform editor fields: labels in one column, fields in the other, all
+   controls the same height; one column on narrow screens */
+.pam-platform-editor .form h3.form-header {
+    font-size: 0.85em;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.8;
+    margin: 1.5em 0 0.6em;
+    padding-bottom: 0.35em;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.pam-platform-editor table.fields {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 0.5em;
+}
+
+.pam-platform-editor table.fields th {
+    width: 11em;
+    padding-right: 1em;
+    text-align: left;
+    font-weight: normal;
+    vertical-align: middle;
+}
+
+.pam-platform-editor .form .fields .labeled-field {
+    display: grid;
+    grid-template-columns: 11em minmax(0, 1fr);
+    column-gap: 1em;
+    align-items: center;
+    margin: 0 0 0.5em;
+}
+
+.pam-platform-editor .form .fields .field-header label {
+    display: block;
+}
+
+.pam-platform-editor input[type="text"],
+.pam-platform-editor input[type="password"],
+.pam-platform-editor input[type="number"],
+.pam-platform-editor select {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 20em;
+    height: 1.9em;
+    padding: 0.15em 0.45em;
+    border: 1px solid #999;
+    border-radius: 0.25em;
+    background-color: white;
+    font: inherit;
+    color: inherit;
+}
+
+.pam-platform-editor input[type="number"] {
+    max-width: 6em;
+}
+
+.pam-platform-editor table.fields th.pam-top {
+    vertical-align: top;
+    padding-top: 0.3em;
+}
+
+.pam-platform-editor input:focus,
+.pam-platform-editor select:focus {
+    outline: none;
+    border-color: #3C3C3C;
+    box-shadow: 0 0 0 2px rgba(60, 60, 60, 0.15);
+}
+
+/* Password fields keep their show/hide icon beside the input */
+.pam-platform-editor .form-field .password-field {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    max-width: 21.5em;
+}
+
+.pam-platform-editor .form-field .password-field input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* The script editor uses the full width under its label */
+.pam-platform-editor .form .fields .labeled-field-script {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0.4em;
+}
+
+@media (max-width: 40em) {
+    .pam-platform-editor .form .fields .labeled-field {
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: 0.25em;
+    }
+    .pam-platform-editor table.fields th {
+        width: 7em;
+    }
+}
+
+/* Script editor: line numbers and an auto-sized textarea share one
+   scrolling container, so they always stay aligned */
+.pam-script-editor {
+    height: 22em;
+    margin: 0.25em 0 0.75em;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+    font-family: monospace;
+    font-size: 0.95em;
+    line-height: 1.4em;
+    background: #fff;
+}
+
+.pam-script-scroll {
+    height: 100%;
+    overflow: auto;
+}
+
+/* Grows with the text, so the gutter background spans every line */
+.pam-script-content {
+    display: flex;
+    align-items: stretch;
+    width: max-content;
+    min-width: 100%;
+    min-height: 100%;
+}
+
+/* Stays visible while scrolling long lines horizontally */
+.pam-script-gutter {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    flex: 0 0 auto;
+    min-width: 2.5em;
+    padding: 0.5em 0.5em 0.5em 0;
+    text-align: right;
+    background: #f2f2f2;
+    color: rgba(0, 0, 0, 0.45);
+    user-select: none;
+}
+
+.pam-script-gutter .error {
+    color: #c00;
+    font-weight: bold;
+}
+
+/* Overrides Guacamole's global textarea style (30em x 10em, 0.8em font).
+   Height and width are set by the directive to fit the content. */
+.pam-script-editor textarea {
+    flex: 1 0 auto;
+    align-self: flex-start;
+    box-sizing: border-box;
+    max-width: none;
+    margin: 0;
+    padding: 0.5em;
+    border: none;
+    border-radius: 0;
+    resize: none;
+    overflow: hidden;
+    font: inherit;
+    line-height: inherit;
+    white-space: pre;
+    background: transparent;
+}
+
+/* Validation status above the editor; its height is fixed so nothing
+   moves when the message appears, changes or disappears */
+.pam-script-status {
+    height: 1.5em;
+    line-height: 1.5em;
+    margin-top: 0.75em;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.pam-script-status.valid {
+    color: #2a7a2a;
+}
+
+.pam-script-status.invalid {
+    color: #c00;
+    cursor: help;
+}
+
+.pam-saved {
+    margin-left: 0.75em;
+    color: #2a7a2a;
+}
+
+/* Syntax reference */
+.pam-syntax-help {
+    flex: 0 1 22em;
+    font-size: 0.85em;
+}
+
+.pam-syntax-help h3 {
+    font-size: 1em;
+    margin: 0 0 0.5em;
+}
+
+.pam-syntax-help table {
+    margin-bottom: 1em;
+    border-collapse: collapse;
+}
+
+.pam-syntax-help td {
+    padding: 0.2em 0.5em 0.2em 0;
+    vertical-align: top;
+}
+
+.pam-syntax-help code {
+    white-space: nowrap;
+}
+
+/* Managed connections */
+.pam-connection-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.pam-connection-table th,
+.pam-connection-table td {
+    padding: 0.5em;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Active checkouts and requests awaiting approval: rows centered on their
+   buttons */
+.pam-checkouts .pam-connection-table td,
+.pam-pending .pam-connection-table td {
+    vertical-align: middle;
+}
+
+.pam-protocol,
+.pam-active {
+    font-size: 0.8em;
+    opacity: 0.7;
+    margin-left: 0.4em;
+}
+
+.pam-empty {
+    opacity: 0.6;
+}
+
+.pam-status-badge {
+    display: inline-block;
+    padding: 0.1em 0.5em;
+    border-radius: 0.2em;
+    font-size: 0.85em;
+    font-weight: bold;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.pam-status-badge.success { background: #d6f0d6; color: #1e5e1e; }
+.pam-status-badge.failed  { background: #f6d6d6; color: #8a1c1c; }
+.pam-status-badge.unknown { background: #f8e3b5; color: #7a4b00; }
+.pam-status-badge.running { background: #d6e4f6; color: #1c4a8a; }
+
+.pam-status details {
+    margin-top: 0.4em;
+}
+
+.pam-status pre {
+    max-width: 40em;
+    max-height: 16em;
+    overflow: auto;
+    white-space: pre-wrap;
+    font-size: 0.85em;
+}
+
+.pam-host-key {
+    margin-top: 0.3em;
+    font-family: monospace;
+    font-size: 0.75em;
+    opacity: 0.7;
+    word-break: break-all;
+}
+
+/* Checkout history: who ended a checkout on someone else's behalf */
+.pam-ended-by {
+    font-size: 0.85em;
+    opacity: 0.75;
+}
+
+/* Password request dialog */
+.pam-request-overlay {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1em;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.pam-request-dialog {
+    width: 100%;
+    max-width: 32em;
+    max-height: 100%;
+    overflow: auto;
+    box-sizing: border-box;
+    padding: 1.25em 1.5em;
+    background: #fff;
+    color: #000;
+    border-radius: 0.25em;
+    box-shadow: 0 0.25em 1.5em rgba(0, 0, 0, 0.4);
+}
+
+.pam-request-dialog h2 {
+    margin: 0 0 0.75em;
+    font-size: 1.25em;
+}
+
+.pam-request-account th {
+    text-align: left;
+    font-weight: normal;
+    padding-right: 1em;
+    vertical-align: top;
+}
+
+.pam-request-dn {
+    font-family: monospace;
+    word-break: break-all;
+}
+
+.pam-request-dialog label {
+    display: block;
+    margin-bottom: 0.25em;
+}
+
+.pam-request-dialog textarea {
+    width: 100%;
+    max-width: none;
+    height: auto;
+    box-sizing: border-box;
+    font-size: 1em;
+    white-space: pre-wrap;
+    resize: vertical;
+}
+
+.pam-request-password {
+    display: flex;
+    gap: 0.5em;
+    align-items: center;
+}
+
+.pam-request-password input {
+    flex: 1 1 auto;
+    max-width: none;
+    font-family: monospace;
+    font-size: 1em;
+}
+
+.pam-request-hint {
+    font-size: 0.85em;
+    opacity: 0.75;
+}
+
+.pam-request-error {
+    color: #c00;
+}
+
+.pam-request-held {
+    font-weight: bold;
+}
+
+.pam-request-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5em;
+    margin-top: 1em;
+}
+
+/* Password management sections that do not apply to a connection */
+.pam-hidden {
+    display: none !important;
+}
+
+/* Request dialog: account URL and notes */
+.pam-request-url a {
+    word-break: break-all;
+}
+
+.pam-request-notes {
+    margin: 0.75em 0;
+    padding: 0.5em 0.75em;
+    background: rgba(0, 0, 0, 0.05);
+    border-left: 3px solid rgba(0, 0, 0, 0.2);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.pam-request-holders {
+    font-size: 0.9em;
+    opacity: 0.8;
+}
+
+/* Icon of Account connections on the home screen and in connection lists */
+.connection .icon.pam-account {
+    background-image: url('images/user-icons/guac-user.svg');
+}
+
+/* Approvals */
+.pam-approvers {
+    font-size: 0.85em;
+    opacity: 0.75;
+    margin-top: 0.2em;
+}
+
+.pam-approval-actions {
+    white-space: nowrap;
+}
+
+.pam-approval-actions button {
+    margin-right: 0.4em;
+}
+
+.pam-status-badge.approved  { background: #d6f0d6; color: #1e5e1e; }
+.pam-status-badge.denied    { background: #f6d6d6; color: #8a1c1c; }
+.pam-status-badge.expired,
+.pam-status-badge.cancelled { background: rgba(0, 0, 0, 0.08); color: inherit; }
+
+.pam-request-pending {
+    padding: 0.5em 0.75em;
+    background: #d6e4f6;
+    border-left: 3px solid #1c4a8a;
+}
+
+/* Approver groups checklist */
+.pam-groups-list {
+    max-height: 12em;
+    overflow: auto;
+}
+
+.pam-groups-list label {
+    display: block;
+    padding: 0.1em 0;
+}
+
+.pam-groups-list label.missing {
+    opacity: 0.6;
+}
+
+/* The approval permission is shown in the permissions section instead */
+.attributes .form-pam-approval {
+    display: none;
+}
+
+/* "Approve" next to connections in the user and group editors */
+.pam-approve-choice {
+    margin-left: 1em;
+    font-size: 0.85em;
+    opacity: 0.85;
+    white-space: nowrap;
+}
+
+.pam-approve-choice input {
+    margin: 0 0.3em 0 0;
+    vertical-align: middle;
+}
+
+.pam-approval-hint {
+    font-size: 0.9em;
+    opacity: 0.8;
+}
+
+/* As a row of the permissions table: kept from widening the table */
+td.pam-approval-hint {
+    max-width: 30em;
+    padding-top: 0;
+    white-space: normal;
+}
+
+/* Count of requests awaiting the user's approval, next to the user menu */
+.pam-user-menu-badges {
+    display: flex;
+    align-items: center;
+}
+
+/* Spacing on the badges themselves, so hidden ones leave no gap: each is
+   kept clear of the next badge, or of the user's name */
+.pam-user-menu-badges .pam-badge {
+    margin-right: 0.6em;
+}
+
+.pam-badge {
+    display: inline-block;
+    min-width: 1.5em;
+    padding: 0 0.4em;
+    border-radius: 0.75em;
+    background: #f1c40f;
+    color: #4a3b00 !important;
+    font-size: 0.75em;
+    font-weight: bold;
+    line-height: 1.5em;
+    text-align: center;
+    text-decoration: none !important;
+    box-sizing: border-box;
+}
+
+/* The same count inside the Approvals tab label */
+.pam-tab-count {
+    margin-left: 0.3em;
+    color: #9a6b00;
+    font-weight: bold;
+}
+
+/* Failed rotations: red, where approvals are yellow */
+.pam-badge.rotations {
+    background: #c0392b;
+    color: #fff !important;
+}
+
+.pam-tab-count.rotations {
+    color: #c0392b;
+}
+
+
+/* Request status of a connection on the home screen: opens the request dialog */
+.pam-connection-status {
+    display: inline-block;
+    margin-left: 0.75em;
+    padding: 0.05em 0.6em;
+    border-radius: 1em;
+    font-size: 0.85em;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+.pam-connection-status.held    { background: #d6f0d6; color: #1e5e1e; }
+.pam-connection-status.pending { background: #d6e4f6; color: #1c4a8a; }
+
+.pam-connection-status:hover,
+.pam-connection-status:focus {
+    text-decoration: underline;
+}
+
+/* Checkout history: one line per checkout; long reasons and approver lists
+   are cut short, and shown in full on hover */
+.pam-history .history-list td {
+    white-space: nowrap;
+}
+
+.pam-history .history-list td.pam-history-truncate {
+    max-width: 16em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* A reason read in full, in a dialog */
+.pam-reason-full {
+    max-height: 50vh;
+    overflow: auto;
+    margin-bottom: 0.75em;
+}
+
+.pam-denial-reason {
+    border-left-color: #8a1c1c;
+}
+
+/* Approvals history: a cut-short reason opens the request in full */
+/* A reason cut to one line in a table; clicking it shows it in full */
+td.pam-truncate {
+    max-width: 18em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pam-reason-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.pam-reason-link:hover,
+.pam-reason-link:focus {
+    text-decoration: underline;
+}
+
+/* Platforms overview, shown while no platform is open */
+.pam-platform-overview {
+    flex: 1 1 28em;
+    min-width: 0;
+}
+
+.pam-platform-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(15em, 1fr));
+    gap: 0.75em;
+    margin-bottom: 1.25em;
+}
+
+.pam-platform-card {
+    padding: 0.75em 1em;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 0.3em;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.pam-platform-card:hover,
+.pam-platform-card:focus {
+    border-color: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.03);
+    outline: none;
+}
+
+.pam-platform-card-title {
+    font-weight: bold;
+}
+
+.pam-platform-card-facts {
+    margin-top: 0.6em;
+    font-size: 0.85em;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25em 1em;
+}
+
+.pam-platform-failing {
+    color: #8a1c1c;
+    font-weight: bold;
+}
+
+.pam-platform-create-header {
+    font-size: 1em;
+    margin: 0 0 0.5em;
+}
+
+.pam-platform-create {
+    border-style: dashed;
+    background: transparent;
+}
+
+/* Type of a platform, next to its name */
+.pam-type-badge {
+    display: inline-block;
+    margin-left: 0.4em;
+    padding: 0 0.45em;
+    border-radius: 0.2em;
+    font-size: 0.75em;
+    font-weight: normal;
+    background: rgba(0, 0, 0, 0.08);
+    vertical-align: middle;
+}
+
+/* Default size of the platform description (Guacamole's own text area,
+   still resizable from its corner), as its content area, not counting
+   padding and border */
+.pam-platform-editor .text-area-field textarea {
+    box-sizing: content-box;
+    width: 313.2px;
+    height: 60px;
+}

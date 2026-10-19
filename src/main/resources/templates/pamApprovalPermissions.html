@@ -1,0 +1,23 @@
+<!-- Rows moved into the editor's permissions table once it appears; until
+     then (or if it never does) they stay here, in a section of their own -->
+<div class="pam-approval-permissions" ng-show="isApplicable() && !merged">
+    <h2 class="header">{{ 'PAM_APPROVAL_PERMISSIONS.SECTION_HEADER_APPROVALS' | translate }}</h2>
+    <div class="section">
+        <table class="properties">
+            <tbody>
+                <tr class="pam-approval-row" ng-show="isApplicable()">
+                    <th>{{ 'PAM_APPROVAL_PERMISSIONS.FIELD_HEADER_APPROVER' | translate }}</th>
+                    <td>
+                        <input type="checkbox" ng-model="approver" ng-model-options="{ getterSetter: true }"
+                               ng-disabled="!editable">
+                    </td>
+                </tr>
+                <tr class="pam-approval-row" ng-show="isApplicable() && selection.isApprover()">
+                    <td colspan="2" class="pam-approval-hint">
+                        {{ (group ? 'PAM_APPROVAL_PERMISSIONS.HELP_SELECT_GROUP' : 'PAM_APPROVAL_PERMISSIONS.HELP_SELECT_USER') | translate:{ COUNT: selection.count() } }}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>

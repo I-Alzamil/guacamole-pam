@@ -1,0 +1,110 @@
+<div class="pam-request-container">
+
+    <!-- Plain root element: ng-if on the root of a replace:true directive
+         would be evaluated outside the dialog scope -->
+    <div class="pam-request-overlay" ng-if="identifier !== null">
+        <div class="pam-request-dialog" role="dialog" aria-modal="true" aria-labelledby="pam-request-title">
+
+            <h2 id="pam-request-title">{{ request.name || ('PAM.REQUEST.HEADER' | translate) }}</h2>
+
+            <!-- Account details -->
+            <table class="pam-request-account" ng-show="request.account">
+                <tr>
+                    <th>{{ 'PAM.REQUEST.FIELD_ACCOUNT' | translate }}</th>
+                    <td>{{ request.accountName }}</td>
+                </tr>
+                <tr ng-show="request.accountDn && request.accountDn !== request.accountName">
+                    <th>{{ 'PAM.REQUEST.FIELD_DN' | translate }}</th>
+                    <td class="pam-request-dn">{{ request.accountDn }}</td>
+                </tr>
+                <tr ng-show="request.url">
+                    <th>{{ 'PAM.REQUEST.FIELD_URL' | translate }}</th>
+                    <td class="pam-request-url">
+                        <a ng-if="isWebLink(request.url)" ng-href="{{ request.url }}" target="_blank" rel="noopener noreferrer">{{ request.url }}</a>
+                        <span ng-if="!isWebLink(request.url)">{{ request.url }}</span>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- Notes, shown as plain text -->
+            <div class="pam-request-notes" ng-show="request.notes">{{ request.notes }}</div>
+
+            <p class="pam-request-error" ng-show="error">{{ error }}</p>
+
+            <!-- Outcome of the last request, if not acted on since -->
+            <p ng-if="request.lastStatus === 'DENIED' && !request.pending" class="pam-request-error">
+                {{ 'PAM.REQUEST.TEXT_LAST_DENIED' | translate:{ USER: request.lastDecidedBy } }}
+            </p>
+            <div ng-if="request.lastStatus === 'DENIED' && !request.pending && request.lastDecisionReason"
+                 class="pam-request-notes pam-denial-reason">{{ request.lastDecisionReason }}</div>
+            <p ng-if="request.lastStatus === 'EXPIRED' && !request.pending" class="pam-request-hint">
+                {{ 'PAM.REQUEST.TEXT_LAST_EXPIRED' | translate }}
+            </p>
+
+            <!-- Awaiting approval -->
+            <div ng-if="request.pending" class="pam-request-pending">
+                <p>{{ 'PAM.REQUEST.TEXT_PENDING' | translate:{ APPROVED: request.pending.approvers.length, REQUIRED: request.pending.approvalsRequired } }}</p>
+                <p class="pam-request-hint" ng-show="request.pending.approvers.length">
+                    {{ 'PAM_APPROVALS.INFO_APPROVED_BY' | translate:{ USERS: request.pending.approvers.join(', ') } }}
+                </p>
+                <p class="pam-request-hint">{{ textKey('HELP_PENDING') | translate:{ MINUTES: request.durationMinutes } }}</p>
+            </div>
+
+            <!-- Available: ask for a reason -->
+            <div ng-if="canRequest() && !request.noRequest">
+                <p ng-if="!request.approvalsRequired">{{ textKey(request.exclusive ? 'TEXT_AVAILABLE_EXCLUSIVE' : 'TEXT_AVAILABLE') | translate:{ MINUTES: request.durationMinutes } }}</p>
+                <p ng-if="request.approvalsRequired">{{ textKey('TEXT_NEEDS_APPROVAL') | translate:{ REQUIRED: request.approvalsRequired, MINUTES: request.durationMinutes } }}</p>
+                <label for="pam-request-reason">{{ 'PAM.REQUEST.FIELD_REASON' | translate }}</label>
+                <textarea id="pam-request-reason" ng-model="form.reason" maxlength="500" rows="3"
+                          ng-disabled="busy"></textarea>
+            </div>
+
+            <!-- Held by someone else -->
+            <p ng-if="request.heldExclusively" class="pam-request-held">
+                {{ 'PAM.REQUEST.TEXT_HELD_BY_OTHER' | translate:{ USER: request.holders.join(', '), EXPIRES: (request.expires | date:'medium') } }}
+            </p>
+
+            <!-- Others holding a shared password -->
+            <p ng-if="!request.heldExclusively && request.holders.length" class="pam-request-holders">
+                {{ 'PAM.REQUEST.INFO_ALSO_HELD_BY' | translate:{ USERS: request.holders.join(', ') } }}
+            </p>
+
+            <!-- Held by the current user -->
+            <div ng-if="request.mine && !expired">
+                <p>{{ textKey('TEXT_HELD') | translate:{ REMAINING: formatRemaining() } }}</p>
+
+                <div class="pam-request-password" ng-if="grant && request.account">
+                    <input ng-attr-type="{{ revealed ? 'text' : 'password' }}" readonly
+                           value="{{ grant.password }}" autocomplete="off" spellcheck="false"
+                           aria-label="{{ 'PAM.REQUEST.FIELD_PASSWORD' | translate }}"/>
+                    <button ng-click="toggleReveal()">{{ (revealed ? 'PAM.REQUEST.ACTION_HIDE' : 'PAM.REQUEST.ACTION_SHOW') | translate }}</button>
+                    <button ng-click="copyPassword()">{{ (copied ? 'PAM.REQUEST.INFO_COPIED' : 'PAM.REQUEST.ACTION_COPY') | translate }}</button>
+                </div>
+                <p class="pam-request-hint" ng-if="grant || !request.account">{{ textKey(request.managed ? 'HELP_RELEASE_MANAGED' : 'HELP_RELEASE') | translate }}</p>
+            </div>
+
+            <p ng-if="expired">{{ textKey('TEXT_EXPIRED') | translate }}</p>
+
+            <div class="pam-request-actions">
+                <button class="save" ng-if="canRequest()"
+                        ng-click="requestPassword()" ng-disabled="busy || (!request.noRequest && !form.reason.trim())">
+                    {{ (request.approvalsRequired ? 'PAM.REQUEST.ACTION_REQUEST_APPROVAL' : textKey('ACTION_REQUEST')) | translate }}
+                </button>
+                <button class="danger" ng-if="request.pending" ng-click="cancelRequest()" ng-disabled="busy">
+                    {{ 'PAM.REQUEST.ACTION_CANCEL_REQUEST' | translate }}
+                </button>
+                <button ng-if="request.account && request.mine && !grant && !expired" ng-click="requestPassword()" ng-disabled="busy">
+                    {{ 'PAM.REQUEST.ACTION_SHOW_AGAIN' | translate }}
+                </button>
+                <button class="save" ng-if="!request.account && request.mine && !expired" ng-click="connect()">
+                    {{ 'PAM.REQUEST.ACTION_CONNECT' | translate }}
+                </button>
+                <button class="danger" ng-if="request.mine && !expired" ng-click="releasePassword()" ng-disabled="busy">
+                    {{ textKey('ACTION_RELEASE') | translate }}
+                </button>
+                <button class="cancel" ng-click="close()">{{ 'PAM.ACTION_CLOSE' | translate }}</button>
+            </div>
+
+        </div>
+    </div>
+</div>

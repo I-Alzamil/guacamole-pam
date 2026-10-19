@@ -1,0 +1,53 @@
+<div class="pam-settings">
+
+    <!-- Active checkouts -->
+    <div class="settings section pam-checkouts">
+        <p>{{ 'PAM.HELP_CHECKOUTS' | translate }}</p>
+
+        <table class="pam-connection-table" ng-class="{loading: !activeCheckouts}">
+            <thead>
+                <tr>
+                    <th>{{ 'PAM.TABLE_HEADER_CONNECTION' | translate }}</th>
+                    <th>{{ 'PAM.TABLE_HEADER_USER' | translate }}</th>
+                    <th>{{ 'PAM.TABLE_HEADER_REASON' | translate }}</th>
+                    <th>{{ 'PAM.TABLE_HEADER_CHECKED_OUT' | translate }}</th>
+                    <th>{{ 'PAM.TABLE_HEADER_EXPIRES' | translate }}</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr ng-repeat="checkout in activeCheckouts">
+                    <td>{{ checkout.connectionName }}</td>
+                    <td>{{ checkout.username }}</td>
+                    <td class="pam-truncate"><a href="" class="pam-reason-link" ng-click="showReason(checkout)"
+                        title="{{ 'PAM_APPROVALS.HELP_READ_FULL' | translate }}">{{ checkout.reason }}</a></td>
+                    <td>{{ checkout.checkedOut | date:'medium' }}</td>
+                    <td>{{ checkout.expires | date:'medium' }}</td>
+                    <td><button class="danger" ng-click="revokeCheckout(checkout)">{{ 'PAM.ACTION_REVOKE' | translate }}</button></td>
+                </tr>
+                <tr ng-show="activeCheckouts && !activeCheckouts.length">
+                    <td colspan="6" class="pam-empty">{{ 'PAM.INFO_NO_ACTIVE_CHECKOUTS' | translate }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+    </div>
+
+    <!-- Every checkout, active or ended -->
+    <h2 class="header">{{ 'PAM.SECTION_HEADER_CHECKOUT_HISTORY' | translate }}</h2>
+    <guac-settings-pam-history></guac-settings-pam-history>
+
+    <!-- Full reason of an active checkout -->
+    <div class="pam-request-overlay" ng-if="reasonShown" ng-click="closeReason($event)">
+        <div class="pam-request-dialog" role="dialog" aria-modal="true" aria-labelledby="pam-checkout-reason-title">
+            <h2 id="pam-checkout-reason-title">{{ reasonShown.connectionName }}</h2>
+            <p class="pam-request-hint">{{ reasonShown.username }} · {{ reasonShown.checkedOut | date:'medium' }}</p>
+            <label>{{ 'PAM.TABLE_HEADER_REASON' | translate }}</label>
+            <div class="pam-request-notes pam-reason-full">{{ reasonShown.reason }}</div>
+            <div class="pam-request-actions">
+                <button class="cancel" ng-click="closeReason()">{{ 'PAM.ACTION_CLOSE' | translate }}</button>
+            </div>
+        </div>
+    </div>
+
+</div>
