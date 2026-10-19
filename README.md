@@ -76,8 +76,13 @@ GRANT SELECT,USAGE ON ALL SEQUENCES IN SCHEMA public TO guacamole_user;
   pam-admin-bypass-requests: true
   ```
 - Only administrators can change a connection's *Password management* and
-  *Access requests* sections, platforms, or who may approve. Other users who
-  may create or edit connections can still change everything else.
+  *Access requests* sections, platforms, or who may approve, nor the
+  username, hostname or port of a connection whose password is managed (they
+  decide whose password its platform rotates, and where). Other users who may
+  create or edit connections can still change everything else.
+- Balancing connection groups refuse to connect when one of their
+  connections requires a request, is an Account, or has its password
+  managed: open those connections directly.
 - Administrators get four new settings tabs: **Platforms**, **Password
   Rotation**, **Checkouts** and **Approvals**. Approvers who aren't
   administrators only get **Approvals**, for the connections their permission

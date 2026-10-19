@@ -6,7 +6,6 @@ import java.util.List;
 import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleResourceNotFoundException;
-import org.apache.guacamole.GuacamoleSecurityException;
 import org.apache.guacamole.pam.checkout.Checkout;
 import org.apache.guacamole.pam.checkout.CheckoutService;
 import org.slf4j.Logger;
@@ -142,11 +141,8 @@ public class ApprovalService {
     private ApprovalRequest requireQualified(int requestId, Approver approver) throws GuacamoleException {
 
         ApprovalRequest request = approvals.get(requestId);
-        if (request == null)
+        if (request == null || !approver.qualifiesFor(request.getConnectionIdentifier()))
             throw new GuacamoleResourceNotFoundException("No such request.");
-
-        if (!approver.qualifiesFor(request.getConnectionIdentifier()))
-            throw new GuacamoleSecurityException("Permission denied.");
 
         return request;
 

@@ -7,13 +7,15 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleSecurityException;
 import org.apache.guacamole.form.Form;
+import org.apache.guacamole.net.GuacamoleTunnel;
 import org.apache.guacamole.net.auth.Connection;
+import org.apache.guacamole.net.auth.ConnectionGroup;
 import org.apache.guacamole.net.auth.DecoratingDirectory;
+import org.apache.guacamole.net.auth.DelegatingConnectionGroup;
 import org.apache.guacamole.net.auth.DelegatingUser;
 import org.apache.guacamole.net.auth.DelegatingUserContext;
 import org.apache.guacamole.net.auth.DelegatingUserGroup;
@@ -24,6 +26,7 @@ import org.apache.guacamole.net.auth.UserGroup;
 import org.apache.guacamole.net.auth.permission.SystemPermission;
 import org.apache.guacamole.pam.checkout.CheckoutService;
 import org.apache.guacamole.pam.rotation.RotationService;
+import org.apache.guacamole.protocol.GuacamoleClientInformation;
 
 /**
  * Decorates the PostgreSQL UserContext: adds password management to the
@@ -31,7 +34,10 @@ import org.apache.guacamole.pam.rotation.RotationService;
  * adds the approval permission to users and user groups. Only
  * administrators may change either: users allowed to create or edit
  * connections, users or groups keep doing so, but cannot change how
- * passwords are managed, who must request access, or who approves.
+ * passwords are managed, who must request access, or who approves, nor the
+ * account and host of a managed connection (see {@link ProtectedFields}).
+ * Balancing connection groups, which Guacamole connects through without
+ * this extension's connections, refuse connections it must check.
  */
 public class PamUserContextDecorator extends DelegatingUserContext {
 
@@ -69,7 +75,7 @@ public class PamUserContextDecorator extends DelegatingUserContext {
             @Override
             public void add(Connection object) throws GuacamoleException {
                 requireUnchanged(PamAttributes.CONNECTION_ATTRIBUTE_NAMES, null, object.getAttributes(),
-                        "Only administrators can change password management or access requests.");
+                        CONNECTION_CHANGE_REFUSED);
                 super.add(object);
             }
 
@@ -78,7 +84,15 @@ public class PamUserContextDecorator extends DelegatingUserContext {
                 Connection stored = object.getIdentifier() == null ? null : connections.get(object.getIdentifier());
                 requireUnchanged(PamAttributes.CONNECTION_ATTRIBUTE_NAMES,
                         stored == null ? null : stored.getAttributes(), object.getAttributes(),
-                        "Only administrators can change password management or access requests.");
+                        CONNECTION_CHANGE_REFUSED);
+
+                // The account and host of a managed connection decide whose
+                // password its platform rotates, and where
+                if (stored != null && ProtectedFields.isManaged(stored.getAttributes())
+                        && ProtectedFields.parametersChanged(ProtectedFields.MANAGED_PARAMETERS,
+                                stored.getConfiguration().getParameters(), object.getConfiguration().getParameters())
+                        && !isAdministrator())
+                    throw new GuacamoleSecurityException(MANAGED_PARAMETERS_REFUSED);
 
                 // Connections created through the REST API are never decorated
                 if (object instanceof PamConnection)
@@ -89,6 +103,69 @@ public class PamUserContextDecorator extends DelegatingUserContext {
         };
 
     }
+
+    @Override
+    public Directory<ConnectionGroup> getConnectionGroupDirectory() throws GuacamoleException {
+
+        return new DecoratingDirectory<ConnectionGroup>(super.getConnectionGroupDirectory()) {
+
+            @Override
+            protected ConnectionGroup decorate(ConnectionGroup object) {
+                return new CheckedConnectionGroup(object);
+            }
+
+            @Override
+            protected ConnectionGroup undecorate(ConnectionGroup object) {
+                return object instanceof CheckedConnectionGroup ? ((CheckedConnectionGroup) object).getUndecorated()
+                        : object;
+            }
+
+        };
+
+    }
+
+    /**
+     * Connection group refusing to balance over connections this extension
+     * checks: Guacamole opens the chosen connection itself, so its request,
+     * approval and time limit would not apply, nor would its sessions be
+     * tracked for rotation.
+     */
+    private final class CheckedConnectionGroup extends DelegatingConnectionGroup {
+
+        CheckedConnectionGroup(ConnectionGroup group) {
+            super(group);
+        }
+
+        ConnectionGroup getUndecorated() {
+            return getDelegateConnectionGroup();
+        }
+
+        @Override
+        public GuacamoleTunnel connect(GuacamoleClientInformation info, Map<String, String> tokens)
+                throws GuacamoleException {
+            if (getType() == ConnectionGroup.Type.BALANCING)
+                checkoutService.requireBalanceable(getName(), getConnectionIdentifiers());
+            return getDelegateConnectionGroup().connect(info, tokens);
+        }
+
+        /**
+         * The deprecated variant without tokens, routed through the check
+         * above as for {@link PamConnection}.
+         */
+        @Override
+        @Deprecated
+        public GuacamoleTunnel connect(GuacamoleClientInformation info) throws GuacamoleException {
+            return connect(info, Collections.<String, String>emptyMap());
+        }
+
+    }
+
+    private static final String CONNECTION_CHANGE_REFUSED =
+            "Only administrators can change password management or access requests.";
+
+    private static final String MANAGED_PARAMETERS_REFUSED =
+            "Only administrators can change the username, hostname or port of a connection whose password is"
+            + " managed.";
 
     /**
      * Whether the user of this context is an administrator, determined once.
@@ -226,23 +303,9 @@ public class PamUserContextDecorator extends DelegatingUserContext {
     private void requireUnchanged(List<String> names, Map<String, String> stored, Map<String, String> updated,
             String refusal) throws GuacamoleException {
 
-        boolean changed = false;
-        for (String name : names)
-            changed |= !Objects.equals(normalize(stored, name), normalize(updated, name));
-
-        if (changed && !isAdministrator())
+        if (ProtectedFields.attributesChanged(names, stored, updated) && !isAdministrator())
             throw new GuacamoleSecurityException(refusal);
 
-    }
-
-    /**
-     * Treats a missing attribute, an empty value, "false" and "[]" alike.
-     */
-    private static String normalize(Map<String, String> attributes, String name) {
-        String value = attributes == null ? null : attributes.get(name);
-        if (value == null || value.trim().isEmpty() || value.equals("false") || value.equals("[]"))
-            return null;
-        return value.trim();
     }
 
     @Override

@@ -228,6 +228,29 @@ public class CheckoutService {
     }
 
     /**
+     * Refuses connecting through a balancing connection group if any of its
+     * connections is an Account, requires a request, or is managed: the
+     * connection Guacamole picks would be opened without its checks, and its
+     * session would not be tracked for rotation.
+     *
+     * @throws GuacamoleClientException
+     *     If the group contains such a connection.
+     */
+    public void requireBalanceable(String groupName, Iterable<String> connectionIdentifiers)
+            throws GuacamoleException {
+
+        for (String identifier : connectionIdentifiers) {
+            Integer id = parseId(identifier);
+            Target target = id == null ? null : connections.load(id);
+            if (target != null && (isRequestable(target) || isManaged(target)))
+                throw new GuacamoleClientException("Connection group \"" + groupName + "\" balances over \""
+                        + target.getName() + "\", which requires a request or has its password managed."
+                        + " Open that connection directly instead.");
+        }
+
+    }
+
+    /**
      * Starts the checkout of an approved request. The requester sees the
      * password, or connects, by opening the connection again.
      */

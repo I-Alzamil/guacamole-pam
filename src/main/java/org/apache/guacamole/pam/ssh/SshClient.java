@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -31,11 +32,6 @@ public class SshClient {
     private static final long SETTLE_MAX_MS = 3000;
 
     private static final long POLL_INTERVAL_MS = 50;
-
-    /**
-     * Amount of output kept for the transcript shown on failure.
-     */
-    private static final int TRANSCRIPT_LIMIT = 2000;
 
     private static final Pattern ANSI_ESCAPE = Pattern.compile(
             "\u001B\\[[0-?]*[ -/]*[@-~]"           // CSI sequences (colors, cursor moves)
@@ -207,14 +203,14 @@ public class SshClient {
      */
     private static final class Output {
 
-        private final Map<String, String> values;
         private final StringBuilder raw = new StringBuilder();
-        private final StringBuilder transcript = new StringBuilder();
+        private final Transcript transcript;
         private int stepStart = 0;
         private final byte[] buffer = new byte[4096];
 
         Output(Map<String, String> values) {
-            this.values = values;
+            this.transcript = new Transcript(Arrays.asList(
+                    values.get(SequenceScript.OLDPASS), values.get(SequenceScript.NEWPASS)));
         }
 
         /**
@@ -230,8 +226,6 @@ public class SshClient {
                 String text = new String(buffer, 0, length, StandardCharsets.UTF_8);
                 raw.append(text);
                 transcript.append(text);
-                if (transcript.length() > TRANSCRIPT_LIMIT * 2)
-                    transcript.delete(0, transcript.length() - TRANSCRIPT_LIMIT);
                 received = true;
             }
             return received;
@@ -275,15 +269,7 @@ public class SshClient {
         }
 
         String transcript() {
-            String text = clean(transcript.toString());
-            if (text.length() > TRANSCRIPT_LIMIT)
-                text = text.substring(text.length() - TRANSCRIPT_LIMIT);
-            for (String key : new String[] { SequenceScript.OLDPASS, SequenceScript.NEWPASS }) {
-                String secret = values.get(key);
-                if (secret != null && !secret.isEmpty())
-                    text = text.replace(secret, "******");
-            }
-            return text.trim();
+            return transcript.render(Output::clean);
         }
 
         private static String clean(String text) {
