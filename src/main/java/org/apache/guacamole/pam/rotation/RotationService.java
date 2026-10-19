@@ -456,8 +456,8 @@ public class RotationService {
     private PasswordChanger createChanger(Target target) throws GuacamoleException {
 
         // Never try a target with a password that is not its own
-        if (target.getPasswordError() != null)
-            throw new IllegalArgumentException("The stored password cannot be read: " + target.getPasswordError());
+        if (target.getSecretError() != null)
+            throw new IllegalArgumentException("The stored secrets cannot be read: " + target.getSecretError());
 
         String platformId = target.getAttribute(PamAttributes.PLATFORM);
         if (platformId == null)

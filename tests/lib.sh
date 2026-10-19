@@ -158,14 +158,15 @@ grant() { api PATCH "$DATA/users/$1/permissions" "$ADMIN" "$2" >/dev/null; }
 
 grant_read() { grant "$1" "[{\"op\":\"add\",\"path\":\"/connectionPermissions/$2\",\"value\":\"READ\"}]"; }
 
-# parameter ID NAME: a connection parameter; passwords as plaintext, also
-# when kept apart by the extension (the parameter is then ${PAM_PASSWORD})
+# parameter ID NAME: a connection parameter; secrets as plaintext, also
+# when kept apart by the extension (the parameter is then a token such as
+# ${PAM_PASSWORD_17})
 parameter() {
     local value
     value=$(json_get "$(curl -s "$DATA/connections/$1/parameters?token=$ADMIN")" "d.get('$2')")
-    if [ "$2" = password ] && [ "$value" = '${PAM_PASSWORD}' ]; then
-        value=$(reveal "managed-password:$1" "$(podman exec myguacdbtest psql -U postgres -tAc \
-            "SELECT password FROM pam_connection_password WHERE connection_id = $1")")
+    if [[ "$value" == '${PAM_'*"_$1}" ]]; then
+        value=$(reveal "connection-secret:$1:$2" "$(podman exec myguacdbtest psql -U postgres -tAc \
+            "SELECT value FROM pam_connection_secret WHERE connection_id = $1 AND parameter_name = '$2'")")
     elif [ "$2" = password ]; then
         value=$(reveal connection-password "$value")
     fi

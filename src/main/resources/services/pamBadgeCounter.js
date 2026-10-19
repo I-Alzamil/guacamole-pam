@@ -36,7 +36,10 @@ angular.module('guacPam').factory('pamBadgeCounter', ['$injector', function pamB
                 return;
             return fetchCount().then(function counted(value) {
                 count = timer ? value || 0 : 0;
-            }, function countFailed() {
+            }, function countFailed(error) {
+                // Logged out, or the session ended: started again at login
+                if (error && error.type === 'PERMISSION_DENIED')
+                    counter.stop();
                 count = 0;
             });
         };

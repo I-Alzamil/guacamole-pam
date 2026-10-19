@@ -22,6 +22,12 @@ if [ -z "$ADMIN" ]; then
     exit 2
 fi
 
+# Guacamole 1.6 remembers the first request whose error it handles, and ends
+# that request's session whenever any later request is refused as
+# unauthorized (such as a browser still polling with an ended session). Let
+# it remember a throwaway login rather than one a suite relies on
+curl -s -o /dev/null "$DATA/connections/0?token=$(admin_token)"
+
 for suite in suites/*.sh; do
     if [ $# -gt 0 ]; then
         wanted=no

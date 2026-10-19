@@ -92,20 +92,25 @@ that is never stored in the database:
 - platform secrets, such as an LDAP, Kerberos or WinRM administrator's
   password;
 - Account passwords;
-- passwords of managed connections (those with a platform);
+- every connection's passwords, private keys and passphrases (`password`,
+  `passphrase`, `private-key`, `gateway-password`, `sftp-password`,
+  `sftp-passphrase`, `sftp-private-key` and Kubernetes' `client-key`);
 - passwords kept from rotations that could not be confirmed.
 
-A managed connection's password is kept apart, in `pam_connection_password`,
-encrypted for that connection only. Its **Password** field then holds
-`${PAM_PASSWORD}`, which the extension replaces with the password when the
-connection opens, as Guacamole's vault extensions do. Editors of the
-connection only see `${PAM_PASSWORD}`: saving it unchanged keeps the
-password, and typing a new one replaces it. `${PAM_PASSWORD}` can't be used
-in any other field, where Guacamole would replace it too, and encrypted
-values can't be pasted from one connection into another.
+A connection's secrets are kept apart, in `pam_connection_secret`, each
+encrypted for its field and connection only. The field then holds a token
+naming both, such as `${PAM_PASSWORD_17}` or `${PAM_PRIVATE_KEY_17}`, which
+the extension replaces with the value when the connection opens, as
+Guacamole's vault extensions do. Balancing groups are given the values of all
+their connections, as Guacamole chooses which one to open. Editors of the
+connection only see the tokens: saving them unchanged keeps the values, and
+typing a new value replaces it. A token can't be used in any other field or
+connection, where Guacamole would replace it too, and encrypted values can't
+be pasted into a connection.
 
-Passwords of connections without a platform stay unencrypted, as in
-Guacamole itself.
+Values containing one of Guacamole's own tokens, such as `${GUAC_PASSWORD}`
+to pass the user's own password on, stay in their field for Guacamole to
+replace.
 
 Generate a key once with `openssl rand -base64 32` and set it in
 `guacamole.properties` (or `PAM_ENCRYPTION_KEY` in the Docker image), then
@@ -129,15 +134,15 @@ password, so losing the key means resetting those accounts by other means.
   start; once the log no longer reports secrets under the old key, remove it.
 - **Before removing the key, or the extension, or installing an earlier
   version**, set `pam-encryption-decrypt: true` (`PAM_ENCRYPTION_DECRYPT`) with
-  the key and restart: every secret is decrypted, and managed connections'
-  passwords go back into their **Password** field. Then remove both
-  settings. Without this, managed connections would send `${PAM_PASSWORD}` as
+  the key and restart: every secret is decrypted, and connections' secrets
+  go back into their fields. Then remove both settings. Without this,
+  connections would send their tokens, such as `${PAM_PASSWORD_17}`, as
   their password.
 - **If the key is missing or wrong**, the extension still loads and access
   rules still apply. Unencrypted secrets keep working, and what needs an
-  encrypted secret fails, saying which key it needs: opening a managed
-  connection, checking out an Account, or rotating (before trying the target
-  with a wrong password). The log says the same at start.
+  encrypted secret fails, saying which key it needs: opening a connection,
+  checking out an Account, or rotating (before trying the target with a wrong
+  password). The log says the same at start.
 
 #### Reading an encrypted secret
 
@@ -153,8 +158,9 @@ psql -tAc "SELECT pending_password FROM pam_rotation_state WHERE connection_id =
 ```
 
 The last argument is the kind of value: `pending-password`,
-`connection-password` (an Account's password), `managed-password:<connection
-id>` (from `pam_connection_password`) or `platform-secrets`.
+`connection-password` (an Account's password),
+`connection-secret:<connection id>:<field>` (from `pam_connection_secret`,
+such as `connection-secret:17:private-key`) or `platform-secrets`.
 
 ## After installing
 
@@ -199,16 +205,21 @@ connection needs in its *Access requests* section.
 - **Secrets stay on the server.** Platform secrets, such as an LDAP rotation
   account's password, are never sent to the browser. They're stored unencrypted
   in the database unless a key is set (see
-  [Encrypting stored secrets](#encrypting-stored-secrets)). Passwords of
-  connections without a platform are always stored unencrypted, like in
-  Guacamole itself, so protect database access accordingly.
+  [Encrypting stored secrets](#encrypting-stored-secrets)), like
+  connections' passwords and keys, so set one, or protect database access
+  accordingly.
 - **Editors can read passwords, unless a key is set.** Users with *edit*
   permission on a connection can read its parameters, including its password.
-  With a key set, they see managed connections' and Accounts' passwords only
-  as `${PAM_PASSWORD}` or encrypted. They can still change a managed
-  connection's other parameters, and some protocols have parameters that
-  could send the password elsewhere (such as a VNC repeater), so give edit
-  permission on managed connections and Accounts to administrators only.
+  With a key set, they see passwords and keys only as tokens, and Accounts'
+  passwords encrypted. They can still change a connection's other
+  parameters, and some protocols have parameters that could send the
+  password elsewhere (such as its hostname, or a VNC repeater, unless the
+  connection is managed), so give edit permission on sensitive connections
+  and Accounts to administrators only.
+- **A Guacamole 1.6 issue can end sessions.** Guacamole remembers the first
+  request whose error it handles, and ends that request's session whenever a
+  later request is refused as unauthorized, from anyone. The extension's own
+  pages never send requests without a session, so they don't trigger it.
 - **SSH hosts are pinned.** The host key is trusted on first contact and
   required from then on, like SSH's `known_hosts`. If a host's key changes on
   purpose, paste the new fingerprint (shown in the error) into the connection's

@@ -99,7 +99,7 @@ public class PamDatabase {
 
     private volatile boolean sessionTable = false;
 
-    private volatile boolean passwordTable = false;
+    private volatile boolean secretTable = false;
 
     /**
      * Returns why this extension cannot use the Guacamole database here, or
@@ -213,15 +213,15 @@ public class PamDatabase {
                         + " schema/postgresql.sql from the extension's jar is run again as the database owner,"
                         + " and its new tables granted to Guacamole's user, the extension works as its earlier"
                         + " versions: without \"pam_session\", servers sharing this database do not see each"
-                        + " other's sessions (run a single server); without \"pam_connection_password\", the"
-                        + " passwords of managed connections are not encrypted.",
+                        + " other's sessions (run a single server); without \"pam_connection_secret\", the"
+                        + " passwords and keys of connections are not encrypted.",
                         username, firstLine(e.getMessage()));
 
             }
         }
 
         sessionTable = hasTable(connection, "pam_session");
-        passwordTable = hasTable(connection, "pam_connection_password");
+        secretTable = hasTable(connection, "pam_connection_secret");
         schemaReady = true;
         logger.info("PAM database schema is ready.");
 
@@ -259,12 +259,12 @@ public class PamDatabase {
     }
 
     /**
-     * Whether "pam_connection_password" exists, letting the passwords of
-     * managed connections be kept encrypted. Known once the database was
-     * first used.
+     * Whether "pam_connection_secret" exists, letting the sensitive
+     * parameters of connections be kept encrypted. Known once the database
+     * was first used.
      */
-    public boolean hasPasswordTable() {
-        return passwordTable;
+    public boolean hasSecretTable() {
+        return secretTable;
     }
 
     /**

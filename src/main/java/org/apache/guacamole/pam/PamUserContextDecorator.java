@@ -27,7 +27,7 @@ import org.apache.guacamole.net.auth.UserContext;
 import org.apache.guacamole.net.auth.UserGroup;
 import org.apache.guacamole.net.auth.permission.SystemPermission;
 import org.apache.guacamole.pam.checkout.CheckoutService;
-import org.apache.guacamole.pam.db.PasswordStore;
+import org.apache.guacamole.pam.db.ConnectionSecrets;
 import org.apache.guacamole.pam.rotation.RotationService;
 import org.apache.guacamole.protocol.GuacamoleClientInformation;
 import org.apache.guacamole.protocol.GuacamoleConfiguration;
@@ -43,8 +43,8 @@ import org.apache.guacamole.protocol.GuacamoleConfiguration;
  * Balancing connection groups, which Guacamole connects through without
  * this extension's connections, refuse connections it must check. Account
  * passwords are stored encrypted when a key is set, wherever the connection
- * is saved from, and the passwords of other managed connections kept apart
- * (see {@link PasswordStore}).
+ * is saved from, and the passwords and keys of other connections kept apart
+ * (see {@link ConnectionSecrets}).
  */
 public class PamUserContextDecorator extends DelegatingUserContext {
 
@@ -58,48 +58,44 @@ public class PamUserContextDecorator extends DelegatingUserContext {
 
     private final CheckoutService checkoutService;
 
-    private final PasswordStore passwords;
+    private final ConnectionSecrets connectionSecrets;
 
     public PamUserContextDecorator(UserContext context, RotationService rotationService,
-            CheckoutService checkoutService, PasswordStore passwords) {
+            CheckoutService checkoutService, ConnectionSecrets connectionSecrets) {
         super(context);
         this.rotationService = rotationService;
         this.checkoutService = checkoutService;
-        this.passwords = passwords;
+        this.connectionSecrets = connectionSecrets;
     }
 
     /**
-     * Prepares storing the connection's password as {@link PasswordStore}
-     * decides, changing the "password" parameter to what is stored there,
-     * and refuses {@link PasswordStore#TOKEN} in any other parameter, where
-     * Guacamole would replace it with the password too. Returns null if the
-     * connection has no configuration.
+     * Prepares storing the connection's sensitive parameters as
+     * {@link ConnectionSecrets} decides, changing them to what is stored in
+     * them. Returns null if the connection has no configuration.
      */
-    private PasswordStore.Saving preparePassword(Connection object) throws GuacamoleException {
+    private ConnectionSecrets.Saving prepareSecrets(Connection object) throws GuacamoleException {
 
         GuacamoleConfiguration configuration = object.getConfiguration();
         if (configuration == null)
             return null;
 
-        for (Map.Entry<String, String> parameter : configuration.getParameters().entrySet()) {
-            if (!PASSWORD_PARAMETER.equals(parameter.getKey()) && parameter.getValue() != null
-                    && parameter.getValue().contains(PasswordStore.TOKEN))
-                throw new GuacamoleClientException(PasswordStore.TOKEN + " can only be used as the password.");
-        }
-
-        String password = configuration.getParameter(PASSWORD_PARAMETER);
-        PasswordStore.Saving saving;
+        ConnectionSecrets.Saving saving;
         try {
-            saving = passwords.prepare(toId(object.getIdentifier()), configuration.getProtocol(),
-                    ProtectedFields.isManaged(object.getAttributes()), password);
+            saving = connectionSecrets.prepare(toId(object.getIdentifier()), configuration.getProtocol(),
+                    configuration.getParameters());
         }
         catch (GuacamoleServerException e) {
-            throw new GuacamoleClientException("The password cannot be saved. " + e.getMessage(), e);
+            throw new GuacamoleClientException("The connection cannot be saved. " + e.getMessage(), e);
         }
 
-        if (saving.getParameter() != null && !saving.getParameter().equals(password)) {
+        if (!saving.getChanges().isEmpty()) {
             GuacamoleConfiguration changed = new GuacamoleConfiguration(configuration);
-            changed.setParameter(PASSWORD_PARAMETER, saving.getParameter());
+            for (Map.Entry<String, String> change : saving.getChanges().entrySet()) {
+                if (change.getValue() == null)
+                    changed.unsetParameter(change.getKey());
+                else
+                    changed.setParameter(change.getKey(), change.getValue());
+            }
             object.setConfiguration(changed);
         }
 
@@ -117,9 +113,10 @@ public class PamUserContextDecorator extends DelegatingUserContext {
     }
 
     /**
-     * Completes storing the password of a saved connection.
+     * Completes storing the sensitive parameters of a saved connection.
      */
-    private static void completePassword(PasswordStore.Saving saving, Connection object) throws GuacamoleException {
+    private static void completeSecrets(ConnectionSecrets.Saving saving, Connection object)
+            throws GuacamoleException {
         Integer id = toId(object.getIdentifier());
         if (saving != null && id != null)
             saving.complete(id);
@@ -134,7 +131,7 @@ public class PamUserContextDecorator extends DelegatingUserContext {
 
             @Override
             protected Connection decorate(Connection object) throws GuacamoleException {
-                return new PamConnection(object, rotationService, checkoutService, passwords,
+                return new PamConnection(object, rotationService, checkoutService, connectionSecrets,
                         self().getIdentifier(), isAdministrator());
             }
 
@@ -143,18 +140,18 @@ public class PamUserContextDecorator extends DelegatingUserContext {
             public void add(Connection object) throws GuacamoleException {
                 requireUnchanged(PamAttributes.CONNECTION_ATTRIBUTE_NAMES, null, object.getAttributes(),
                         CONNECTION_CHANGE_REFUSED);
-                PasswordStore.Saving saving = preparePassword(object);
+                ConnectionSecrets.Saving saving = prepareSecrets(object);
                 super.add(object);
-                completePassword(saving, object);
+                completeSecrets(saving, object);
             }
 
-            // Checked by undecorate(), then saved: only then is the password
+            // Checked by undecorate(), then saved: only then are secrets
             // kept apart
             @Override
             public void update(Connection object) throws GuacamoleException {
-                PasswordStore.Saving saving = preparePassword(object);
+                ConnectionSecrets.Saving saving = prepareSecrets(object);
                 super.update(object);
-                completePassword(saving, object);
+                completeSecrets(saving, object);
             }
 
             @Override
@@ -206,7 +203,8 @@ public class PamUserContextDecorator extends DelegatingUserContext {
      * Connection group refusing to balance over connections this extension
      * checks: Guacamole opens the chosen connection itself, so its request,
      * approval and time limit would not apply, nor would its sessions be
-     * tracked for rotation.
+     * tracked for rotation. For the same reason, it is given the secrets of
+     * all its connections, each standing for its own token.
      */
     private final class CheckedConnectionGroup extends DelegatingConnectionGroup {
 
@@ -221,9 +219,26 @@ public class PamUserContextDecorator extends DelegatingUserContext {
         @Override
         public GuacamoleTunnel connect(GuacamoleClientInformation info, Map<String, String> tokens)
                 throws GuacamoleException {
-            if (getType() == ConnectionGroup.Type.BALANCING)
-                checkoutService.requireBalanceable(getName(), getConnectionIdentifiers());
-            return getDelegateConnectionGroup().connect(info, tokens);
+            if (getType() != ConnectionGroup.Type.BALANCING)
+                return getDelegateConnectionGroup().connect(info, tokens);
+
+            checkoutService.requireBalanceable(getName(), getConnectionIdentifiers());
+
+            // Guacamole shows users no detail of a server error, only logs it
+            Map<String, String> withSecrets = new HashMap<>(tokens);
+            for (String identifier : getConnectionIdentifiers()) {
+                Integer id = toId(identifier);
+                try {
+                    if (id != null)
+                        withSecrets.putAll(connectionSecrets.getTokens(id));
+                }
+                catch (GuacamoleServerException e) {
+                    throw new GuacamoleServerException("Connection group \"" + getName() + "\" cannot be opened: "
+                            + e.getMessage(), e);
+                }
+            }
+
+            return getDelegateConnectionGroup().connect(info, withSecrets);
         }
 
         /**
@@ -237,8 +252,6 @@ public class PamUserContextDecorator extends DelegatingUserContext {
         }
 
     }
-
-    private static final String PASSWORD_PARAMETER = "password";
 
     private static final String CONNECTION_CHANGE_REFUSED =
             "Only administrators can change password management or access requests.";

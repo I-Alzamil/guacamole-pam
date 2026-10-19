@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Holds a Guacamole session open over the HTTP tunnel, as a browser would.
 
-    session.py GUAC_URL TOKEN CONNECTION_ID
+    session.py GUAC_URL TOKEN ID [TYPE]
+
+TYPE is "c" for a connection (the default) or "g" for a connection group.
 
 Prints "open" once the tunnel is connected and "closed" when it ends, from
 either side. Ends the session cleanly on SIGTERM or SIGINT.
@@ -15,10 +17,11 @@ import urllib.parse
 import urllib.request
 
 url, token, connection = sys.argv[1:4]
+kind = sys.argv[4] if len(sys.argv) > 4 else "c"
 tunnel = url + "/tunnel"
 
 data = urllib.parse.urlencode({
-    "token": token, "GUAC_DATA_SOURCE": "postgresql", "GUAC_ID": connection, "GUAC_TYPE": "c",
+    "token": token, "GUAC_DATA_SOURCE": "postgresql", "GUAC_ID": connection, "GUAC_TYPE": kind,
     "GUAC_WIDTH": "800", "GUAC_HEIGHT": "600", "GUAC_DPI": "96",
 }).encode()
 

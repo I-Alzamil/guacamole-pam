@@ -1,9 +1,10 @@
 #!/bin/bash
 # Encryption at rest: what the database holds (platform secrets, Account
-# passwords and pending passwords encrypted; managed connections' passwords
-# kept apart, encrypted, behind ${PAM_PASSWORD}; other connections'
-# passwords plaintext), what the API returns, saving connections from the
-# editor, and sessions. Skipped when the test setup has no key.
+# passwords and pending passwords encrypted; connections' passwords, keys and
+# passphrases kept apart, encrypted, behind tokens such as ${PAM_PASSWORD_17};
+# Guacamole's own tokens left alone), what the API returns, saving
+# connections from the editor, and sessions, also through balancing groups.
+# Skipped when the test setup has no key.
 
 if [ -z "$PAM_TEST_KEY" ]; then
     section "Skipped: build.sh was run without an encryption key"
@@ -42,7 +43,8 @@ check "...which appears nowhere in the table" 0 "$(sql "SELECT count(*) FROM pam
 STORED=$(stored_password "$ACCOUNT")
 check "an Account's password is encrypted" yes "$(is_encrypted "$STORED")"
 check "...and decrypts to the password" "$ACCOUNT_PASSWORD" "$(reveal connection-password "$STORED")"
-check "another connection's password stays plaintext, for guacd" "T2-Ssh-Plain1!" "$(stored_password "$SSH")"
+check "a connection's password is kept apart, behind its token" "\${PAM_PASSWORD_$SSH}" "$(stored_password "$SSH")"
+check "...and is the password" "T2-Ssh-Plain1!" "$(parameter "$SSH" password)"
 check "no Account password is stored as plaintext" 0 \
     "$(sql "SELECT count(*) FROM guacamole_connection_parameter p JOIN guacamole_connection c USING (connection_id)
             WHERE c.protocol = 'pam-account' AND p.parameter_name = 'password' AND p.parameter_value NOT LIKE 'pam:v1:%'")"
@@ -78,7 +80,7 @@ check "...and the stored password is unchanged" "T2-Enc-Typed1!" "$(checkout_pas
 R=$(edit_connection "$ADMIN" "$SSH" "{\"password\":\"$(raw_parameter "$ACCOUNT")\"}")
 check "an Account's encrypted password pasted into another connection is refused" 400 "$(status_of "$R")"
 check_contains "...as encrypted passwords are not copied" "cannot be copied" "$(message_of "$R")"
-check "...and that connection's password is unchanged" "T2-Ssh-Plain1!" "$(stored_password "$SSH")"
+check "...and that connection's password is unchanged" "T2-Ssh-Plain1!" "$(parameter "$SSH" password)"
 
 # ---------------------------------------------------------------- rotation
 section "Rotation"
@@ -121,45 +123,53 @@ check "...the pending password was the new password" "$(parameter "$SLOW_C" pass
 check "...and the SSH server accepts" yes "$(ssh_accepts mysshtest "$(parameter "$SLOW_C" password)")"
 check "...and the pending password is gone" "" "$(sql "SELECT pending_password FROM pam_rotation_state WHERE connection_id = $SLOW_C")"
 
-# ---------------------------------------------------------------- managed connections
-section "Managed connections: passwords kept apart"
-guacd_logged_in_since() { # TIME: whether guacd logged an SSH login since then
-    podman logs --since "$1" myguacdtest 2>&1 | grep -q 'SSH connection successful' && echo yes || echo no
+# ---------------------------------------------------------------- connections
+section "Connections: secrets kept apart"
+guacd_logged_in_since() { # TIME: how many SSH logins guacd logged since then
+    podman logs --since "$1" myguacdtest 2>&1 | grep -c 'SSH connection successful'
 }
 # With its own login: Guacamole may end the session whose connection guacd
 # reports a login rejected
-session_of() { # ID: opens a session for a few seconds; prints guacd's verdict
+session_of() { # ID [TYPE]: opens a session for a few seconds; whether guacd logged a login
     local since file
     since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     file="$T2_TMP/session-$1"
-    python3 -I ./session.py "$GUAC_URL" "$(admin_token)" "$1" >"$file" 2>&1 &
+    python3 -I ./session.py "$GUAC_URL" "$(admin_token)" "$1" "${2:-c}" >"$file" 2>&1 &
     sleep 6
     kill $! 2>/dev/null
-    guacd_logged_in_since "$since"
+    [ "$(guacd_logged_in_since "$since")" -gt 0 ] && echo yes || echo no
 }
-create_connection WRONG "{\"name\":\"t2 enc wrong\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",
-    \"parameters\":{\"hostname\":\"mysshtest\",\"port\":\"22\",\"username\":\"mysshtest\",\"password\":\"T2-Wrong-1!\"},
-    \"attributes\":{\"pam-request-exempt\":\"true\"}}"
+kept() { sql "SELECT value FROM pam_connection_secret WHERE connection_id = $1 AND parameter_name = '${2:-password}'"; }
+ssh_connection() { # VARIABLE NAME EXTRA-PARAMETERS-JSON [ATTRIBUTES-JSON] [PARENT]
+    create_connection "$1" "$(python3 -I -c '
+import json, sys
+parameters = {"hostname": "mysshtest", "port": "22", "username": "mysshtest"}
+parameters.update(json.loads(sys.argv[2]))
+attributes = {"pam-request-exempt": "true"}
+attributes.update(json.loads(sys.argv[3]))
+print(json.dumps({"name": sys.argv[1], "parentIdentifier": sys.argv[4], "protocol": "ssh",
+                  "parameters": parameters, "attributes": attributes}))' "$2" "$3" "${4:-{\}}" "${5:-ROOT}")"
+}
+
+ssh_connection WRONG "t2 enc wrong" '{"password": "T2-Wrong-1!"}'
 check "control: with a wrong password, guacd logs no SSH login" no "$(session_of "$WRONG")"
 
 LINUX=$(platform_id "Linux (passwd)")
 CURRENT=$(parameter "$SLOW_C" password)
-create_connection MANAGED "{\"name\":\"t2 enc managed\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",
-    \"parameters\":{\"hostname\":\"mysshtest\",\"port\":\"22\",\"username\":\"mysshtest\",\"password\":\"$CURRENT\"},
-    \"attributes\":{\"pam-platform\":\"$LINUX\",\"pam-request-exempt\":\"true\"}}"
+ssh_connection MANAGED "t2 enc managed" "{\"password\": \"$CURRENT\"}" "{\"pam-platform\": \"$LINUX\"}"
 LAST_SSH=$MANAGED
 on_cleanup sync_seeded_ssh
-kept() { sql "SELECT password FROM pam_connection_password WHERE connection_id = $1"; }
+TOKEN="\${PAM_PASSWORD_$MANAGED}"
 
-check "the password parameter of a managed connection is the token" '${PAM_PASSWORD}' "$(stored_password "$MANAGED")"
+check "the password parameter is the token naming its connection" "$TOKEN" "$(stored_password "$MANAGED")"
 KEPT=$(kept "$MANAGED")
 check "...the password is kept encrypted" yes "$(is_encrypted "$KEPT")"
-check "...for this connection alone" "$CURRENT" "$(reveal "managed-password:$MANAGED" "$KEPT")"
-check "...and the API shows editors only the token" '${PAM_PASSWORD}' "$(raw_parameter "$MANAGED")"
+check "...for this connection and field alone" "$CURRENT" "$(reveal "connection-secret:$MANAGED:password" "$KEPT")"
+check "...and the API shows editors only the token" "$TOKEN" "$(raw_parameter "$MANAGED")"
 check "a session logs in with the kept password" yes "$(session_of "$MANAGED")"
 
 check "rotation succeeds" SUCCESS "$(rotate "$MANAGED" | cut -d: -f1)"
-check "...the parameter is still the token" '${PAM_PASSWORD}' "$(stored_password "$MANAGED")"
+check "...the parameter is still the token" "$TOKEN" "$(stored_password "$MANAGED")"
 check "...the SSH server accepts the new kept password" yes "$(ssh_accepts mysshtest "$(parameter "$MANAGED" password)")"
 check "...and refuses the previous one" no "$(ssh_accepts mysshtest "$CURRENT")"
 check "...and a session logs in with it" yes "$(session_of "$MANAGED")"
@@ -168,30 +178,66 @@ KEPT=$(kept "$MANAGED")
 edit_connection "$ADMIN" "$MANAGED" '' '' "t2 enc managed renamed" >/dev/null
 check "saved unchanged (the editor sends the token back), the kept password is unchanged" "$KEPT" "$(kept "$MANAGED")"
 
-R=$(edit_connection "$ADMIN" "$MANAGED" '{"command":"echo ${PAM_PASSWORD}"}')
-check "the token in another parameter, where Guacamole would replace it too, is refused" 400 "$(status_of "$R")"
-check_contains "...as it can only be the password" "can only be used as the password" "$(message_of "$R")"
+R=$(edit_connection "$ADMIN" "$MANAGED" "{\"command\":\"echo $TOKEN\"}")
+check "the token in another field, where Guacamole would replace it too, is refused" 400 "$(status_of "$R")"
+check_contains "...as it only belongs in its field and connection" "can only be used in the field and connection" "$(message_of "$R")"
+R=$(edit_connection "$ADMIN" "$SSH" "{\"password\":\"$TOKEN\"}")
+check_contains "another connection's token is refused" "can only be used in the field and connection" "$(message_of "$R")"
 R=$(edit_connection "$ADMIN" "$SSH" "{\"password\":\"$KEPT\"}")
-check_contains "a kept password pasted into another connection is refused" "cannot be copied" "$(message_of "$R")"
-R=$(edit_connection "$ADMIN" "$SSH" '{"password":"${PAM_PASSWORD}"}')
-check_contains "the token typed into a connection without a kept password is refused" "has none" "$(message_of "$R")"
+check_contains "a kept value pasted into another connection is refused" "cannot be copied" "$(message_of "$R")"
 
-# Moved in the database, a kept password does not decrypt for another connection
-sql "UPDATE pam_connection_password SET password = (SELECT password FROM pam_connection_password
-     WHERE connection_id = $SLOW_C) WHERE connection_id = $MANAGED" >/dev/null
+R=$(edit_connection "$ADMIN" "$SSH" '{"password":"${GUAC_PASSWORD}"}')
+check "Guacamole's own tokens are accepted" 204 "$(status_of "$R")"
+check "...and stay in the parameter, for Guacamole to replace" '${GUAC_PASSWORD}' "$(stored_password "$SSH")"
+check "...with nothing kept for them" "" "$(kept "$SSH")"
+
+# Moved in the database, a kept value does not decrypt for another connection
+sql "UPDATE pam_connection_secret SET value = (SELECT value FROM pam_connection_secret
+     WHERE connection_id = $SLOW_C AND parameter_name = 'password') WHERE connection_id = $MANAGED" >/dev/null
 check "another connection's kept password, moved in the database, is refused" 500 "$(tunnel "$ADMIN" "$MANAGED" c | cut -d' ' -f1)"
 check_contains "...and the log says why" 'Connection "t2 enc managed renamed" cannot be opened: A secret could not be decrypted' \
     "$(podman logs --since 1m myguactest 2>&1 | grep 'cannot be opened')"
 R=$(rotate "$MANAGED")
 check "...and a rotation fails before trying the SSH server with it" FAILED "${R%%:*}"
-check_contains "...saying why" "stored password cannot be read" "$R"
-sql "UPDATE pam_connection_password SET password = '$KEPT' WHERE connection_id = $MANAGED" >/dev/null
+check_contains "...saying why" "stored secrets cannot be read" "$R"
+sql "UPDATE pam_connection_secret SET value = '$KEPT' WHERE connection_id = $MANAGED AND parameter_name = 'password'" >/dev/null
+check "...and work again once restored" yes "$(session_of "$MANAGED")"
 
-PASSWORD=$(parameter "$MANAGED" password)
-edit_connection "$ADMIN" "$MANAGED" '' '{"pam-platform":null}' >/dev/null
-check "once no longer managed, the password is back in its parameter" "$PASSWORD" "$(stored_password "$MANAGED")"
-check "...and no longer kept" "" "$(kept "$MANAGED")"
-edit_connection "$ADMIN" "$MANAGED" '' "{\"pam-platform\":\"$LINUX\"}" >/dev/null
-check "managed again, it is kept apart again" '${PAM_PASSWORD}' "$(stored_password "$MANAGED")"
-check "...with the same password" "$PASSWORD" "$(parameter "$MANAGED" password)"
-check "...and a session logs in" yes "$(session_of "$MANAGED")"
+# ---------------------------------------------------------------- keys
+section "Private keys and passphrases"
+PASSPHRASE='T2 key passphrase'
+ssh-keygen -q -t rsa -b 2048 -m PEM -N "$PASSPHRASE" -C t2-test-key -f "$T2_TMP/key"
+podman exec -i mysshtest sh -c 'cat >> /config/.ssh/authorized_keys' < "$T2_TMP/key.pub"
+on_cleanup "podman exec mysshtest sed -i '/t2-test-key/d' /config/.ssh/authorized_keys"
+PRIVATE_KEY=$(cat "$T2_TMP/key")
+ssh_connection KEYED "t2 enc keyed" "$(python3 -I -c 'import json,sys; print(json.dumps({"private-key": sys.argv[1], "passphrase": sys.argv[2]}))' "$PRIVATE_KEY" "$PASSPHRASE")"
+check "the private key is kept apart" "\${PAM_PRIVATE_KEY_$KEYED}" "$(json_get "$(curl -s "$DATA/connections/$KEYED/parameters?token=$ADMIN")" "d.get('private-key')")"
+check "...and the passphrase" "\${PAM_PASSPHRASE_$KEYED}" "$(json_get "$(curl -s "$DATA/connections/$KEYED/parameters?token=$ADMIN")" "d.get('passphrase')")"
+check "...both encrypted" "yes yes" "$(is_encrypted "$(kept "$KEYED" private-key)") $(is_encrypted "$(kept "$KEYED" passphrase)")"
+check "...the key as given" "$PRIVATE_KEY" "$(reveal "connection-secret:$KEYED:private-key" "$(kept "$KEYED" private-key)")"
+check "a session logs in with the kept key and passphrase" yes "$(session_of "$KEYED")"
+
+# ---------------------------------------------------------------- balancing groups
+section "Balancing groups"
+# Guacamole allows one session per user and group by default
+create_group BALANCE '{"name":"t2 enc balance","parentIdentifier":"ROOT","type":"BALANCING","attributes":{"max-connections-per-user":"2"}}'
+CURRENT=$(parameter "$MANAGED" password)
+ssh_connection MEMBER_PW "t2 enc member password" "{\"password\": \"$CURRENT\"}" '{}' "$BALANCE"
+ssh_connection MEMBER_KEY "t2 enc member key" "$(python3 -I -c 'import json,sys; print(json.dumps({"private-key": sys.argv[1], "passphrase": sys.argv[2]}))' "$PRIVATE_KEY" "$PASSPHRASE")" '{}' "$BALANCE"
+check "members keep their secrets apart" "\${PAM_PASSWORD_$MEMBER_PW} \${PAM_PRIVATE_KEY_$MEMBER_KEY}" \
+    "$(stored_password "$MEMBER_PW") $(json_get "$(curl -s "$DATA/connections/$MEMBER_KEY/parameters?token=$ADMIN")" "d.get('private-key')")"
+
+# Two sessions at once: the group opens each member once
+SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+HISTORY=$(sql "SELECT coalesce(max(history_id), 0) FROM guacamole_connection_history")
+for i in 1 2; do
+    python3 -I ./session.py "$GUAC_URL" "$(admin_token)" "$BALANCE" g >"$T2_TMP/balance-$i" 2>&1 &
+    echo $! >"$T2_TMP/balance-$i.pid"
+    sleep 2
+done
+sleep 4
+for i in 1 2; do kill "$(cat "$T2_TMP/balance-$i.pid")" 2>/dev/null; done
+check "two sessions through the group open both members" "$(printf '%s\n' "$MEMBER_PW" "$MEMBER_KEY" | sort | xargs)" \
+    "$(sql "SELECT string_agg(DISTINCT connection_id::text, ' ' ORDER BY connection_id::text) FROM guacamole_connection_history
+            WHERE history_id > $HISTORY AND connection_id IN ($MEMBER_PW, $MEMBER_KEY)")"
+check "...and both log in, with their own secrets" 2 "$(guacd_logged_in_since "$SINCE")"

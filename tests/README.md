@@ -66,7 +66,7 @@ defaults (`http://localhost:8080`, `guacadmin` / `guacadmin`).
 | `20-access` | Requests and reasons; two approvals, directly and through a group; non-approvers; self-approval; denials with reasons; cancellations; checkouts of Accounts and of connections, release and revocation; what administrators skip |
 | `30-security` | What editors who are not administrators cannot change (password management, access requests, and the username, hostname and port of managed connections), the original account-takeover attack end to end; balancing groups; administrator endpoints; platform secrets |
 | `40-servers` | Two servers sharing the database (skipped without `startguac2.sh`): sessions counted by every server; a checkout revoked on one server closing the session on the other; after-use rotation waiting for sessions on the other server; one rotation at a time, and no checkout during it, across servers; records of a stopped server ignored once stale, removed, then the connection rotated. Sessions are held open by `session.py`, as a browser would |
-| `50-encryption` | Stored secrets with the test key of `build.sh` (skipped without one): platform secrets, Account passwords and pending passwords encrypted at rest, managed connections' passwords kept apart behind `${PAM_PASSWORD}`, other connections' passwords plaintext; what the API shows editors; editor saves keeping, replacing or refusing values (a value of another field or connection, of an unknown key, `${PAM_PASSWORD}` elsewhere than the password); sessions logging in with kept passwords (checked in guacd's log, against a wrong-password control); a kept password moved to another connection in the database refused; rotations, and connections no longer managed. Suites read encrypted values with the jar's own decryption tool |
+| `50-encryption` | Stored secrets with the test key of `build.sh` (skipped without one): platform secrets, Account passwords and pending passwords encrypted at rest; connections' passwords, private keys and passphrases kept apart behind tokens such as `${PAM_PASSWORD_17}`; Guacamole's own tokens left in place; what the API shows editors; editor saves keeping, replacing or refusing values (another field's or connection's token or value, an unknown key); sessions logging in with kept passwords and with a kept private key and passphrase (checked in guacd's log, against a wrong-password control); a balancing group opening both its connections, each with its own secrets; a kept value moved to another connection in the database refused; rotations. Suites read encrypted values with the jar's own decryption tool |
 
 ### Test data
 
@@ -84,7 +84,8 @@ Kerberos salt handling, the protection of managed connections' parameters,
 the balancing group check, each part of the two-server support (shared
 rotation claims, sessions counted across servers, stale records, closing
 sessions of checkouts ended elsewhere), and encryption at rest (editor saves,
-rotated Account passwords, pending passwords, supplying `${PAM_PASSWORD}`,
-refusing it elsewhere, binding kept passwords to their connection, refusing
+rotated Account passwords, pending passwords, supplying tokens to
+connections and balancing groups, refusing them elsewhere, leaving
+Guacamole's tokens alone, binding kept values to their connection, refusing
 encrypted values pasted into connections). Do the same when adding a test for
 a fix: a test that cannot fail proves nothing.

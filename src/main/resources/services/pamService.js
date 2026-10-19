@@ -4,18 +4,27 @@
 angular.module('guacPam').factory('pamService', ['$injector', function pamService($injector) {
 
     // Required services
+    var $q                    = $injector.get('$q');
     var authenticationService = $injector.get('authenticationService');
     var requestService        = $injector.get('requestService');
 
     var service = {};
 
     var request = function request(method, path, data, params) {
+
+        // Once logged out, or once the session ended on the server, never
+        // ask without a token: Guacamole 1.6 may then end the session of
+        // another request, which it remembers wrongly
+        if (!authenticationService.getCurrentToken())
+            return $q.reject({ type : 'PERMISSION_DENIED', message : 'Not logged in.' });
+
         return requestService({
             method : method,
             url    : 'api/session/ext/pam/' + path,
             params : angular.extend({ token : authenticationService.getCurrentToken() }, params),
             data   : data
         });
+
     };
 
     service.getAccess = function getAccess() {

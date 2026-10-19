@@ -29,25 +29,26 @@ import org.slf4j.LoggerFactory;
  *
  * Passwords of Accounts, which never reach guacd, and passwords kept from
  * unconfirmed rotations are encrypted if a key is set (see {@link Secrets}),
- * and the passwords of other managed connections are then kept apart (see
- * {@link PasswordStore}). Passwords returned here are always plaintext.
+ * and the passwords, keys and passphrases of other connections are then kept
+ * apart (see {@link ConnectionSecrets}). Values returned here are always
+ * plaintext.
  */
 public class ConnectionRepository {
 
     private static final Logger logger = LoggerFactory.getLogger(ConnectionRepository.class);
 
-    private static final String PASSWORD_PARAMETER = "password";
+    static final String PASSWORD_PARAMETER = "password";
 
     private final PamDatabase database;
 
     private final Secrets secrets;
 
-    private final PasswordStore passwords;
+    private final ConnectionSecrets connectionSecrets;
 
-    public ConnectionRepository(PamDatabase database, Secrets secrets, PasswordStore passwords) {
+    public ConnectionRepository(PamDatabase database, Secrets secrets, ConnectionSecrets connectionSecrets) {
         this.database = database;
         this.secrets = secrets;
-        this.passwords = passwords;
+        this.connectionSecrets = connectionSecrets;
     }
 
     /**
@@ -72,9 +73,10 @@ public class ConnectionRepository {
         private State state = new State();
 
         /**
-         * Why the password could not be read, leaving it out, or null.
+         * Why a sensitive parameter could not be read, leaving it out, or
+         * null.
          */
-        private String passwordError;
+        private String secretError;
 
         Target(int id, String name, String protocol) {
             this.id = id;
@@ -118,21 +120,21 @@ public class ConnectionRepository {
          * The connection's password, as plaintext, or null if it has none.
          *
          * @throws GuacamoleServerException
-         *     If it could not be read (not decrypted).
+         *     If a sensitive parameter could not be read (not decrypted).
          */
         public String getPassword() throws GuacamoleServerException {
-            if (passwordError != null)
-                throw new GuacamoleServerException("The password of \"" + name + "\" cannot be read: "
-                        + passwordError);
+            if (secretError != null)
+                throw new GuacamoleServerException("The secrets of \"" + name + "\" cannot be read: "
+                        + secretError);
             return parameters.get(PASSWORD_PARAMETER);
         }
 
         /**
-         * Why the password could not be read, leaving it out of the
+         * Why a sensitive parameter could not be read, leaving it out of the
          * parameters, or null.
          */
-        public String getPasswordError() {
-            return passwordError;
+        public String getSecretError() {
+            return secretError;
         }
 
     }
@@ -199,14 +201,16 @@ public class ConnectionRepository {
                     + " WHERE connection_id = ?", connectionId, target.parameters);
             // Most callers need no password, so one that cannot be read is
             // left out, and reported by Target.getPassword()
-            if (target.parameters.containsKey(PASSWORD_PARAMETER)) {
+            for (String name : ConnectionSecrets.SENSITIVE) {
+                if (!target.parameters.containsKey(name))
+                    continue;
                 try {
-                    target.parameters.put(PASSWORD_PARAMETER,
-                            passwords.resolve(connectionId, target.parameters.get(PASSWORD_PARAMETER)));
+                    target.parameters.put(name, connectionSecrets.resolve(connectionId, name,
+                            target.parameters.get(name)));
                 }
                 catch (GuacamoleException e) {
-                    target.parameters.remove(PASSWORD_PARAMETER);
-                    target.passwordError = e.getMessage();
+                    target.parameters.remove(name);
+                    target.secretError = e.getMessage();
                 }
             }
             readPairs(connection, "SELECT attribute_name, attribute_value FROM guacamole_connection_attribute"
@@ -373,28 +377,22 @@ public class ConnectionRepository {
             try {
 
                 String protocol = null;
-                boolean managed = false;
                 try (PreparedStatement statement = connection.prepareStatement(
-                        "SELECT protocol, EXISTS (SELECT 1 FROM guacamole_connection_attribute"
-                      + "   WHERE connection_id = c.connection_id AND attribute_name = ? AND attribute_value <> '')"
-                      + " FROM guacamole_connection c WHERE connection_id = ?")) {
-                    statement.setString(1, PamAttributes.PLATFORM);
-                    statement.setInt(2, connectionId);
+                        "SELECT protocol FROM guacamole_connection WHERE connection_id = ?")) {
+                    statement.setInt(1, connectionId);
                     try (ResultSet results = statement.executeQuery()) {
-                        if (results.next()) {
+                        if (results.next())
                             protocol = results.getString(1);
-                            managed = results.getBoolean(2);
-                        }
                     }
                 }
 
                 String parameter;
-                if (passwords.keepsPassword(protocol, managed)) {
-                    passwords.keep(connection, connectionId, newPassword);
-                    parameter = PasswordStore.TOKEN;
+                if (connectionSecrets.keepsSecrets(protocol)) {
+                    connectionSecrets.keep(connection, connectionId, PASSWORD_PARAMETER, newPassword);
+                    parameter = ConnectionSecrets.token(PASSWORD_PARAMETER, connectionId);
                 }
                 else {
-                    passwords.forget(connection, connectionId);
+                    connectionSecrets.forget(connection, connectionId, PASSWORD_PARAMETER);
                     parameter = storedPassword(protocol, newPassword);
                 }
 
@@ -515,8 +513,8 @@ public class ConnectionRepository {
                 while (results.next()) {
                     int id = results.getInt(1);
                     String stored = results.getString(3);
-                    // Kept apart, and moved by PasswordStore
-                    if (PasswordStore.TOKEN.equals(stored))
+                    // Kept apart, and moved by ConnectionSecrets
+                    if (stored.startsWith("${PAM_"))
                         continue;
                     if (!secrets.canReveal(stored)) {
                         report.unreadable(stored);
