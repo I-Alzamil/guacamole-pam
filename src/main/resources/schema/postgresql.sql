@@ -182,7 +182,32 @@ CREATE TABLE IF NOT EXISTS pam_user_preference (
 
 );
 
+-- Version 2: several Guacamole servers sharing the database
+
+-- Sessions open on managed connections, on every server, so all servers can
+-- tell whether a connection is in use. Each server refreshes the heartbeat of
+-- its own rows, and rows no longer refreshed are removed
+CREATE TABLE IF NOT EXISTS pam_session (
+
+  session_id    varchar(36)   NOT NULL,
+  connection_id integer       NOT NULL,
+  username      varchar(128)  NOT NULL,
+  server        varchar(128)  NOT NULL,
+  started       timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  heartbeat     timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (session_id),
+  CONSTRAINT pam_session_connection
+    FOREIGN KEY (connection_id)
+    REFERENCES guacamole_connection (connection_id) ON DELETE CASCADE
+
+);
+
+-- Servers look for checkouts that just ended, to close their sessions
+CREATE INDEX IF NOT EXISTS pam_checkout_released
+  ON pam_checkout (released);
+
 -- Last, so the default platforms above are only added to a fresh install, and
 -- so the extension can tell the schema is complete (PamDatabase.SCHEMA_VERSION)
-INSERT INTO pam_schema_version (version) VALUES (1)
+INSERT INTO pam_schema_version (version) VALUES (1), (2)
 ON CONFLICT (version) DO NOTHING;

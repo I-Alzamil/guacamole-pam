@@ -287,6 +287,14 @@ public class CheckoutRepository {
 
     }
 
+    /**
+     * Returns the checkouts that ended within the given number of seconds,
+     * on any server.
+     */
+    public List<Checkout> listEndedWithin(int seconds) throws GuacamoleException {
+        return query(SELECT + " WHERE k.released > CURRENT_TIMESTAMP - make_interval(secs => ?)", seconds);
+    }
+
     private List<Checkout> query(String sql, int... parameters) throws GuacamoleException {
         try (Connection connection = database.getConnection()) {
             return query(connection, sql, parameters);

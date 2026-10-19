@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.Driver;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -68,7 +69,12 @@ public class PamDatabase {
      * Version the schema script records once it has run, which must match
      * the version it inserts into "pam_schema_version".
      */
-    private static final int SCHEMA_VERSION = 1;
+    private static final int SCHEMA_VERSION = 2;
+
+    /**
+     * The first version, whose tables are enough to run on a single server.
+     */
+    private static final int SINGLE_SERVER_VERSION = 1;
 
     /**
      * SQL state of PostgreSQL's "insufficient_privilege".
@@ -90,6 +96,8 @@ public class PamDatabase {
     private final Properties connectionProperties = new Properties();
 
     private volatile boolean schemaReady = false;
+
+    private volatile boolean sessionTable = false;
 
     /**
      * Returns why this extension cannot use the Guacamole database here, or
@@ -183,7 +191,7 @@ public class PamDatabase {
         // Already there: nothing to run, which also lets a database user
         // without the privilege to create tables use tables created for it
         // (PostgreSQL refuses even "CREATE TABLE IF NOT EXISTS" to it)
-        if (!isSchemaCurrent(connection)) {
+        if (!hasVersion(connection, SCHEMA_VERSION)) {
             try (Statement statement = connection.createStatement()) {
                 // Statements end with a semicolon at the end of a line
                 for (String sql : schema.split(";[ \\t]*\\r?\\n")) {
@@ -191,33 +199,58 @@ public class PamDatabase {
                         statement.execute(sql);
                 }
             }
+            catch (SQLException e) {
+
+                // Tables of the first version created by hand still work,
+                // on a single server, until the new ones are created
+                if (!INSUFFICIENT_PRIVILEGE.equals(e.getSQLState())
+                        || !hasVersion(connection, SINGLE_SERVER_VERSION))
+                    throw e;
+
+                logger.warn("The database user \"{}\" may not upgrade the PAM extension's tables ({}). Until"
+                        + " schema/postgresql.sql from the extension's jar is run again as the database owner,"
+                        + " and the new table \"pam_session\" granted to Guacamole's user, servers sharing this"
+                        + " database do not see each other's sessions: run a single server.",
+                        username, firstLine(e.getMessage()));
+
+            }
         }
 
+        sessionTable = hasTable(connection, "pam_session");
         schemaReady = true;
         logger.info("PAM database schema is ready.");
 
     }
 
     /**
-     * Logs why the tables could not be created. When the database user lacks
-     * the privilege, as with the grants of Guacamole's installation guide,
-     * explains once how to create them by hand.
+     * Whether the tables of the given version of the schema exist: the
+     * schema script records its versions last.
      */
-    /**
-     * Whether the tables of this version of the schema exist: the schema
-     * script records its version last.
-     */
-    private static boolean isSchemaCurrent(Connection connection) throws SQLException {
-        try (Statement statement = connection.createStatement()) {
-            try (ResultSet results = statement.executeQuery("SELECT to_regclass('pam_schema_version') IS NOT NULL")) {
-                if (!results.next() || !results.getBoolean(1))
-                    return false;
-            }
-            try (ResultSet results = statement.executeQuery(
-                    "SELECT 1 FROM pam_schema_version WHERE version = " + SCHEMA_VERSION)) {
-                return results.next();
+    private static boolean hasVersion(Connection connection, int version) throws SQLException {
+        if (!hasTable(connection, "pam_schema_version"))
+            return false;
+        try (Statement statement = connection.createStatement();
+             ResultSet results = statement.executeQuery(
+                 "SELECT 1 FROM pam_schema_version WHERE version = " + version)) {
+            return results.next();
+        }
+    }
+
+    private static boolean hasTable(Connection connection, String table) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("SELECT to_regclass(?) IS NOT NULL")) {
+            statement.setString(1, table);
+            try (ResultSet results = statement.executeQuery()) {
+                return results.next() && results.getBoolean(1);
             }
         }
+    }
+
+    /**
+     * Whether "pam_session" exists, letting servers sharing the database
+     * see each other's sessions. Known once the database was first used.
+     */
+    public boolean hasSessionTable() {
+        return sessionTable;
     }
 
     /**
@@ -230,6 +263,11 @@ public class PamDatabase {
         return end < 0 ? message : message.substring(0, end);
     }
 
+    /**
+     * Logs why the tables could not be created. When the database user lacks
+     * the privilege, as with the grants of Guacamole's installation guide,
+     * explains once how to create them by hand.
+     */
     private void logSchemaFailure(SQLException e) {
 
         if (!INSUFFICIENT_PRIVILEGE.equals(e.getSQLState())) {

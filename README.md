@@ -61,6 +61,27 @@ GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO guacamole_us
 GRANT SELECT,USAGE ON ALL SEQUENCES IN SCHEMA public TO guacamole_user;
 ```
 
+Do the same after upgrading from a version without the `pam_session` table.
+Until then the extension keeps working on a single server, and logs a warning
+that servers sharing the database can't see each other's sessions.
+
+### Several Guacamole servers
+
+Any number of Guacamole servers may share the database, whether as a
+standby or all active behind a load balancer (with sticky sessions, as
+Guacamole itself needs). Nothing needs configuring:
+
+- **Rotations are claimed in the database**, so only one server rotates a
+  connection at a time. A checkout is refused while any server rotates its
+  password.
+- **Open sessions are recorded in the database** (`pam_session`), so
+  after-use and periodic rotations wait for sessions on every server. A server
+  that stops without closing its sessions leaves records that are ignored
+  after 3 minutes, then removed, and the connections are rotated after use.
+- **When a checkout ends**, by release, revocation or expiry, the server
+  ending it closes the holder's sessions at once. Other servers close theirs
+  within 15 seconds.
+
 ## After installing
 
 - **Every connection requires a request by default**, including connections
@@ -144,6 +165,7 @@ test passwords.
 | `startldap.sh` | OpenLDAP server `myldaptest`, test user `uid=ldaptest,ou=people,dc=example,dc=org` |
 | `startad.sh` | Samba Active Directory `myadtest` (LDAPS and Kerberos), test user `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`. Prints the certificate fingerprint to pin |
 | `startkdc.sh` | MIT Kerberos KDC `mykdctest`, realm `EXAMPLE.ORG`, admin `admin/admin`, test user `kdctest` |
+| `startguac2.sh` | A second Guacamole server sharing the database, on http://localhost:8081, for the two-server tests. Stopped by `build.sh`: start it again after a build |
 | `seed.sh` | Adds the test platforms, connections, users and group to a fresh database, through the REST API |
 | `stop.sh` | Stops all of the above |
 

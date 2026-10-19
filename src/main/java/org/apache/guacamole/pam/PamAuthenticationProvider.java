@@ -113,7 +113,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         CheckoutRepository checkouts = new CheckoutRepository(database);
         platforms = new PlatformRepository(database);
         connections = new ConnectionRepository(database);
-        rotationService = new RotationService(platforms, connections, checkouts);
+        rotationService = new RotationService(database, platforms, connections, checkouts);
         approvals = new ApprovalRepository(database);
         badgePreferences = new BadgePreferences(database);
         checkoutService = new CheckoutService(connections, checkouts, platforms, approvals, rotationService,

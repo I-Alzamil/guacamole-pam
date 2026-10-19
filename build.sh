@@ -3,6 +3,8 @@
 podman stop myguactest
 podman stop myguacdtest
 podman stop myguacdbtest
+# A second server (startguac2.sh) would keep the old jar
+podman stop --ignore myguactest2
 # Clean & build the project
 mvn clean
 mvn package

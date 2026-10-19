@@ -4,9 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -18,6 +17,7 @@ import org.apache.guacamole.pam.PamAttributes;
 import org.apache.guacamole.pam.checkout.Checkout;
 import org.apache.guacamole.pam.checkout.CheckoutRepository;
 import org.apache.guacamole.pam.db.ConnectionRepository;
+import org.apache.guacamole.pam.db.PamDatabase;
 import org.apache.guacamole.pam.db.SchemaUnavailableException;
 import org.apache.guacamole.pam.db.ConnectionRepository.Target;
 import org.apache.guacamole.pam.management.ManagementType;
@@ -38,6 +38,14 @@ import org.slf4j.LoggerFactory;
  *
  * A connection is "in use" while it has open sessions or an active checkout;
  * automatic rotations wait until it is no longer in use.
+ *
+ * Several Guacamole servers may share the database: rotations are claimed
+ * through the database ({@link RotationLocks}), so only one server rotates a
+ * connection at a time, and sessions are recorded there
+ * ({@link SessionRegistry}), so every server knows whether a connection is in
+ * use. When a checkout ends, the server ending it closes its own sessions of
+ * the holder at once; the other servers close theirs when they next look for
+ * ended checkouts.
  */
 public class RotationService {
 
@@ -53,6 +61,14 @@ public class RotationService {
 
     private static final long EXPIRY_CHECK_SECONDS = 15;
 
+    private static final long HEARTBEAT_SECONDS = 60;
+
+    /**
+     * How far back, at least, to look for ended checkouts: well over the
+     * time between two looks, so no checkout is missed.
+     */
+    private static final long ENDED_CHECKOUT_WINDOW_MS = TimeUnit.MINUTES.toMillis(2);
+
     /**
      * Minimum time between automatic retries of a failed periodic rotation,
      * so a broken target is not hammered (and its account locked out).
@@ -67,50 +83,64 @@ public class RotationService {
 
     private final PasswordGenerator passwordGenerator = new PasswordGenerator();
 
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2, runnable -> {
-        Thread thread = new Thread(runnable, "pam-rotation");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private final RotationLocks locks;
+
+    private final SessionRegistry sessions;
+
+    private final ScheduledExecutorService scheduler = newScheduler("pam-rotation", 2);
 
     /**
-     * Open tunnels per connection identifier, with the user of each.
+     * Expiry, ended checkouts and heartbeats, kept apart so long rotations
+     * never delay the end of a session.
      */
-    private final ConcurrentMap<String, Map<GuacamoleTunnel, String>> activeSessions = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService housekeeping = newScheduler("pam-housekeeping", 1);
 
     /**
-     * Connections currently being rotated.
+     * When ended checkouts were last looked for successfully.
      */
-    private final Set<Integer> inProgress = ConcurrentHashMap.newKeySet();
+    private volatile long lastEndedCheck = System.currentTimeMillis();
 
-    public RotationService(PlatformRepository platforms, ConnectionRepository connections,
+    public RotationService(PamDatabase database, PlatformRepository platforms, ConnectionRepository connections,
             CheckoutRepository checkouts) {
         this.platforms = platforms;
         this.connections = connections;
         this.checkouts = checkouts;
+        this.locks = new RotationLocks(database);
+        this.sessions = new SessionRegistry(database);
         scheduler.scheduleWithFixedDelay(this::rotateDueConnections,
                 PERIODIC_CHECK_SECONDS, PERIODIC_CHECK_SECONDS, TimeUnit.SECONDS);
-        scheduler.scheduleWithFixedDelay(this::expireCheckouts,
+        housekeeping.scheduleWithFixedDelay(this::endCheckouts,
                 EXPIRY_CHECK_SECONDS, EXPIRY_CHECK_SECONDS, TimeUnit.SECONDS);
+        housekeeping.scheduleWithFixedDelay(this::heartbeat,
+                HEARTBEAT_SECONDS, HEARTBEAT_SECONDS, TimeUnit.SECONDS);
+    }
+
+    private static ScheduledExecutorService newScheduler(String name, int threads) {
+        return Executors.newScheduledThreadPool(threads, runnable -> {
+            Thread thread = new Thread(runnable, name);
+            thread.setDaemon(true);
+            return thread;
+        });
     }
 
     public void sessionStarted(String identifier, String username, GuacamoleTunnel tunnel) {
-        activeSessions.computeIfAbsent(identifier, id -> new ConcurrentHashMap<>()).put(tunnel, username);
+        sessions.started(identifier, username, tunnel);
     }
 
     public void sessionEnded(String identifier, GuacamoleTunnel tunnel) {
+        if (!sessions.ended(tunnel))
+            scheduleAfterUse(identifier);
+    }
 
-        Map<GuacamoleTunnel, String> sessions = activeSessions.get(identifier);
-        if (sessions == null)
-            return;
-
-        sessions.remove(tunnel);
-        if (!sessions.isEmpty())
-            return;
-
-        activeSessions.remove(identifier, sessions);
-        scheduler.schedule(() -> rotateAfterUse(identifier), AFTER_USE_DELAY_SECONDS, TimeUnit.SECONDS);
-
+    private void scheduleAfterUse(String identifier) {
+        try {
+            scheduler.schedule(() -> rotateAfterUse(identifier), AFTER_USE_DELAY_SECONDS, TimeUnit.SECONDS);
+        }
+        catch (RejectedExecutionException e) {
+            // Shutting down: another server, or this one once restarted,
+            // rotates it when the session's row goes stale
+            logger.debug("After-use rotation of connection {} not scheduled: shutting down.", identifier);
+        }
     }
 
     /**
@@ -119,44 +149,47 @@ public class RotationService {
      * access window does not outlive its limit. After-use rotation follows.
      */
     public void checkoutEnded(Checkout checkout) {
-
-        String identifier = checkout.getConnectionIdentifier();
-        Map<GuacamoleTunnel, String> sessions = activeSessions.get(identifier);
-
-        if (sessions != null) {
-            for (Map.Entry<GuacamoleTunnel, String> session : sessions.entrySet()) {
-                if (!session.getValue().equals(checkout.getUsername()))
-                    continue;
-                try {
-                    logger.info("Closing the session of \"{}\" on \"{}\": its checkout ended.",
-                            checkout.getUsername(), checkout.getConnectionName());
-                    session.getKey().close();
-                }
-                catch (Exception e) {
-                    logger.warn("Unable to close a session of \"{}\" on \"{}\": {}", checkout.getUsername(),
-                            checkout.getConnectionName(), e.getMessage());
-                }
-            }
-        }
-
-        scheduler.execute(() -> rotateAfterUse(identifier));
-
+        closeSessions(checkout, false);
+        scheduler.execute(() -> rotateAfterUse(checkout.getConnectionIdentifier()));
     }
 
     /**
-     * Whether a rotation of the given connection is running right now.
+     * Closes this server's sessions of the holder of an ended checkout. When
+     * it ended on another server, only sessions started before it ended:
+     * later ones were opened with a new checkout, or without needing one.
      */
-    public boolean isRotating(int id) {
-        return inProgress.contains(id);
+    private void closeSessions(Checkout checkout, boolean endedElsewhere) {
+        for (SessionRegistry.Session session : sessions.getLocal(checkout.getConnectionIdentifier())) {
+
+            if (!session.getUsername().equals(checkout.getUsername()))
+                continue;
+            if (endedElsewhere && session.getStarted() >= checkout.getReleased())
+                continue;
+
+            try {
+                logger.info("Closing the session of \"{}\" on \"{}\": its checkout ended{}.",
+                        checkout.getUsername(), checkout.getConnectionName(),
+                        endedElsewhere ? " on another server" : "");
+                session.getTunnel().close();
+            }
+            catch (Exception e) {
+                logger.warn("Unable to close a session of \"{}\" on \"{}\": {}", checkout.getUsername(),
+                        checkout.getConnectionName(), e.getMessage());
+            }
+
+        }
     }
 
-    private int getActiveSessions(String identifier) {
-        Map<GuacamoleTunnel, String> sessions = activeSessions.get(identifier);
-        return sessions == null ? 0 : sessions.size();
+    /**
+     * Whether a rotation of the given connection is running right now, on
+     * any server.
+     */
+    public boolean isRotating(int id) throws GuacamoleException {
+        return locks.isClaimed(id);
     }
 
     private boolean isInUse(int id) throws GuacamoleException {
-        return getActiveSessions(Integer.toString(id)) > 0 || !checkouts.listActive(id).isEmpty();
+        return sessions.count(id) > 0 || !checkouts.listActive(id).isEmpty();
     }
 
     private void rotateAfterUse(String identifier) {
@@ -168,7 +201,7 @@ public class RotationService {
 
             Target target = connections.load(id);
             if (target != null && Platform.MODE_AFTER_USE.equals(policyOf(target).getMode()))
-                rotate(target, "after use");
+                rotateUnlessDone(target, "after use", current -> !isInUse(current.getId()));
 
         }
         catch (SchemaUnavailableException e) {
@@ -178,6 +211,11 @@ public class RotationService {
             logger.error("After-use rotation of connection {} failed: {}", identifier, e.getMessage());
             logger.debug("After-use rotation failed.", e);
         }
+    }
+
+    private void endCheckouts() {
+        expireCheckouts();
+        closeSessionsOfEndedCheckouts();
     }
 
     private void expireCheckouts() {
@@ -197,32 +235,62 @@ public class RotationService {
         }
     }
 
+    /**
+     * Closes this server's sessions of checkouts that ended on another
+     * server. Looks back over every checkout ended since the last successful
+     * look, with a margin: those ended here are found again, and only their
+     * sessions that are already closed would match.
+     */
+    private void closeSessionsOfEndedCheckouts() {
+
+        long now = System.currentTimeMillis();
+
+        // Sessions opened from now on need a checkout active when they open
+        if (!sessions.hasLocal()) {
+            lastEndedCheck = now;
+            return;
+        }
+
+        try {
+            long window = Math.max(ENDED_CHECKOUT_WINDOW_MS, now - lastEndedCheck + ENDED_CHECKOUT_WINDOW_MS);
+            for (Checkout checkout : checkouts.listEndedWithin((int) TimeUnit.MILLISECONDS.toSeconds(window)))
+                closeSessions(checkout, true);
+            lastEndedCheck = now;
+        }
+        catch (SchemaUnavailableException e) {
+            logger.debug("Ended checkout check skipped: {}", e.getMessage());
+        }
+        catch (Exception e) {
+            logger.error("Ended checkout check failed: {}", e.getMessage());
+            logger.debug("Ended checkout check failed.", e);
+        }
+
+    }
+
+    private void heartbeat() {
+        try {
+            for (int id : sessions.heartbeat())
+                scheduleAfterUse(Integer.toString(id));
+        }
+        catch (SchemaUnavailableException e) {
+            logger.debug("Session heartbeat skipped: {}", e.getMessage());
+        }
+        catch (Exception e) {
+            logger.error("Session heartbeat failed: {}", e.getMessage());
+            logger.debug("Session heartbeat failed.", e);
+        }
+    }
+
     private void rotateDueConnections() {
         try {
 
-            long now = System.currentTimeMillis();
             Map<String, Platform> all = platforms.getAll();
             for (Target target : connections.listManaged()) {
 
-                EffectivePolicy policy = EffectivePolicy.of(all.get(target.getAttribute(PamAttributes.PLATFORM)), target);
-                if (!Platform.MODE_PERIODIC.equals(policy.getMode()))
-                    continue;
-
-                Integer hours = policy.getIntervalHours();
-                if (hours == null || hours <= 0)
-                    continue;
-
-                ConnectionRepository.State state = target.getState();
-                long lastSuccess = state.getLastSuccess() == null ? 0 : state.getLastSuccess().getTime();
-                long lastAttempt = state.getLastAttempt() == null ? 0 : state.getLastAttempt().getTime();
-
-                boolean due = now >= lastSuccess + TimeUnit.HOURS.toMillis(hours);
-                boolean retryAllowed = now >= lastAttempt + RETRY_DELAY_MS || lastAttempt <= lastSuccess;
-
                 // Rotating while in use would break the password a user is
                 // relying on; wait until the session or checkout ends
-                if (due && retryAllowed && !isInUse(target.getId()))
-                    rotate(connections.load(target.getId()), "periodic");
+                if (isDue(target, all) && !isInUse(target.getId()))
+                    rotateUnlessDone(target, "periodic", current -> isDue(current, platforms.getAll()));
 
             }
 
@@ -234,6 +302,31 @@ public class RotationService {
             logger.error("Periodic rotation check failed: {}", e.getMessage());
             logger.debug("Periodic rotation check failed.", e);
         }
+    }
+
+    /**
+     * Whether a periodic rotation of the connection is due, and a failed one
+     * may be retried.
+     */
+    private static boolean isDue(Target target, Map<String, Platform> all) {
+
+        EffectivePolicy policy = EffectivePolicy.of(all.get(target.getAttribute(PamAttributes.PLATFORM)), target);
+        if (!Platform.MODE_PERIODIC.equals(policy.getMode()))
+            return false;
+
+        Integer hours = policy.getIntervalHours();
+        if (hours == null || hours <= 0)
+            return false;
+
+        long now = System.currentTimeMillis();
+        ConnectionRepository.State state = target.getState();
+        long lastSuccess = state.getLastSuccess() == null ? 0 : state.getLastSuccess().getTime();
+        long lastAttempt = state.getLastAttempt() == null ? 0 : state.getLastAttempt().getTime();
+
+        boolean due = now >= lastSuccess + TimeUnit.HOURS.toMillis(hours);
+        boolean retryAllowed = now >= lastAttempt + RETRY_DELAY_MS || lastAttempt <= lastSuccess;
+        return due && retryAllowed;
+
     }
 
     /**
@@ -251,7 +344,7 @@ public class RotationService {
             throw new GuacamoleResourceNotFoundException("No such connection.");
 
         requireNotCheckedOut(id);
-        return rotate(target, "manual");
+        return rotate(target, "manual", current -> true);
 
     }
 
@@ -261,12 +354,14 @@ public class RotationService {
     public List<ManagedConnection> listManaged() throws GuacamoleException {
 
         Map<String, Platform> all = platforms.getAll();
+        Map<Integer, Integer> counts = sessions.countAll();
+        Set<Integer> rotating = locks.getClaimed();
 
         List<ManagedConnection> managed = new ArrayList<>();
         for (Target target : connections.listManaged()) {
             Platform platform = all.get(target.getAttribute(PamAttributes.PLATFORM));
             managed.add(new ManagedConnection(target, platform, EffectivePolicy.of(platform, target),
-                    getActiveSessions(Integer.toString(target.getId())), inProgress.contains(target.getId())));
+                    counts.getOrDefault(target.getId(), 0), rotating.contains(target.getId())));
         }
 
         return managed;
@@ -288,23 +383,60 @@ public class RotationService {
 
     }
 
-    private RotationResult rotate(Target target, String reason) throws GuacamoleException {
+    /**
+     * Whether a rotation is still wanted, given the connection as loaded
+     * once claimed.
+     */
+    @FunctionalInterface
+    private interface Wanted {
+        boolean test(Target current) throws GuacamoleException;
+    }
 
-        if (!inProgress.add(target.getId()))
-            throw new GuacamoleClientException("A rotation of this connection is already running.");
-
+    /**
+     * An automatic rotation: skipped if another server is running it, or
+     * ran it meanwhile.
+     */
+    private void rotateUnlessDone(Target target, String reason, Wanted wanted) throws GuacamoleException {
         try {
+            if (rotate(target, reason, wanted) == null)
+                logger.debug("Rotation ({}) of connection {} skipped: no longer needed.", reason, target.getId());
+        }
+        catch (GuacamoleClientException e) {
+            // Running elsewhere, or just checked out: not a failure
+            logger.debug("Rotation ({}) of connection {} skipped: {}", reason, target.getId(), e.getMessage());
+        }
+    }
+
+    /**
+     * Claims the connection, then rotates it if still wanted, returning null
+     * if not.
+     *
+     * @throws GuacamoleClientException
+     *     If a rotation of the connection is running, here or on another
+     *     server, or it is checked out.
+     */
+    private RotationResult rotate(Target target, String reason, Wanted wanted) throws GuacamoleException {
+
+        try (RotationLocks.Claim claim = locks.tryClaim(target.getId())) {
+
+            if (claim == null)
+                throw new GuacamoleClientException("A rotation of this connection is already running.");
 
             // Checked only after claiming the connection; see CheckoutService
             requireNotCheckedOut(target.getId());
 
-            RotationResult result = performRotation(target);
-            logger.info("Rotation ({}) of connection \"{}\" ({}): {} {}", reason, target.getName(),
-                    target.getId(), result.getStatus(), result.getMessage() == null ? "" : result.getMessage());
+            // Loaded again: another server may have rotated it since
+            Target current = connections.load(target.getId());
+            if (current == null)
+                throw new GuacamoleResourceNotFoundException("No such connection.");
+            if (!wanted.test(current))
+                return null;
+
+            RotationResult result = performRotation(current);
+            logger.info("Rotation ({}) of connection \"{}\" ({}): {} {}", reason, current.getName(),
+                    current.getId(), result.getStatus(), result.getMessage() == null ? "" : result.getMessage());
             return result;
-        }
-        finally {
-            inProgress.remove(target.getId());
+
         }
 
     }
@@ -452,6 +584,7 @@ public class RotationService {
     }
 
     public void shutdown() {
+        housekeeping.shutdownNow();
         scheduler.shutdownNow();
     }
 

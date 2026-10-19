@@ -286,8 +286,16 @@ public class CheckoutService {
 
         // A rotation claims the connection before checking for checkouts,
         // and a checkout is created before checking for rotations, so at
-        // least one of the two always backs off
-        if (rotationService.isRotating(id)) {
+        // least one of the two always backs off, on any server
+        boolean rotating;
+        try {
+            rotating = rotationService.isRotating(id);
+        }
+        catch (GuacamoleException e) {
+            checkouts.release(checkout.getId(), Checkout.CANCELLED, null);
+            throw e;
+        }
+        if (rotating) {
             checkouts.release(checkout.getId(), Checkout.CANCELLED, null);
             throw new GuacamoleClientException("The password is being rotated. Please try again in a moment.");
         }
