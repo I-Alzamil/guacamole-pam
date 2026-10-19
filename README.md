@@ -63,8 +63,16 @@ GRANT SELECT,USAGE ON ALL SEQUENCES IN SCHEMA public TO guacamole_user;
 
 - **Every connection requires a request by default**, including connections
   that already existed. To keep a connection usable as before, tick **Allow
-  access without a request** in its *Access requests* section. Administrators
-  never need requests: they connect directly, and this is logged.
+  access without a request** in its *Access requests* section.
+- **Administrators skip approvals, but still give a reason** when a connection
+  or Account requires a request, so their access is in the history like
+  anyone else's. To let administrators connect and check out Accounts without
+  any request instead (logged), set this in `guacamole.properties` (or the
+  `PAM_ADMIN_BYPASS_REQUESTS` environment variable in the Docker image):
+
+  ```
+  pam-admin-bypass-requests: true
+  ```
 - Only administrators can change a connection's *Password management* and
   *Access requests* sections, platforms, or who may approve. Other users who
   may create or edit connections can still change everything else.

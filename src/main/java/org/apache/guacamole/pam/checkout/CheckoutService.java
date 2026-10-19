@@ -55,6 +55,11 @@ public class CheckoutService {
     private static final String NO_REQUEST_REASON = "Access without a request";
 
     /**
+     * Reason recorded for checkouts of administrators bypassing requests.
+     */
+    private static final String ADMIN_BYPASS_REASON = "Administrator access without a request";
+
+    /**
      * Upper bound of the approvals a connection can require.
      */
     private static final int MAX_APPROVALS = 10;
@@ -76,8 +81,16 @@ public class CheckoutService {
 
     private final RotationService rotationService;
 
+    /**
+     * Whether administrators bypass requests entirely. Otherwise they only
+     * skip approvals, and give a reason like anyone else.
+     */
+    private final boolean adminBypass;
+
     public CheckoutService(ConnectionRepository connections, CheckoutRepository checkouts,
-            PlatformRepository platforms, ApprovalRepository approvals, RotationService rotationService) {
+            PlatformRepository platforms, ApprovalRepository approvals, RotationService rotationService,
+            boolean adminBypass) {
+        this.adminBypass = adminBypass;
         this.connections = connections;
         this.approvals = approvals;
         this.platforms = platforms;
@@ -117,7 +130,8 @@ public class CheckoutService {
      * existing checkout is returned (with the password, for an Account). If
      * the connection needs approval, a new request instead awaits approval
      * (or the user's pending request is returned), unless the user is an
-     * administrator: administrators bypass approval.
+     * administrator: administrators bypass approval, and also the reason
+     * when they bypass requests.
      *
      * @throws GuacamoleClientException
      *     If the reason is missing, or the connection cannot be held now.
@@ -164,7 +178,17 @@ public class CheckoutService {
         if (approvalsRequired > 0)
             return RequestOutcome.pending(toRequest(target, platformOf(target), username, administrator));
 
-        String checkoutReason = requiresRequest(target) ? validateReason(reason) : NO_REQUEST_REASON;
+        String checkoutReason;
+        if (!requiresRequest(target))
+            checkoutReason = NO_REQUEST_REASON;
+        else if (bypassesRequests(administrator)) {
+            checkoutReason = ADMIN_BYPASS_REASON;
+            logger.info("Administrator \"{}\" checks out \"{}\" without a request.", username, target.getName());
+        }
+        else
+            checkoutReason = validateReason(reason);
+
+
         checkout = startCheckout(target, username, checkoutReason, account ? 1 : 0);
         return RequestOutcome.granted(toGrant(checkout, connections.load(id)));
 
@@ -172,8 +196,9 @@ public class CheckoutService {
 
     /**
      * Refuses a session on a connection requiring a request unless the user
-     * holds an active checkout of it, or is an administrator (who bypasses
-     * requests, which is logged).
+     * holds an active checkout of it, or is an administrator while
+     * administrators bypass requests (which is logged). The same applies to
+     * Accounts, through {@link #request}.
      *
      * @throws GuacamoleClientException
      *     If the user must request access first.
@@ -192,7 +217,7 @@ public class CheckoutService {
         if (checkouts.getActive(id, username) != null)
             return;
 
-        if (administrator) {
+        if (bypassesRequests(administrator)) {
             logger.info("Administrator \"{}\" connects to \"{}\" without a request.", username, target.getName());
             return;
         }
@@ -405,12 +430,20 @@ public class CheckoutService {
                 isManaged(target), isExclusive(target), getDuration(target),
                 checkouts.listActive(target.getId()), username)
             .withAccount(account)
-            .withBypass(administrator)
-            .withNoRequest(!requiresRequest(target))
+            .withBypass(bypassesRequests(administrator))
+            .withNoRequest(!requiresRequest(target) || bypassesRequests(administrator))
             .withApproval(approvalsRequired,
                 approvalsRequired > 0 ? approvals.getPending(target.getId(), username) : null,
                 approvalsRequired > 0 ? approvals.getLatest(target.getId(), username) : null);
 
+    }
+
+    /**
+     * Whether the user, an administrator or not, connects and checks out
+     * without a request.
+     */
+    private boolean bypassesRequests(boolean administrator) {
+        return administrator && adminBypass;
     }
 
     /**

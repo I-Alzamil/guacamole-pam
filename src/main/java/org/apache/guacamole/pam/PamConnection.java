@@ -29,7 +29,8 @@ public class PamConnection extends DelegatingConnection {
 
     /**
      * The user this connection is presented to, and whether they are an
-     * administrator (who bypasses access requests).
+     * administrator (who skips approvals, and bypasses access requests if
+     * "pam-admin-bypass-requests" is set).
      */
     private final String username;
     private final boolean administrator;

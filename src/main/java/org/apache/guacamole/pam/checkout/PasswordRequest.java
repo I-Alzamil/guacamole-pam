@@ -156,8 +156,8 @@ public class PasswordRequest {
     }
 
     /**
-     * Marks the current user as an administrator, who connects without a
-     * request and needs no approval.
+     * Marks the current user as an administrator who bypasses requests
+     * (with "pam-admin-bypass-requests"): they connect without a request.
      */
     PasswordRequest withBypass(boolean bypass) {
         this.bypass = bypass;

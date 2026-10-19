@@ -23,6 +23,7 @@ import org.apache.guacamole.pam.db.ConnectionRepository;
 import org.apache.guacamole.pam.db.PamDatabase;
 import org.apache.guacamole.pam.platform.PlatformRepository;
 import org.apache.guacamole.pam.rotation.RotationService;
+import org.apache.guacamole.properties.BooleanGuacamoleProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,6 +51,16 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
      * rotation engine reads and writes that provider's tables directly.
      */
     private static final String MANAGED_DATA_SOURCE = "postgresql";
+
+    /**
+     * Whether administrators connect, and check out Accounts, without a
+     * request. False by default: administrators then skip approvals only,
+     * and give a reason like anyone else.
+     */
+    private static final BooleanGuacamoleProperty ADMIN_BYPASS_REQUESTS = new BooleanGuacamoleProperty() {
+        @Override
+        public String getName() { return "pam-admin-bypass-requests"; }
+    };
 
     private final PlatformRepository platforms;
 
@@ -105,7 +116,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         rotationService = new RotationService(platforms, connections, checkouts);
         approvals = new ApprovalRepository(database);
         badgePreferences = new BadgePreferences(database);
-        checkoutService = new CheckoutService(connections, checkouts, platforms, approvals, rotationService);
+        checkoutService = new CheckoutService(connections, checkouts, platforms, approvals, rotationService,
+                environment.getProperty(ADMIN_BYPASS_REQUESTS, false));
         approvalService = new ApprovalService(approvals, checkoutService);
 
         // Offer the Account connection type in the connection editor
