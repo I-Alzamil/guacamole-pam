@@ -11,6 +11,7 @@
                 <ul ng-class="{loading: !platforms}">
                     <li ng-repeat="platform in platforms"
                         ng-class="{selected: editing.id === platform.id}"
+                        ng-attr-title="{{ platform.description || undefined }}"
                         ng-click="selectPlatform(platform)">
                         <span class="pam-platform-name">
                             {{ platform.name }}
@@ -28,6 +29,7 @@
                 <div class="pam-platform-cards" ng-show="platforms.length">
                     <div class="pam-platform-card" ng-repeat="platform in platforms"
                          role="button" tabindex="0" ng-click="selectPlatform(platform)"
+                         ng-attr-title="{{ platform.description || undefined }}"
                          ng-keydown="($event.key === 'Enter' || $event.key === ' ') && selectPlatform(platform)">
                         <div class="pam-platform-card-title">
                             {{ platform.name }}
@@ -48,6 +50,7 @@
                 <div class="pam-platform-cards">
                     <div class="pam-platform-card pam-platform-create" ng-repeat="type in platformTypes"
                          role="button" tabindex="0" ng-click="newPlatform(type.name)"
+                         title="{{ 'PAM.HELP_TYPE_' + (type.name | uppercase) | translate }}"
                          ng-keydown="($event.key === 'Enter' || $event.key === ' ') && newPlatform(type.name)">
                         <div class="pam-platform-card-title">+ {{ 'PAM.TYPE_' + (type.name | uppercase) | translate }}</div>
                         <div class="pam-platform-description">{{ 'PAM.HELP_TYPE_' + (type.name | uppercase) | translate }}</div>
