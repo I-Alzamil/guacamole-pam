@@ -1,6 +1,7 @@
 package org.apache.guacamole.pam;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -111,11 +112,13 @@ public class PamConnection extends DelegatingConnection {
     }
 
     /**
-     * DelegatingConnection routes both connect() variants through this one
-     * (passing tokens along internally), so only this needs overriding.
+     * Opens every session of the connection, checking access and tracking
+     * the session. The wrapped connection is called directly: going through
+     * DelegatingConnection would route through the deprecated
+     * connect(info), which calls back here.
      */
     @Override
-    public GuacamoleTunnel connect(GuacamoleClientInformation info)
+    public GuacamoleTunnel connect(GuacamoleClientInformation info, Map<String, String> tokens)
             throws GuacamoleException {
 
         // Password request connections never open a session, even if the
@@ -128,7 +131,7 @@ public class PamConnection extends DelegatingConnection {
         final String identifier = getIdentifier();
         checkoutService.requireAccess(identifier, username, administrator);
 
-        GuacamoleTunnel tunnel = super.connect(info);
+        GuacamoleTunnel tunnel = getDelegateConnection().connect(info, tokens);
 
         GuacamoleTunnel tracked = new DelegatingGuacamoleTunnel(tunnel) {
 
@@ -150,6 +153,18 @@ public class PamConnection extends DelegatingConnection {
         rotationService.sessionStarted(identifier, username, tracked);
         return tracked;
 
+    }
+
+    /**
+     * The deprecated variant without tokens, which DelegatingConnection
+     * would send straight to the wrapped connection: routed through the
+     * checks above instead, as the Connection API itself does. Delete this
+     * if a future Guacamole release removes the method.
+     */
+    @Override
+    @Deprecated
+    public GuacamoleTunnel connect(GuacamoleClientInformation info) throws GuacamoleException {
+        return connect(info, Collections.<String, String>emptyMap());
     }
 
 }

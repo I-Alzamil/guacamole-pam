@@ -233,7 +233,10 @@ public class RotationService {
     public RotationResult rotateNow(String identifier) throws GuacamoleException {
 
         Integer id = parseInt(identifier);
-        Target target = id == null ? null : connections.load(id);
+        if (id == null)
+            throw new GuacamoleResourceNotFoundException("No such connection.");
+
+        Target target = connections.load(id);
         if (target == null)
             throw new GuacamoleResourceNotFoundException("No such connection.");
 
