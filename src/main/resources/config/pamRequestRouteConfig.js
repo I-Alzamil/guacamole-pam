@@ -18,7 +18,7 @@ angular.module('guacPam').run(['$injector', function pamRequestRouteConfig($inje
     var pamRequestService     = $injector.get('pamRequestService');
 
     /**
-     * Data source whose connections can be password requests.
+     * Data source whose connections can need a request.
      */
     var DATA_SOURCE = 'postgresql';
 

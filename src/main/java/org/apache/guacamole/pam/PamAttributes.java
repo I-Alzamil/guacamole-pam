@@ -58,20 +58,14 @@ public final class PamAttributes {
     public static final String REQUEST_EXEMPT = "pam-request-exempt";
 
     /**
-     * "true" if users had to request access, before requests became the
-     * default. Only read when upgrading, then removed.
-     */
-    public static final String LEGACY_REQUEST_REQUIRED = "pam-request-required";
-
-    /**
-     * How many distinct approvers must approve a password request before
+     * How many distinct approvers must approve a request before
      * its checkout starts. Empty or 0 means no approval is needed.
      */
     public static final String APPROVALS_REQUIRED = "pam-approvals-required";
 
     /**
      * User and user group attribute: "true" if the user, or every member of
-     * the group, may approve password requests, for the connections listed
+     * the group, may approve requests, for the connections listed
      * in {@link #APPROVER_CONNECTIONS}. Administrators may approve any
      * request. Only administrators can change these attributes.
      */
@@ -104,26 +98,21 @@ public final class PamAttributes {
     );
 
     /**
-     * Connection attribute of an earlier version naming approver groups;
-     * removed on upgrade.
-     */
-    public static final String LEGACY_APPROVER_GROUPS = "pam-approver-groups";
-
-    /**
      * Custom field type rendering a drop-down of platforms.
      */
     public static final String PLATFORM_FIELD_TYPE = "PAM_PLATFORM";
 
     /**
-     * Attribute naming the sequence profile of a connection before profiles
-     * became SSH platforms; converted on upgrade.
-     */
-    public static final String LEGACY_SEQUENCE_PROFILE = "pam-sequence-profile";
-
-    /**
      * Every form of the password management of a connection.
      */
     public static final List<Form> CONNECTION_FORMS;
+
+    /**
+     * Names of every attribute of {@link #CONNECTION_FORMS}. They decide how
+     * a connection's password is managed and who may use it, so only
+     * administrators may change them.
+     */
+    public static final List<String> CONNECTION_ATTRIBUTE_NAMES;
 
     static {
 
@@ -150,6 +139,13 @@ public final class PamAttributes {
         )));
 
         CONNECTION_FORMS = Collections.unmodifiableList(forms);
+
+        List<String> names = new ArrayList<>();
+        for (Form form : CONNECTION_FORMS) {
+            for (Field field : form.getFields())
+                names.add(field.getName());
+        }
+        CONNECTION_ATTRIBUTE_NAMES = Collections.unmodifiableList(names);
 
     }
 

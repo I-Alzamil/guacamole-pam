@@ -18,6 +18,7 @@ import org.apache.guacamole.pam.PamAttributes;
 import org.apache.guacamole.pam.checkout.Checkout;
 import org.apache.guacamole.pam.checkout.CheckoutRepository;
 import org.apache.guacamole.pam.db.ConnectionRepository;
+import org.apache.guacamole.pam.db.SchemaUnavailableException;
 import org.apache.guacamole.pam.db.ConnectionRepository.Target;
 import org.apache.guacamole.pam.management.ManagementType;
 import org.apache.guacamole.pam.management.ManagementTypes;
@@ -170,6 +171,9 @@ public class RotationService {
                 rotate(target, "after use");
 
         }
+        catch (SchemaUnavailableException e) {
+            logger.debug("After-use rotation skipped: {}", e.getMessage());
+        }
         catch (Exception e) {
             logger.error("After-use rotation of connection {} failed: {}", identifier, e.getMessage());
             logger.debug("After-use rotation failed.", e);
@@ -183,6 +187,9 @@ public class RotationService {
                         checkout.getConnectionName(), checkout.getUsername());
                 checkoutEnded(checkout);
             }
+        }
+        catch (SchemaUnavailableException e) {
+            logger.debug("Checkout expiry check skipped: {}", e.getMessage());
         }
         catch (Exception e) {
             logger.error("Checkout expiry check failed: {}", e.getMessage());
@@ -219,6 +226,9 @@ public class RotationService {
 
             }
 
+        }
+        catch (SchemaUnavailableException e) {
+            logger.debug("Periodic rotation check skipped: {}", e.getMessage());
         }
         catch (Exception e) {
             logger.error("Periodic rotation check failed: {}", e.getMessage());

@@ -23,7 +23,7 @@
                     </td>
                     <td>{{ request.username }}</td>
                     <td class="pam-truncate"><a href="" class="pam-reason-link" ng-click="showReason(request)"
-                        title="{{ 'PAM_APPROVALS.HELP_READ_FULL' | translate }}">{{ request.reason }}</a></td>
+                        title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ request.reason }}</a></td>
                     <td>{{ request.requested | date:'medium' }}</td>
                     <td>
                         {{ request.approvers.length }} / {{ request.approvalsRequired }}
@@ -55,9 +55,9 @@
 
         <!-- Search controls -->
         <form class="filter" ng-submit="search()">
-            <input class="search-string" type="text" placeholder="{{ 'PAM_HISTORY.FIELD_PLACEHOLDER_FILTER' | translate }}" ng-model="searchString">
-            <input class="search-button" type="submit" value="{{ 'PAM_HISTORY.ACTION_SEARCH' | translate }}">
-            <button type="button" ng-click="downloadCSV()" ng-disabled="!isLoaded()">{{ 'PAM_HISTORY.ACTION_DOWNLOAD' | translate }}</button>
+            <input class="search-string" type="text" placeholder="{{ 'PAM.FIELD_PLACEHOLDER_FILTER' | translate }}" ng-model="searchString">
+            <input class="search-button" type="submit" value="{{ 'PAM.ACTION_SEARCH' | translate }}">
+            <button type="button" ng-click="downloadCSV()" ng-disabled="!isLoaded()">{{ 'PAM.ACTION_DOWNLOAD' | translate }}</button>
         </form>
 
         <!-- Search results -->
@@ -96,7 +96,7 @@
                         </td>
                         <td class="pam-history-truncate">
                             <a href="" class="pam-reason-link" ng-click="showReason(decision.entry)"
-                               title="{{ 'PAM_APPROVALS.HELP_READ_FULL' | translate }}">{{ decision.entry.reason }}</a>
+                               title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ decision.entry.reason }}</a>
                         </td>
                         <td>{{ decision.entry.requested | date : dateFormat }}</td>
                         <td><span class="pam-status-badge {{ decision.entry.status | lowercase }}">{{ 'PAM_APPROVALS.STATUS_' + decision.entry.status | translate }}</span></td>
@@ -104,7 +104,7 @@
                         <td class="pam-history-truncate" title="{{ decision.decidedBy }}">{{ decision.decidedBy }}</td>
                         <td class="pam-history-truncate">
                             <a href="" class="pam-reason-link" ng-if="decision.entry.decisionReason" ng-click="showReason(decision.entry)"
-                               title="{{ 'PAM_APPROVALS.HELP_READ_FULL' | translate }}">{{ decision.entry.decisionReason }}</a>
+                               title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ decision.entry.decisionReason }}</a>
                         </td>
                     </tr>
                 </tbody>

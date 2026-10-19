@@ -5,8 +5,8 @@ import java.util.List;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
- * A password request: one user holding the password of one connection for
- * a limited time. Times are milliseconds since the epoch.
+ * A checkout: one user holding an Account's password, or access to a
+ * connection, for a limited time. Times are milliseconds since the epoch.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class Checkout {

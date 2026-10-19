@@ -13,19 +13,18 @@ angular.module('guacPam').directive('guacSettingsPamApprovals', [function guacSe
         controller  : ['$scope', '$injector', function settingsPamApprovalsController($scope, $injector) {
 
             // Required types
-            var FilterToken = $injector.get('FilterToken');
-            var SortOrder   = $injector.get('SortOrder');
+            var SortOrder = $injector.get('SortOrder');
 
             // Required services
             var $document             = $injector.get('$document');
             var $filter               = $injector.get('$filter');
             var $translate            = $injector.get('$translate');
-            var csvService            = $injector.get('csvService');
             var $interval             = $injector.get('$interval');
             var authenticationService = $injector.get('authenticationService');
             var pamApprovalBadge      = $injector.get('pamApprovalBadge');
             var guacNotification      = $injector.get('guacNotification');
             var pamService            = $injector.get('pamService');
+            var pamHistoryTools       = $injector.get('pamHistoryTools');
 
             /**
              * How often the requests awaiting approval refresh, in
@@ -97,13 +96,7 @@ angular.module('guacPam').directive('guacSettingsPamApprovals', [function guacSe
 
                 $scope.history = null;
 
-                var terms = [];
-                angular.forEach(FilterToken.tokenize($scope.searchString), function addTerm(token) {
-                    if (token.type === 'LITERAL')
-                        terms.push(token.value);
-                    else if (token.type !== 'WHITESPACE')
-                        terms.push(token.consumed);
-                });
+                var terms = pamHistoryTools.getTerms($scope.searchString);
 
                 pamService.searchApprovals(terms).then(function historyRetrieved(requests) {
                     $scope.history = requests.map(function wrapRequest(request) {
@@ -156,7 +149,7 @@ angular.module('guacPam').directive('guacSettingsPamApprovals', [function guacSe
                         ]);
                     });
 
-                    saveAs(csvService.toBlob(records), translations['PAM_APPROVALS.FILENAME_CSV']);
+                    pamHistoryTools.saveCsv(records, translations['PAM_APPROVALS.FILENAME_CSV']);
 
                 }, angular.noop);
 

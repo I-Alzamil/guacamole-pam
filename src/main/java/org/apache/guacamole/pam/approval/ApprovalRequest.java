@@ -6,7 +6,7 @@ import java.util.List;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
- * A password request awaiting, or having received, approval. Times are
+ * A request awaiting, or having received, approval. Times are
  * milliseconds since the epoch.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)

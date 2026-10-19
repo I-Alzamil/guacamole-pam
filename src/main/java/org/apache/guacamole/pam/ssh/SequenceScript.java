@@ -1,4 +1,4 @@
-package org.apache.guacamole.pam.profile;
+package org.apache.guacamole.pam.ssh;
 
 import java.util.ArrayList;
 import java.util.Arrays;

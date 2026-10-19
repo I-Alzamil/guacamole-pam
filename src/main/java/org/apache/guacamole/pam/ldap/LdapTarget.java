@@ -113,6 +113,12 @@ public final class LdapTarget {
         if (adminDn != null && (adminPassword == null || adminPassword.isEmpty()))
             throw new IllegalArgumentException("The rotation account has no password.");
 
+        // A rotation account can usually change any password in the
+        // directory, so its credentials never travel unencrypted
+        if (adminDn != null && encryption == Encryption.NONE)
+            throw new IllegalArgumentException("A rotation account is set, so the connection to the LDAP server"
+                    + " must be encrypted (LDAPS or StartTLS).");
+
         String password = parameters.get(PASSWORD);
         String username = value(parameters, USERNAME);
 

@@ -3,7 +3,7 @@ package org.apache.guacamole.pam.management;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.apache.guacamole.pam.profile.SequenceScript;
+import org.apache.guacamole.pam.ssh.SequenceScript;
 import org.apache.guacamole.pam.rotation.ChangeOutcome;
 import org.apache.guacamole.pam.ssh.SshClient;
 import org.apache.guacamole.pam.ssh.SshTarget;

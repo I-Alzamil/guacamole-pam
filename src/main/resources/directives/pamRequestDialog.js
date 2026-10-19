@@ -1,7 +1,7 @@
 /**
- * Dialog for requesting the password of a password request connection,
- * showing it while checked out, and releasing it. The password is only kept
- * while the dialog shows it, and is never written to storage.
+ * Dialog for requesting an Account's password or access to a connection,
+ * showing the password while checked out, and releasing it. The password
+ * is only kept while the dialog shows it, and is never written to storage.
  */
 angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDialog() {
 

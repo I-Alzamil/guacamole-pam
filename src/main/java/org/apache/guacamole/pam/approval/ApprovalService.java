@@ -13,7 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Decisions on password requests by approvers: users whose approval
+ * Decisions on requests by approvers: users whose approval
  * permission, of their own or of one of their groups, covers the request's
  * connection. Administrators may decide on any. A request needs as many distinct approvers as its account
  * requires, none of them the requester; a single denial rejects it. The

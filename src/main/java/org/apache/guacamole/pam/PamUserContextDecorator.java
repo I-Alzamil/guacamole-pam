@@ -28,8 +28,10 @@ import org.apache.guacamole.pam.rotation.RotationService;
 /**
  * Decorates the PostgreSQL UserContext: adds password management to the
  * connection editor and tracks connection usage for after-use rotation, and
- * adds the approval permission to users and user groups, which only
- * administrators may change.
+ * adds the approval permission to users and user groups. Only
+ * administrators may change either: users allowed to create or edit
+ * connections, users or groups keep doing so, but cannot change how
+ * passwords are managed, who must request access, or who approves.
  */
 public class PamUserContextDecorator extends DelegatingUserContext {
 
@@ -52,7 +54,10 @@ public class PamUserContextDecorator extends DelegatingUserContext {
 
     @Override
     public Directory<Connection> getConnectionDirectory() throws GuacamoleException {
-        return new DecoratingDirectory<Connection>(super.getConnectionDirectory()) {
+
+        final Directory<Connection> connections = super.getConnectionDirectory();
+
+        return new DecoratingDirectory<Connection>(connections) {
 
             @Override
             protected Connection decorate(Connection object) throws GuacamoleException {
@@ -60,8 +65,21 @@ public class PamUserContextDecorator extends DelegatingUserContext {
                         isAdministrator());
             }
 
+            // DecoratingDirectory.add() does not go through undecorate()
             @Override
-            protected Connection undecorate(Connection object) {
+            public void add(Connection object) throws GuacamoleException {
+                requireUnchanged(PamAttributes.CONNECTION_ATTRIBUTE_NAMES, null, object.getAttributes(),
+                        "Only administrators can change password management or access requests.");
+                super.add(object);
+            }
+
+            @Override
+            protected Connection undecorate(Connection object) throws GuacamoleException {
+                Connection stored = object.getIdentifier() == null ? null : connections.get(object.getIdentifier());
+                requireUnchanged(PamAttributes.CONNECTION_ATTRIBUTE_NAMES,
+                        stored == null ? null : stored.getAttributes(), object.getAttributes(),
+                        "Only administrators can change password management or access requests.");
+
                 // Connections created through the REST API are never decorated
                 if (object instanceof PamConnection)
                     return ((PamConnection) object).getUndecorated();
@@ -69,6 +87,7 @@ public class PamUserContextDecorator extends DelegatingUserContext {
             }
 
         };
+
     }
 
     /**
@@ -98,14 +117,15 @@ public class PamUserContextDecorator extends DelegatingUserContext {
             // DecoratingDirectory.add() does not go through undecorate()
             @Override
             public void add(User object) throws GuacamoleException {
-                requireApprovalUnchanged(null, object.getAttributes());
+                requireUnchanged(APPROVER_ATTRIBUTES, null, object.getAttributes(), APPROVER_CHANGE_REFUSED);
                 super.add(object);
             }
 
             @Override
             protected User undecorate(User object) throws GuacamoleException {
                 User stored = object.getIdentifier() == null ? null : users.get(object.getIdentifier());
-                requireApprovalUnchanged(stored == null ? null : stored.getAttributes(), object.getAttributes());
+                requireUnchanged(APPROVER_ATTRIBUTES, stored == null ? null : stored.getAttributes(),
+                        object.getAttributes(), APPROVER_CHANGE_REFUSED);
                 return object instanceof ApproverUser ? ((ApproverUser) object).getUndecorated() : object;
             }
 
@@ -128,14 +148,15 @@ public class PamUserContextDecorator extends DelegatingUserContext {
             // DecoratingDirectory.add() does not go through undecorate()
             @Override
             public void add(UserGroup object) throws GuacamoleException {
-                requireApprovalUnchanged(null, object.getAttributes());
+                requireUnchanged(APPROVER_ATTRIBUTES, null, object.getAttributes(), APPROVER_CHANGE_REFUSED);
                 super.add(object);
             }
 
             @Override
             protected UserGroup undecorate(UserGroup object) throws GuacamoleException {
                 UserGroup stored = object.getIdentifier() == null ? null : groups.get(object.getIdentifier());
-                requireApprovalUnchanged(stored == null ? null : stored.getAttributes(), object.getAttributes());
+                requireUnchanged(APPROVER_ATTRIBUTES, stored == null ? null : stored.getAttributes(),
+                        object.getAttributes(), APPROVER_CHANGE_REFUSED);
                 return object instanceof ApproverUserGroup ? ((ApproverUserGroup) object).getUndecorated() : object;
             }
 
@@ -194,19 +215,23 @@ public class PamUserContextDecorator extends DelegatingUserContext {
         return copy;
     }
 
+    private static final String APPROVER_CHANGE_REFUSED =
+            "Only administrators can change who may approve requests.";
+
     /**
-     * Refuses changes of the approval permission by anyone but an
-     * administrator, wherever the change comes from.
+     * Refuses a change of any of the given attributes by anyone but an
+     * administrator, wherever the change comes from. Stored attributes are
+     * null for a new object.
      */
-    private void requireApprovalUnchanged(Map<String, String> stored, Map<String, String> updated)
-            throws GuacamoleException {
+    private void requireUnchanged(List<String> names, Map<String, String> stored, Map<String, String> updated,
+            String refusal) throws GuacamoleException {
 
         boolean changed = false;
-        for (String name : APPROVER_ATTRIBUTES)
+        for (String name : names)
             changed |= !Objects.equals(normalize(stored, name), normalize(updated, name));
 
         if (changed && !isAdministrator())
-            throw new GuacamoleSecurityException("Only administrators can change who may approve password requests.");
+            throw new GuacamoleSecurityException(refusal);
 
     }
 

@@ -23,6 +23,8 @@ import org.apache.guacamole.pam.db.ConnectionRepository;
 import org.apache.guacamole.pam.db.PamDatabase;
 import org.apache.guacamole.pam.platform.PlatformRepository;
 import org.apache.guacamole.pam.rotation.RotationService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Privileged access management extension. Every connection stored in the
@@ -30,8 +32,12 @@ import org.apache.guacamole.pam.rotation.RotationService;
  * platform, which rotates the password over SSH, LDAP or other management
  * types. Also adds "pam-account" connections: accounts whose password users
  * request and check out for a limited time instead of opening a session.
+ * Without Guacamole's PostgreSQL authentication, it stays inactive: it logs
+ * why once, and changes nothing.
  */
 public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
+
+    private static final Logger logger = LoggerFactory.getLogger(PamAuthenticationProvider.class);
 
     /**
      * Identifier of this provider, and so the REST path
@@ -67,11 +73,30 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
     private final Map<AuthenticatedUser, UserContext> dataSourceContexts =
             new MapMaker().weakKeys().makeMap();
 
+    /**
+     * Whether the extension is active: false without Guacamole's PostgreSQL
+     * authentication, in which case every service is null.
+     */
+    private final boolean active;
+
     public PamAuthenticationProvider() throws GuacamoleException {
+
         Environment environment = LocalEnvironment.getInstance();
 
-        // Offer the password request connection type in the connection editor
-        environment.getProtocols().putIfAbsent(AccountProtocol.NAME, AccountProtocol.PROTOCOL);
+        String unavailable = PamDatabase.getUnavailableReason(environment);
+        active = unavailable == null;
+
+        if (!active) {
+            logger.warn("The PAM extension is inactive: {} Guacamole works as without it.", unavailable);
+            platforms = null;
+            connections = null;
+            rotationService = null;
+            approvals = null;
+            badgePreferences = null;
+            checkoutService = null;
+            approvalService = null;
+            return;
+        }
 
         PamDatabase database = new PamDatabase(environment);
         CheckoutRepository checkouts = new CheckoutRepository(database);
@@ -82,6 +107,10 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         badgePreferences = new BadgePreferences(database);
         checkoutService = new CheckoutService(connections, checkouts, platforms, approvals, rotationService);
         approvalService = new ApprovalService(approvals, checkoutService);
+
+        // Offer the Account connection type in the connection editor
+        environment.getProtocols().putIfAbsent(AccountProtocol.NAME, AccountProtocol.PROTOCOL);
+
     }
 
     @Override
@@ -92,7 +121,13 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
     @Override
     public UserContext getUserContext(AuthenticatedUser authenticatedUser)
             throws GuacamoleException {
+
+        // Inactive: no REST API, so the web UI shows none of the extension
+        if (!active)
+            return null;
+
         return new PamUserContext(this, authenticatedUser);
+
     }
 
     @Override
@@ -100,7 +135,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             AuthenticatedUser authenticatedUser, Credentials credentials)
             throws GuacamoleException {
 
-        if (!MANAGED_DATA_SOURCE.equals(context.getAuthenticationProvider().getIdentifier()))
+        if (!active || !MANAGED_DATA_SOURCE.equals(context.getAuthenticationProvider().getIdentifier()))
             return context;
 
         dataSourceContexts.put(authenticatedUser, context);
@@ -180,7 +215,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     @Override
     public void shutdown() {
-        rotationService.shutdown();
+        if (rotationService != null)
+            rotationService.shutdown();
     }
 
 }

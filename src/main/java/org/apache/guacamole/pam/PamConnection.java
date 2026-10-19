@@ -1,16 +1,12 @@
 package org.apache.guacamole.pam;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
-import org.apache.guacamole.form.Field;
-import org.apache.guacamole.form.Form;
 import org.apache.guacamole.net.DelegatingGuacamoleTunnel;
 import org.apache.guacamole.net.GuacamoleTunnel;
 import org.apache.guacamole.net.auth.Connection;
@@ -26,18 +22,6 @@ import org.apache.guacamole.protocol.GuacamoleClientInformation;
  * always exposes its password management attributes to the editor.
  */
 public class PamConnection extends DelegatingConnection {
-
-    /**
-     * Names of all attributes of the password management forms.
-     */
-    private static final List<String> ATTRIBUTE_NAMES = new ArrayList<>();
-
-    static {
-        for (Form form : PamAttributes.CONNECTION_FORMS) {
-            for (Field field : form.getFields())
-                ATTRIBUTE_NAMES.add(field.getName());
-        }
-    }
 
     private final RotationService rotationService;
 
@@ -83,7 +67,7 @@ public class PamConnection extends DelegatingConnection {
     public Map<String, String> getAttributes() {
 
         Map<String, String> attributes = new HashMap<>(super.getAttributes());
-        for (String name : ATTRIBUTE_NAMES) {
+        for (String name : PamAttributes.CONNECTION_ATTRIBUTE_NAMES) {
             String value = attributes.get(name);
             if (value == null || value.isEmpty())
                 attributes.put(name, null);
@@ -101,7 +85,7 @@ public class PamConnection extends DelegatingConnection {
     public void setAttributes(Map<String, String> attributes) {
 
         Map<String, String> cleaned = new HashMap<>(attributes);
-        for (String name : ATTRIBUTE_NAMES) {
+        for (String name : PamAttributes.CONNECTION_ATTRIBUTE_NAMES) {
             String value = cleaned.get(name);
             if (value != null && value.trim().isEmpty())
                 cleaned.put(name, null);
@@ -121,11 +105,11 @@ public class PamConnection extends DelegatingConnection {
     public GuacamoleTunnel connect(GuacamoleClientInformation info, Map<String, String> tokens)
             throws GuacamoleException {
 
-        // Password request connections never open a session, even if the
-        // web UI is bypassed; their password is requested instead
+        // Accounts never open a session, even if the web UI is bypassed;
+        // their password is checked out instead
         if (AccountProtocol.NAME.equals(getConfiguration().getProtocol()))
-            throw new GuacamoleClientException("This is a password request connection."
-                    + " Select it on the home screen to request its password.");
+            throw new GuacamoleClientException("This is an Account, which has no session."
+                    + " Select it on the home screen to check out its password.");
 
         // Connections requiring a request need an active checkout
         final String identifier = getIdentifier();

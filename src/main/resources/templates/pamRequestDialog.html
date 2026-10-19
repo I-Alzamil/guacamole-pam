@@ -45,7 +45,7 @@
             <div ng-if="request.pending" class="pam-request-pending">
                 <p>{{ 'PAM.REQUEST.TEXT_PENDING' | translate:{ APPROVED: request.pending.approvers.length, REQUIRED: request.pending.approvalsRequired } }}</p>
                 <p class="pam-request-hint" ng-show="request.pending.approvers.length">
-                    {{ 'PAM_APPROVALS.INFO_APPROVED_BY' | translate:{ USERS: request.pending.approvers.join(', ') } }}
+                    {{ 'PAM.INFO_APPROVED_BY' | translate:{ USERS: request.pending.approvers.join(', ') } }}
                 </p>
                 <p class="pam-request-hint">{{ textKey('HELP_PENDING') | translate:{ MINUTES: request.durationMinutes } }}</p>
             </div>

@@ -13,7 +13,7 @@ import org.apache.guacamole.form.NumericField;
 import org.apache.guacamole.form.TextField;
 import org.apache.guacamole.pam.db.ConnectionRepository.Target;
 import org.apache.guacamole.pam.platform.Platform;
-import org.apache.guacamole.pam.profile.SequenceScript;
+import org.apache.guacamole.pam.ssh.SequenceScript;
 import org.apache.guacamole.pam.ssh.SshClient;
 import org.apache.guacamole.pam.ssh.SshTarget;
 
@@ -49,6 +49,11 @@ public class SshManagementType implements ManagementType {
      * Connection attribute: SHA256 fingerprint the host key must match.
      */
     public static final String SSH_HOST_KEY = "pam-ssh-host-key";
+
+    /**
+     * Prefix of SSH host key fingerprints, as OpenSSH prints them.
+     */
+    private static final String SSH_FINGERPRINT_PREFIX = "SHA256:";
 
     private static final int DEFAULT_PORT = 22;
 
@@ -139,7 +144,25 @@ public class SshManagementType implements ManagementType {
             throw new IllegalArgumentException("The connection has neither a password nor a private key.");
 
         return new SshTarget(hostname, port, username, password, privateKey,
-                blankToNull(parameters.get("passphrase")), target.getAttribute(SSH_HOST_KEY));
+                blankToNull(parameters.get("passphrase")), trustedHostKey(target));
+
+    }
+
+    /**
+     * The host key to require: the one pinned on the connection, or else the
+     * one recorded at the first contact with the host (trust on first use,
+     * as with SSH's known_hosts). Only a first contact accepts any key.
+     */
+    private static String trustedHostKey(Target target) {
+
+        String pinned = blankToNull(target.getAttribute(SSH_HOST_KEY));
+        if (pinned != null)
+            return pinned;
+
+        // Only an SSH key counts: the same state records the certificate of
+        // an LDAP target, should the connection have been managed over LDAP
+        String recorded = blankToNull(target.getState().getHostKey());
+        return recorded != null && recorded.startsWith(SSH_FINGERPRINT_PREFIX) ? recorded : null;
 
     }
 

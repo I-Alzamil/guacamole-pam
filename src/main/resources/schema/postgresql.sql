@@ -1,10 +1,10 @@
 --
 -- Tables of the PAM extension. Every statement is idempotent, and all are run
--- automatically the first time the extension touches the database. Upgrades
--- that need more than SQL are done afterwards by SchemaMigrations.
+-- automatically the first time the extension touches the database.
 --
 
--- Applied schema versions. Empty means a fresh install
+-- Schema versions applied, so later versions can tell what to upgrade.
+-- Empty means a fresh install
 CREATE TABLE IF NOT EXISTS pam_schema_version (
 
   version integer NOT NULL,
@@ -85,8 +85,9 @@ CREATE TABLE IF NOT EXISTS pam_rotation_state (
 
 );
 
--- Password requests: who checked out which account, why, and until when.
--- Rows are never deleted, so the table doubles as the audit log
+-- Checkouts: who held which Account's password, or access to which
+-- connection, why, and until when. Rows are never deleted, so the table
+-- doubles as the audit log
 CREATE TABLE IF NOT EXISTS pam_checkout (
 
   checkout_id    serial        NOT NULL,
@@ -110,9 +111,6 @@ CREATE TABLE IF NOT EXISTS pam_checkout (
 
 );
 
--- Added in version 3; must precede the indexes using it
-ALTER TABLE pam_checkout ADD COLUMN IF NOT EXISTS exclusive boolean NOT NULL DEFAULT TRUE;
-
 CREATE INDEX IF NOT EXISTS pam_checkout_checked_out
   ON pam_checkout (checked_out);
 
@@ -123,7 +121,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS pam_checkout_exclusive
 CREATE UNIQUE INDEX IF NOT EXISTS pam_checkout_holder
   ON pam_checkout (connection_id, username) WHERE released IS NULL;
 
--- Password requests needing approval. A request is PENDING until enough
+-- Requests needing approval. A request is PENDING until enough
 -- distinct approvers approve it (APPROVED, which starts its checkout), one
 -- denies it (DENIED), its requester cancels it (CANCELLED), or it is left
 -- pending for too long (EXPIRED)
@@ -140,6 +138,9 @@ CREATE TABLE IF NOT EXISTS pam_request (
   decided_by         varchar(128),
   checkout_id        integer,
 
+  -- Why the approver who decided denied the request
+  decision_reason    varchar(500),
+
   PRIMARY KEY (request_id),
   CONSTRAINT pam_request_connection
     FOREIGN KEY (connection_id)
@@ -153,23 +154,6 @@ CREATE TABLE IF NOT EXISTS pam_request (
 -- At most one pending request per user and connection
 CREATE UNIQUE INDEX IF NOT EXISTS pam_request_pending
   ON pam_request (connection_id, username) WHERE status = 'PENDING';
-
--- Per-user preferences: whether a user sees the badge counting requests
--- awaiting their decision, and (administrators) the badge counting failed
--- rotations; each shown unless turned off
-CREATE TABLE IF NOT EXISTS pam_user_preference (
-
-  username       varchar(128)  NOT NULL,
-  approval_badge boolean       NOT NULL DEFAULT TRUE,
-
-  PRIMARY KEY (username)
-
-);
-
-ALTER TABLE pam_user_preference ADD COLUMN IF NOT EXISTS rotation_badge boolean NOT NULL DEFAULT TRUE;
-
--- Added in version 5: why an approver denied the request
-ALTER TABLE pam_request ADD COLUMN IF NOT EXISTS decision_reason varchar(500);
 
 -- Approvals given to requests, one per approver
 CREATE TABLE IF NOT EXISTS pam_request_approval (
@@ -185,23 +169,20 @@ CREATE TABLE IF NOT EXISTS pam_request_approval (
 
 );
 
---
--- Upgrades of installs from before version 3 (no-ops otherwise)
---
+-- Per-user preferences: whether a user sees the badge counting requests
+-- awaiting their decision, and (administrators) the badge counting failed
+-- rotations; each shown unless turned off
+CREATE TABLE IF NOT EXISTS pam_user_preference (
 
-DROP INDEX IF EXISTS pam_checkout_active;
+  username       varchar(128)  NOT NULL,
+  approval_badge boolean       NOT NULL DEFAULT TRUE,
+  rotation_badge boolean       NOT NULL DEFAULT TRUE,
 
--- "pam-ldap" connections became "pam-account" connections managed over LDAP
-INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, parameter_value)
-SELECT connection_id, 'account-management', 'ldap' FROM guacamole_connection WHERE protocol = 'pam-ldap'
-ON CONFLICT (connection_id, parameter_name) DO NOTHING;
+  PRIMARY KEY (username)
 
-UPDATE guacamole_connection SET protocol = 'pam-account' WHERE protocol = 'pam-ldap';
+);
 
-INSERT INTO pam_schema_version (version)
-SELECT version FROM (VALUES (1), (2), (3)) AS versions (version)
+-- Last, so the default platforms above are only added to a fresh install, and
+-- so the extension can tell the schema is complete (PamDatabase.SCHEMA_VERSION)
+INSERT INTO pam_schema_version (version) VALUES (1)
 ON CONFLICT (version) DO NOTHING;
-
--- Approver groups used to be named on each connection; approval is now a
--- permission of users and groups, listing the connections it covers
-DELETE FROM guacamole_connection_attribute WHERE attribute_name = 'pam-approver-groups';

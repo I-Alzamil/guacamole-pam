@@ -13,15 +13,14 @@ angular.module('guacPam').directive('guacSettingsPamHistory', [function guacSett
         controller  : ['$scope', '$injector', function settingsPamHistoryController($scope, $injector) {
 
             // Required types
-            var FilterToken = $injector.get('FilterToken');
-            var SortOrder   = $injector.get('SortOrder');
+            var SortOrder = $injector.get('SortOrder');
 
             // Required services
             var $filter          = $injector.get('$filter');
             var $translate       = $injector.get('$translate');
-            var csvService       = $injector.get('csvService');
             var guacNotification = $injector.get('guacNotification');
             var pamService       = $injector.get('pamService');
+            var pamHistoryTools  = $injector.get('pamHistoryTools');
 
             /**
              * Matching checkouts, each as {entry, duration, ended}, or null
@@ -103,13 +102,7 @@ angular.module('guacPam').directive('guacSettingsPamHistory', [function guacSett
 
                 $scope.checkouts = null;
 
-                var terms = [];
-                angular.forEach(FilterToken.tokenize($scope.searchString), function addTerm(token) {
-                    if (token.type === 'LITERAL')
-                        terms.push(token.value);
-                    else if (token.type !== 'WHITESPACE')
-                        terms.push(token.consumed);
-                });
+                var terms = pamHistoryTools.getTerms($scope.searchString);
 
                 pamService.searchCheckouts(terms).then(function checkoutsRetrieved(checkouts) {
                     $scope.checkouts = checkouts.map(function wrapCheckout(checkout) {
@@ -166,7 +159,7 @@ angular.module('guacPam').directive('guacSettingsPamHistory', [function guacSett
                         ]);
                     });
 
-                    saveAs(csvService.toBlob(records), translations['PAM_HISTORY.FILENAME_CSV']);
+                    pamHistoryTools.saveCsv(records, translations['PAM_HISTORY.FILENAME_CSV']);
 
                 }, angular.noop);
 

@@ -16,6 +16,7 @@ import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.pam.db.PamDatabase;
+import org.apache.guacamole.pam.db.SearchPattern;
 
 /**
  * Storage of checkouts in "pam_checkout". Creating a checkout locks its
@@ -196,7 +197,7 @@ public class CheckoutRepository {
                     + " OR coalesce(k.released_by, '') ILIKE ? ESCAPE '\\'"
                     + " OR EXISTS (SELECT 1 FROM pam_request r JOIN pam_request_approval a ON a.request_id = r.request_id"
                     + "   WHERE r.checkout_id = k.checkout_id AND a.approver ILIKE ? ESCAPE '\\'))");
-            patterns.add("%" + term.trim().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%");
+            patterns.add(SearchPattern.contains(term));
         }
 
         sql.append(" ORDER BY k.checked_out DESC LIMIT ?");

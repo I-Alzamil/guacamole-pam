@@ -20,7 +20,7 @@
                     <td>{{ checkout.connectionName }}</td>
                     <td>{{ checkout.username }}</td>
                     <td class="pam-truncate"><a href="" class="pam-reason-link" ng-click="showReason(checkout)"
-                        title="{{ 'PAM_APPROVALS.HELP_READ_FULL' | translate }}">{{ checkout.reason }}</a></td>
+                        title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ checkout.reason }}</a></td>
                     <td>{{ checkout.checkedOut | date:'medium' }}</td>
                     <td>{{ checkout.expires | date:'medium' }}</td>
                     <td><button class="danger" ng-click="revokeCheckout(checkout)">{{ 'PAM.ACTION_REVOKE' | translate }}</button></td>

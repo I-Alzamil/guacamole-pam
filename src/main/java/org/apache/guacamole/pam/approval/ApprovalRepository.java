@@ -25,9 +25,10 @@ import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.pam.AccountProtocol;
 import org.apache.guacamole.pam.PamAttributes;
 import org.apache.guacamole.pam.db.PamDatabase;
+import org.apache.guacamole.pam.db.SearchPattern;
 
 /**
- * Storage of password requests needing approval ("pam_request") and their
+ * Storage of requests needing approval ("pam_request") and their
  * approvals ("pam_request_approval"), and the approval permissions of users
  * and user groups deciding who may approve them.
  */
@@ -311,7 +312,7 @@ public class ApprovalRepository {
                     + " OR coalesce(r.decision_reason, '') ILIKE ? ESCAPE '\\'"
                     + " OR EXISTS (SELECT 1 FROM pam_request_approval a"
                     + "   WHERE a.request_id = r.request_id AND a.approver ILIKE ? ESCAPE '\\'))");
-            String pattern = "%" + term.trim().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+            String pattern = SearchPattern.contains(term);
             for (int i = 0; i < 8; i++)
                 parameters.add(pattern);
         }

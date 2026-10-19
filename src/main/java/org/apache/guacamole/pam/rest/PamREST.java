@@ -33,20 +33,28 @@ import org.apache.guacamole.pam.checkout.PasswordRequest;
 import org.apache.guacamole.pam.management.ManagementType;
 import org.apache.guacamole.pam.management.ManagementTypes;
 import org.apache.guacamole.pam.platform.Platform;
-import org.apache.guacamole.pam.profile.SequenceScript;
-import org.apache.guacamole.pam.profile.ValidationResult;
+import org.apache.guacamole.pam.ssh.SequenceScript;
+import org.apache.guacamole.pam.ssh.ValidationResult;
 import org.apache.guacamole.pam.rotation.ManagedConnection;
 import org.apache.guacamole.pam.rotation.RotationResult;
 
 /**
- * REST API at "api/session/ext/pam". Password requests are available to any
- * user, subject to Guacamole's connection permissions. Platform names and
- * types are readable by any user, so the connection editor can list them.
- * Everything else is limited to administrators.
+ * REST API at "api/session/ext/pam". Requests (for an Account's password,
+ * or access to a connection) are available to any user, subject to
+ * Guacamole's connection permissions; approvals to approvers, for the
+ * connections their permission covers. Platform names and types are readable
+ * by any user, so the connection editor can list them. Everything else is
+ * limited to administrators.
  */
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class PamREST {
+
+    /**
+     * Most checkouts returned by one history search, as for Guacamole's own
+     * connection history.
+     */
+    private static final int CHECKOUT_HISTORY_LIMIT = 1000;
 
     private final PamAuthenticationProvider provider;
 
@@ -251,13 +259,8 @@ public class PamREST {
     }
 
     /**
-     * Most checkouts returned by one history search, as for Guacamole's own
-     * connection history.
-     */
-    private static final int CHECKOUT_HISTORY_LIMIT = 1000;
-
-    /**
-     * Password request connections the current user may request.
+     * Connections needing a request, and Accounts, that the current user
+     * can read.
      */
     @GET
     @Path("requests")

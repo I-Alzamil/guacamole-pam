@@ -12,9 +12,8 @@ import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
 
-import org.apache.guacamole.pam.profile.SequenceScript;
 import org.apache.guacamole.pam.rotation.ChangeOutcome;
-import org.apache.guacamole.pam.profile.SequenceScript.Step;
+import org.apache.guacamole.pam.ssh.SequenceScript.Step;
 
 /**
  * Runs sequence scripts in an interactive SSH shell, and checks whether a
@@ -192,7 +191,9 @@ public class SshClient {
 
         if (lower.contains("hostkey has been changed") || lower.contains("reject hostkey"))
             return "The host key " + hostKeys.getPresentedFingerprint()
-                    + " does not match the pinned fingerprint. No credentials were sent.";
+                    + " does not match the trusted one. No credentials were sent. If the host's key was"
+                    + " changed on purpose, paste this fingerprint into the connection's \"Trusted SSH host"
+                    + " key\" field.";
         if (e instanceof JSchException && isAuthFailure((JSchException) e))
             return "The target rejected the current credentials.";
 

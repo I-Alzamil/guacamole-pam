@@ -1,4 +1,4 @@
-package org.apache.guacamole.pam.profile;
+package org.apache.guacamole.pam.ssh;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -8,7 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-import org.apache.guacamole.pam.profile.SequenceScript.StepType;
+import org.apache.guacamole.pam.ssh.SequenceScript.StepType;
 import org.junit.Test;
 
 public class SequenceScriptTest {

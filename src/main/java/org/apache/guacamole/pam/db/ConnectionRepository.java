@@ -319,6 +319,7 @@ public class ConnectionRepository {
 
                 try (PreparedStatement statement = connection.prepareStatement(
                         "UPDATE pam_rotation_state SET last_success = CURRENT_TIMESTAMP, last_status = 'SUCCESS',"
+                      // The key passed the host key check, so it is trusted
                       + " last_message = ?, host_key = coalesce(?, host_key), pending_password = NULL"
                       + " WHERE connection_id = ?")) {
                     statement.setString(1, message);
@@ -355,7 +356,10 @@ public class ConnectionRepository {
                + " VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?)"
                + " ON CONFLICT (connection_id) DO UPDATE SET last_attempt = EXCLUDED.last_attempt,"
                + " last_status = EXCLUDED.last_status, last_message = EXCLUDED.last_message,"
-               + " host_key = coalesce(EXCLUDED.host_key, pam_rotation_state.host_key),"
+               // The first key seen is trusted from then on (SSH); a failure
+               // never replaces it, so a host presenting another key cannot
+               // become trusted by failing
+               + " host_key = coalesce(pam_rotation_state.host_key, EXCLUDED.host_key),"
                + " pending_password = CASE WHEN ? THEN pam_rotation_state.pending_password ELSE NULL END")) {
 
             statement.setInt(1, connectionId);

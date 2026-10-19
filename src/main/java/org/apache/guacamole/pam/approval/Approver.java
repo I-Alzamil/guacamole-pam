@@ -4,7 +4,7 @@ import java.util.Collections;
 import java.util.Set;
 
 /**
- * A user deciding on password requests: who they are, whether they are an
+ * A user deciding on requests: who they are, whether they are an
  * administrator (who may decide on any request), and the connections whose
  * requests their approval permission covers.
  */
