@@ -1,6 +1,7 @@
 package org.apache.guacamole.pam.winrm;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -83,7 +84,9 @@ final class FakeWinRmServer implements AutoCloseable {
     private void serve() {
         while (!server.isClosed()) {
             try (Socket socket = server.accept()) {
-                handle(new BufferedInputStream(socket.getInputStream()), socket.getOutputStream());
+                // Each response is sent whole when flushed, as Windows does
+                handle(new BufferedInputStream(socket.getInputStream()),
+                        new BufferedOutputStream(socket.getOutputStream()));
             }
             catch (IOException e) {
                 // Connection closed, or a client refusing the certificate

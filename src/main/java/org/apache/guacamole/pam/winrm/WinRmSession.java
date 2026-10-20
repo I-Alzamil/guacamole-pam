@@ -1,6 +1,7 @@
 package org.apache.guacamole.pam.winrm;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
@@ -151,7 +152,12 @@ class WinRmSession implements AutoCloseable {
             SSLContext context = SSLContext.getInstance("TLS");
             context.init(null, new TrustManager[] { certificateCheck }, new SecureRandom());
 
+            // Requests are written whole, then flushed: never hold back their
+            // last packet until the host acknowledges the first, which a
+            // host delaying acknowledgements (Windows: up to 200 ms) would
+            // turn into a wait on every request
             Socket plain = new Socket();
+            plain.setTcpNoDelay(true);
             plain.connect(new InetSocketAddress(target.getHostname(), target.getPort()), TIMEOUT_MS);
             socket = (SSLSocket) context.getSocketFactory().createSocket(plain, target.getHostname(),
                     target.getPort(), true);
@@ -163,7 +169,7 @@ class WinRmSession implements AutoCloseable {
         }
 
         in = new BufferedInputStream(socket.getInputStream());
-        out = socket.getOutputStream();
+        out = new BufferedOutputStream(socket.getOutputStream());
 
     }
 
