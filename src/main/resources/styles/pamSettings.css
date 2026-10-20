@@ -381,7 +381,38 @@
 
 .pam-request-dialog h2 {
     margin: 0 0 0.75em;
+    padding-right: 1.5em;
     font-size: 1.25em;
+}
+
+/* Close button in the top right corner of a dialog */
+.pam-request-dialog {
+    position: relative;
+}
+
+.pam-request-dialog button.pam-dialog-close {
+    position: absolute;
+    top: 0.5em;
+    right: 0.5em;
+    width: 1.6em;
+    height: 1.6em;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    font-size: 1.4em;
+    line-height: 1;
+    color: #555;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    box-shadow: none;
+    text-shadow: none;
+}
+
+.pam-request-dialog button.pam-dialog-close:hover,
+.pam-request-dialog button.pam-dialog-close:focus {
+    color: #000;
+    background: rgba(0, 0, 0, 0.08);
 }
 
 .pam-request-account th {

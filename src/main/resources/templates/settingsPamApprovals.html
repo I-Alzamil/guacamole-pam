@@ -126,6 +126,9 @@
     <div class="pam-request-overlay" ng-if="dialog" ng-click="closeDialog($event)">
         <div class="pam-request-dialog" role="dialog" aria-modal="true" aria-labelledby="pam-approval-dialog-title">
 
+            <button class="pam-dialog-close" ng-click="closeDialog()" title="{{ 'PAM.ACTION_CLOSE' | translate }}"
+                    aria-label="{{ 'PAM.ACTION_CLOSE' | translate }}">&times;</button>
+
             <h2 id="pam-approval-dialog-title">{{ (dialog.deny ? 'PAM_APPROVALS.DIALOG_HEADER_DENY' : 'PAM_APPROVALS.DIALOG_HEADER_REQUEST') | translate }}</h2>
             <p class="pam-request-hint">
                 {{ 'PAM_APPROVALS.TEXT_REQUEST_BY' | translate:{ USER: dialog.request.username, NAME: dialog.request.connectionName } }}
@@ -146,12 +149,12 @@
                           ng-disabled="busy[dialog.request.id]"></textarea>
             </div>
 
-            <div class="pam-request-actions">
-                <button class="danger" ng-if="dialog.deny" ng-click="confirmDeny()"
+            <div class="pam-request-actions" ng-if="dialog.deny">
+                <button class="danger" ng-click="confirmDeny()"
                         ng-disabled="busy[dialog.request.id] || !dialog.reason.trim()">
                     {{ 'PAM_APPROVALS.ACTION_DENY' | translate }}
                 </button>
-                <button class="cancel" ng-click="closeDialog()">{{ (dialog.deny ? 'PAM.ACTION_CANCEL' : 'PAM.ACTION_CLOSE') | translate }}</button>
+                <button class="cancel" ng-click="closeDialog()">{{ 'PAM.ACTION_CANCEL' | translate }}</button>
             </div>
 
         </div>

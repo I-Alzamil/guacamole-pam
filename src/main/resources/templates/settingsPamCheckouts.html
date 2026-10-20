@@ -40,13 +40,12 @@
     <!-- Full reason of an active checkout -->
     <div class="pam-request-overlay" ng-if="reasonShown" ng-click="closeReason($event)">
         <div class="pam-request-dialog" role="dialog" aria-modal="true" aria-labelledby="pam-checkout-reason-title">
+            <button class="pam-dialog-close" ng-click="closeReason()" title="{{ 'PAM.ACTION_CLOSE' | translate }}"
+                    aria-label="{{ 'PAM.ACTION_CLOSE' | translate }}">&times;</button>
             <h2 id="pam-checkout-reason-title">{{ reasonShown.connectionName }}</h2>
             <p class="pam-request-hint">{{ reasonShown.username }} · {{ reasonShown.checkedOut | date:'medium' }}</p>
             <label>{{ 'PAM.TABLE_HEADER_REASON' | translate }}</label>
             <div class="pam-request-notes pam-reason-full">{{ reasonShown.reason }}</div>
-            <div class="pam-request-actions">
-                <button class="cancel" ng-click="closeReason()">{{ 'PAM.ACTION_CLOSE' | translate }}</button>
-            </div>
         </div>
     </div>
 
