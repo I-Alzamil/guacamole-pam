@@ -310,7 +310,7 @@ public class ConnectionSecrets {
                 if (own) {
                     // Written back, as the editor sent the mask in its place
                     require(id, name);
-                    saving.changes.put(name, token(name, connectionId));
+                    saving.changes.put(name, token(name, id));
                 }
                 else {
                     // Left out until the token naming the connection can be written
