@@ -123,6 +123,12 @@ public class SshClient {
                     case END:
                         break;
 
+                    case FAIL:
+                        output.settle(in, channel);
+                        return new ChangeOutcome(false, newPasswordSent,
+                                "Line " + step.getLine() + ": " + step.getValue(),
+                                output.transcript(), hostKeys.getPresentedFingerprint());
+
                 }
             }
 

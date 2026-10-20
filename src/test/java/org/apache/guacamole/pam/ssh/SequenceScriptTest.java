@@ -151,6 +151,27 @@ public class SequenceScriptTest {
     }
 
     @Test
+    public void failsOnPurpose() {
+
+        SequenceScript script = SequenceScript.parse("@case error\n@fail Not changed <NEWPASS>\n@case ok\n@end\n<NEWPASS>\n");
+        assertTrue(script.getErrors().toString(), script.isValid());
+        assertEquals(StepType.FAIL, script.getSteps().get(1).getType());
+        assertEquals("Not changed <NEWPASS>", script.getSteps().get(1).getValue());
+
+        // A case that fails need not send the new password
+        assertTrue(SequenceScript.parse("@case a\n<NEWPASS>\n@case b\n@fail No\n@end\n").isValid());
+
+        // Failing before ever sending it leaves the script useless
+        SequenceScript useless = SequenceScript.parse("@fail No\n<NEWPASS>\n");
+        assertFalse(useless.isValid());
+        assertEquals(1, useless.getErrors().get(0).getLine());
+        assertTrue(SequenceScript.parse("<NEWPASS>\n@fail Always\n").isValid());
+
+        assertEquals(1, SequenceScript.parse("@fail\n<NEWPASS>\n").getErrors().get(0).getLine());
+
+    }
+
+    @Test
     public void substitutesPlaceholders() {
 
         Map<String, String> values = new HashMap<>();

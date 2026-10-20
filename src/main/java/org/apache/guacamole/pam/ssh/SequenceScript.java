@@ -29,10 +29,11 @@ import java.util.regex.PatternSyntaxException;
  * &#64;case (?i)new             then runs the lines of the case matching earliest
  * ...                       (the first written, if several match there) and
  * &#64;end                      continues after &#64;end
+ * &#64;fail text                ends the script, reporting this text as the problem
  * </pre>
  *
  * Choices cannot be nested, and every way through the script must send
- * &lt;NEWPASS&gt;.
+ * &lt;NEWPASS&gt;, unless it fails on purpose.
  *
  * Placeholders &lt;USER&gt;, &lt;HOST&gt;, &lt;OLDPASS&gt; and &lt;NEWPASS&gt;
  * are replaced in sent lines and expected text.
@@ -53,7 +54,7 @@ public final class SequenceScript {
 
     private static final Pattern PLACEHOLDER = Pattern.compile("<([A-Z_]+)>");
 
-    public enum StepType { SEND, EXPECT, REGEX, TIMEOUT, CASE, END }
+    public enum StepType { SEND, EXPECT, REGEX, TIMEOUT, CASE, END, FAIL }
 
     /**
      * The cases of a choice, as indexes of their steps, and the index of
@@ -277,10 +278,18 @@ public final class SequenceScript {
                     open = null;
                     break;
 
+                case "fail":
+                    // Not substituted: the text is shown as is, never with a password
+                    if (argument.isEmpty())
+                        errors.add(new ParseError(number, "@fail needs the problem to report."));
+                    else
+                        steps.add(new Step(StepType.FAIL, argument, number));
+                    break;
+
                 default:
                     errors.add(new ParseError(number, "Unknown directive @" + directive
-                            + ". Use @expect, @regex, @timeout, @send, @case or @end, or start the line with \\"
-                            + " to send it as-is."));
+                            + ". Use @expect, @regex, @timeout, @send, @case, @end or @fail, or start the line"
+                            + " with \\ to send it as-is."));
 
             }
 
@@ -291,25 +300,34 @@ public final class SequenceScript {
             return new SequenceScript(steps, errors);
         }
 
-        if (!alwaysSendsNewPassword(steps))
-            errors.add(new ParseError(0, steps.stream().anyMatch(Step::sendsNewPassword)
-                    ? "One of the cases never sends <NEWPASS>, nor do the lines outside the choices,"
-                            + " so the password would not change that way."
-                    : "The sequence never sends <NEWPASS>, so it cannot change the password."));
+        if (!alwaysSendsNewPassword(steps)) {
+            Step fail = firstFailOutsideChoices(steps);
+            if (fail != null)
+                errors.add(new ParseError(fail.line, "@fail outside a choice, before <NEWPASS> is sent,"
+                        + " stops every rotation."));
+            else
+                errors.add(new ParseError(0, steps.stream().anyMatch(Step::sendsNewPassword)
+                        ? "One of the cases never sends <NEWPASS>, nor do the lines outside the choices,"
+                                + " so the password would not change that way."
+                        : "The sequence never sends <NEWPASS>, so it cannot change the password."));
+        }
 
         return new SequenceScript(steps, errors);
 
     }
 
     /**
-     * Whether every way through the steps sends the new password: a line
-     * outside the choices does, or every case of one choice does.
+     * Whether every way through the steps sends the new password, or fails
+     * on purpose: a line outside the choices sends it (before any @fail
+     * there), or every case of one choice sends it or fails.
      */
     private static boolean alwaysSendsNewPassword(List<Step> steps) {
 
         for (int i = 0; i < steps.size(); i++) {
 
             Step step = steps.get(i);
+            if (step.type == StepType.FAIL)
+                return false;
             if (step.type != StepType.CASE) {
                 if (step.sendsNewPassword())
                     return true;
@@ -323,7 +341,7 @@ public final class SequenceScript {
                 int next = c + 1 < choice.cases.size() ? choice.cases.get(c + 1) : choice.end;
                 boolean sends = false;
                 for (int j = choice.cases.get(c) + 1; j < next; j++)
-                    sends |= steps.get(j).sendsNewPassword();
+                    sends |= steps.get(j).sendsNewPassword() || steps.get(j).type == StepType.FAIL;
                 everyCase &= sends;
             }
             if (everyCase)
@@ -334,6 +352,19 @@ public final class SequenceScript {
 
         return false;
 
+    }
+
+    private static Step firstFailOutsideChoices(List<Step> steps) {
+        boolean inChoice = false;
+        for (Step step : steps) {
+            if (step.type == StepType.CASE)
+                inChoice = true;
+            else if (step.type == StepType.END)
+                inChoice = false;
+            else if (step.type == StepType.FAIL && !inChoice)
+                return step;
+        }
+        return null;
     }
 
     private static void addStep(List<Step> steps, List<ParseError> errors,

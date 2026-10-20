@@ -76,6 +76,23 @@ RESULT=$(rotate "$SSH_C")
 check "SSH choice: when no case matches, the rotation fails" "FAILED" "${RESULT%%:*}"
 check_contains "SSH choice: ...saying so" "matched none of the cases" "$RESULT"
 check "SSH choice: ...and the password still works" yes "$(ssh_accepts mysshtest "$(parameter "$SSH_C" password)")"
+
+# @fail: echo prints the text only once worked out, so the command line itself does not match
+create_platform AFTER_FAIL "$(python3 -I -c 'import json,sys; print(json.dumps({"name": "t2 ssh fail after", "type": "ssh",
+    "settings": {"script": sys.argv[1] + "\necho t2-$((1+1))-error\n@case t2-2-error\n@fail Second step not done.\n"
+    "@case t2-nomatch\n@end\n"}, "policy": {}}))' "$UNIX_SCRIPT")"
+edit_connection "$ADMIN" "$SSH_C" '' "{\"pam-platform\":\"$AFTER_FAIL\"}" >/dev/null
+RESULT=$(rotate "$SSH_C")
+check "SSH @fail after the change: the new password is kept" "SUCCESS" "${RESULT%%:*}"
+check_contains "SSH @fail after the change: ...with the problem reported" "Second step not done." "$RESULT"
+check "SSH @fail after the change: ...and the server accepts it" yes "$(ssh_accepts mysshtest "$(parameter "$SSH_C" password)")"
+
+choice_platform BEFORE_FAIL "t2 ssh fail before" "$(printf 'echo t2-$((1+1))-error\n@case t2-2-error\n@fail Stopped on purpose.\n@case t2-nomatch\n@end\npasswd')"
+edit_connection "$ADMIN" "$SSH_C" '' "{\"pam-platform\":\"$BEFORE_FAIL\"}" >/dev/null
+RESULT=$(rotate "$SSH_C")
+check "SSH @fail before the change: the rotation fails" "FAILED" "${RESULT%%:*}"
+check_contains "SSH @fail before the change: ...saying why" "Stopped on purpose." "$RESULT"
+check "SSH @fail before the change: ...and the password still works" yes "$(ssh_accepts mysshtest "$(parameter "$SSH_C" password)")"
 edit_connection "$ADMIN" "$SSH_C" '' "{\"pam-platform\":\"$LINUX\"}" >/dev/null
 
 # ---------------------------------------------------------------- OpenLDAP

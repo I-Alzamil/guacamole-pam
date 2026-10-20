@@ -65,6 +65,7 @@
         "HELP_READ_FULL": "Read the request in full",
         "HELP_STORED_SECRETS": "Passwords of this platform are stored. Leave their fields empty to keep them, unless you change where they are sent (server, port, encryption, trusted certificate or CA certificates): enter them again then.",
         "HELP_SYNTAX_CASE": "Wait until the output since the last send matches the regular expression of one of the cases, run the lines of the case matching first in the output, then continue after @end. Cases cannot hold other cases",
+        "HELP_SYNTAX_FAIL": "End the script, reporting this text as the problem, such as in a case matching an error",
         "HELP_SYNTAX_COMMENT": "Comment, ignored, as are empty lines",
         "HELP_SYNTAX_ESCAPE": "Send a line starting with @ or # as-is",
         "HELP_SYNTAX_EXPECT": "Wait until the output since the last send contains this text",
