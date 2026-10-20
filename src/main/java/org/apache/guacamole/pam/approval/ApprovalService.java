@@ -71,10 +71,15 @@ public class ApprovalService {
     /**
      * Approves a request. If this is the last approval needed, the
      * requester's checkout starts now.
+     *
+     * @throws GuacamoleClientException
+     *     If the request is the approver's own, or cannot be approved now.
      */
     public ApprovalRequest approve(int requestId, Approver approver) throws GuacamoleException {
 
-        requireQualified(requestId, approver);
+        ApprovalRequest pending = requireQualified(requestId, approver);
+        if (pending.getUsername().equals(approver.getUsername()))
+            throw new GuacamoleClientException("You cannot approve your own request.");
 
         ApprovalRequest request = approvals.approve(requestId, approver.getUsername());
         logger.info("User \"{}\" approved request {} of \"{}\" for \"{}\" ({}/{}).", approver.getUsername(),

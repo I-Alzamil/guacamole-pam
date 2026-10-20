@@ -377,8 +377,8 @@ public class ApprovalRepository {
      * the approval included.
      *
      * @throws GuacamoleClientException
-     *     If the request is no longer pending, is the approver's own, or was
-     *     already approved by the approver.
+     *     If the request is no longer pending, or was already approved by
+     *     the approver.
      */
     public ApprovalRequest approve(int requestId, String approver) throws GuacamoleException {
 
@@ -389,7 +389,7 @@ public class ApprovalRepository {
             connection.setAutoCommit(false);
             try {
 
-                requirePending(connection, requestId, approver);
+                requirePending(connection, requestId);
 
                 try (PreparedStatement statement = connection.prepareStatement(
                         "INSERT INTO pam_request_approval (request_id, approver) VALUES (?, ?)"
@@ -510,19 +510,17 @@ public class ApprovalRepository {
 
     }
 
-    private static void requirePending(Connection connection, int requestId, String approver)
+    private static void requirePending(Connection connection, int requestId)
             throws SQLException, GuacamoleException {
 
         try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT username, status FROM pam_request WHERE request_id = ? FOR UPDATE")) {
+                "SELECT status FROM pam_request WHERE request_id = ? FOR UPDATE")) {
             statement.setInt(1, requestId);
             try (ResultSet results = statement.executeQuery()) {
                 if (!results.next())
                     throw new GuacamoleResourceNotFoundException("No such request.");
-                if (!ApprovalRequest.PENDING.equals(results.getString(2)))
+                if (!ApprovalRequest.PENDING.equals(results.getString(1)))
                     throw new GuacamoleClientException("This request is no longer awaiting approval.");
-                if (results.getString(1).equals(approver))
-                    throw new GuacamoleClientException("You cannot approve your own request.");
             }
         }
 
