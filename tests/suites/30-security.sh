@@ -1,6 +1,7 @@
 #!/bin/bash
 # What users other than administrators can and cannot do: change how a
-# connection is managed, or the account and host it names; connect through
+# connection is managed, or the credentials, hosts and server checks of a
+# managed one (also through an RDP gateway, SFTP or a VNC repeater); connect through
 # balancing groups around request checks; use administrator endpoints; read
 # platform secrets.
 
@@ -21,13 +22,19 @@ create_connection MANAGED "{\"name\":\"t2 managed account\",\"parentIdentifier\"
 create_connection MANAGED_SSH "{\"name\":\"t2 managed ssh\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",
     \"parameters\":{\"hostname\":\"mysshtest\",\"port\":\"22\",\"username\":\"nobody\",\"password\":\"unused\"},
     \"attributes\":{\"pam-platform\":\"$LINUX\",\"pam-request-exempt\":\"true\",\"pam-rotation-mode\":\"never\"}}"
+create_connection MANAGED_RDP "{\"name\":\"t2 managed rdp\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"rdp\",
+    \"parameters\":{\"hostname\":\"mysshtest\",\"username\":\"nobody\",\"password\":\"unused\"},
+    \"attributes\":{\"pam-platform\":\"$LINUX\",\"pam-request-exempt\":\"true\",\"pam-rotation-mode\":\"never\"}}"
+create_connection MANAGED_VNC "{\"name\":\"t2 managed vnc\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"vnc\",
+    \"parameters\":{\"hostname\":\"mysshtest\",\"port\":\"5900\",\"password\":\"unused\"},
+    \"attributes\":{\"pam-platform\":\"$LINUX\",\"pam-request-exempt\":\"true\",\"pam-rotation-mode\":\"never\"}}"
 create_connection UNMANAGED "{\"name\":\"t2 stored account\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"pam-account\",
     \"parameters\":{\"username\":\"svc-stored\",\"password\":\"Stored-Pw1!\"},\"attributes\":{}}"
 
 # An editor: may update these connections and create others, but is no administrator
 create_user t2-editor t2-editor-pw
 P='[{"op":"add","path":"/systemPermissions","value":"CREATE_CONNECTION"}'
-for c in $MANAGED $MANAGED_SSH $UNMANAGED; do
+for c in $MANAGED $MANAGED_SSH $MANAGED_RDP $MANAGED_VNC $UNMANAGED; do
     P="$P,{\"op\":\"add\",\"path\":\"/connectionPermissions/$c\",\"value\":\"READ\"},{\"op\":\"add\",\"path\":\"/connectionPermissions/$c\",\"value\":\"UPDATE\"}"
 done
 grant t2-editor "$P]"
@@ -35,8 +42,8 @@ EDITOR=$(token t2-editor t2-editor-pw)
 check "setup: editor and connections exist" yes "$([ -n "$EDITOR" ] && [ -n "$MANAGED$MANAGED_SSH$UNMANAGED" ] && echo yes)"
 
 # ---------------------------------------------------------------- managed connections
-section "An editor cannot change whose password is managed, or where"
-REFUSED_PARAMS="403 Only administrators can change the protocol, username, hostname, port or guacd of a connection whose password is managed."
+section "An editor cannot change whose password is managed, or where it goes"
+REFUSED_PARAMS="403 Only administrators can change the credentials of a connection whose password is managed, where it connects (hostname, port, gateway, SFTP or repeater), how it checks the server (host key or certificates), its protocol or its guacd."
 REFUSED_ATTRS="403 Only administrators can change password management or access requests."
 outcome() { printf '%s %s' "$(status_of "$1")" "$(message_of "$1")" | sed 's/ $//'; }
 
@@ -51,6 +58,20 @@ check "SSH: guacd, which receives the password" "$REFUSED_PARAMS" \
     "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_SSH" '' '{"guacd-hostname":"evil.example"}')")"
 check "SSH: guacd port" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_SSH" '' '{"guacd-port":"4823"}')")"
 check "SSH: protocol" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_SSH" '' '' '' telnet)")"
+check "SSH: password replaced" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_SSH" '{"password":"T2-Editor-Pw1!"}')")"
+check "SSH: password removed" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_SSH" '{"password":null}')")"
+check "SSH: private key added" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_SSH" '{"private-key":"key"}')")"
+check "SSH: host key, which checks the server" "$REFUSED_PARAMS" \
+    "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_SSH" '{"host-key":"ssh-ed25519 AAAA"}')")"
+check "RDP: a gateway, which may be given the password" "$REFUSED_PARAMS" \
+    "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_RDP" '{"gateway-hostname":"evil.example"}')")"
+check "RDP: SFTP to another host" "$REFUSED_PARAMS" \
+    "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_RDP" '{"enable-sftp":"true","sftp-hostname":"evil.example"}')")"
+check "RDP: certificates ignored" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_RDP" '{"ignore-cert":"true"}')")"
+check "RDP: domain" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_RDP" '{"domain":"OTHER"}')")"
+check "VNC: a repeater" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_VNC" '{"dest-host":"evil.example"}')")"
+check "the managed SSH password is unchanged" unused "$(parameter "$MANAGED_SSH" password)"
+check "the RDP connection has no gateway" "" "$(parameter "$MANAGED_RDP" gateway-hostname)"
 check "managed: platform removed" "$REFUSED_ATTRS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED" '' '{"pam-platform":null}')")"
 check "stored: platform added" "$REFUSED_ATTRS" "$(outcome "$(edit_connection "$EDITOR" "$UNMANAGED" '' "{\"pam-platform\":\"$KERBEROS\"}")")"
 check "stored: allowed without a request" "$REFUSED_ATTRS" "$(outcome "$(edit_connection "$EDITOR" "$UNMANAGED" '' '{"pam-request-exempt":"true"}')")"
@@ -64,6 +85,9 @@ section "...but can still edit everything else"
 check "managed: saved unchanged" 204 "$(status_of "$(edit_connection "$EDITOR" "$MANAGED")")"
 check "managed: renamed" 204 "$(status_of "$(edit_connection "$EDITOR" "$MANAGED_SSH" '' '' 't2 managed ssh renamed')")"
 check "managed: another parameter" 204 "$(status_of "$(edit_connection "$EDITOR" "$MANAGED_SSH" '{"font-size":"14"}')")"
+check "managed RDP: a display parameter" 204 "$(status_of "$(edit_connection "$EDITOR" "$MANAGED_RDP" '{"color-depth":"16"}')")"
+check "managed RDP: saved unchanged, its password shown masked" 204 "$(status_of "$(edit_connection "$EDITOR" "$MANAGED_RDP")")"
+check "...which is still the password" unused "$(parameter "$MANAGED_RDP" password)"
 check "stored: username" 204 "$(status_of "$(edit_connection "$EDITOR" "$UNMANAGED" '{"username":"svc-stored-2"}')")"
 R=$(api POST "$DATA/connections" "$EDITOR" '{"name":"t2 editor stored","parentIdentifier":"ROOT","protocol":"pam-account","parameters":{"username":"x"},"attributes":{}}')
 check "creating a stored connection" 200 "$(status_of "$R")"

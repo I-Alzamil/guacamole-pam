@@ -390,7 +390,9 @@ public class PamUserContextDecoratorTest {
 
     @Test
     public void refusesChangingTheAccountOrHostOfAManagedConnection() throws GuacamoleException {
-        for (String parameter : new String[] { "hostname", "port", "username" }) {
+        for (String parameter : new String[] { "hostname", "port", "username", "domain", "gateway-hostname",
+                "sftp-hostname", "enable-sftp", "dest-host", "host-key", "ignore-cert", "security",
+                "password-regex" }) {
             TestConnection connection = fromEditor("2");
             connection.getConfiguration().setParameter(parameter, "changed");
             assertRefused("Changing " + parameter, () -> decorated.getConnectionDirectory().update(connection));

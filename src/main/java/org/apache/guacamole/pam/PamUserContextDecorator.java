@@ -137,10 +137,12 @@ public class PamUserContextDecorator extends DelegatingUserContext {
                 completeSecrets(saving, object);
             }
 
-            // Checked by undecorate(), then saved: only then are secrets
-            // kept apart
+            // Checked first: preparing the secrets puts the token, shown as
+            // the mask, in place of a new value, which would then look
+            // unchanged
             @Override
             public void update(Connection object) throws GuacamoleException {
+                requireAllowedChanges(object);
                 ConnectionSecrets.Saving saving = prepareSecrets(object);
                 super.update(object);
                 completeSecrets(saving, object);
@@ -155,19 +157,25 @@ public class PamUserContextDecorator extends DelegatingUserContext {
                 deletion.complete(self().getIdentifier());
             }
 
-            @Override
-            protected Connection undecorate(Connection object) throws GuacamoleException {
+            /**
+             * Refuses changes only administrators may make: this
+             * extension's attributes, and what ProtectedFields protects
+             * on managed connections.
+             */
+            private void requireAllowedChanges(Connection object) throws GuacamoleException {
+
                 Connection stored = object.getIdentifier() == null ? null : connections.get(object.getIdentifier());
                 requireUnchanged(PamAttributes.CONNECTION_ATTRIBUTE_NAMES,
                         stored == null ? null : stored.getAttributes(), object.getAttributes(),
                         CONNECTION_CHANGE_REFUSED);
 
-                // The account and host of a managed connection decide whose
-                // password its platform rotates, and where; its protocol and
-                // guacd, who sees it
-                if (stored != null && ProtectedFields.isManaged(stored.getAttributes())
-                        && (ProtectedFields.parametersChanged(ProtectedFields.MANAGED_PARAMETERS,
-                                stored.getConfiguration().getParameters(), object.getConfiguration().getParameters())
+                // Compared as the editor sees both, where a kept secret is
+                // the mask
+                Integer id = Values.parseId(object.getIdentifier());
+                if (stored != null && id != null && ProtectedFields.isManaged(stored.getAttributes())
+                        && (ProtectedFields.managedParametersChanged(
+                                ConnectionSecrets.masked(stored.getConfiguration(), id).getParameters(),
+                                ConnectionSecrets.masked(object.getConfiguration(), id).getParameters())
                             || ProtectedFields.attributesChanged(ProtectedFields.MANAGED_ATTRIBUTES,
                                 stored.getAttributes(), object.getAttributes())
                             || !Objects.equals(stored.getConfiguration().getProtocol(),
@@ -175,6 +183,10 @@ public class PamUserContextDecorator extends DelegatingUserContext {
                         && !isAdministrator())
                     throw new GuacamoleSecurityException(MANAGED_PARAMETERS_REFUSED);
 
+            }
+
+            @Override
+            protected Connection undecorate(Connection object) throws GuacamoleException {
                 // Connections created through the REST API are never decorated
                 if (object instanceof PamConnection)
                     return ((PamConnection) object).getUndecorated();
@@ -263,8 +275,9 @@ public class PamUserContextDecorator extends DelegatingUserContext {
             "Only administrators can change password management or access requests.";
 
     private static final String MANAGED_PARAMETERS_REFUSED =
-            "Only administrators can change the protocol, username, hostname, port or guacd of a connection whose"
-            + " password is managed.";
+            "Only administrators can change the credentials of a connection whose password is managed, where it"
+            + " connects (hostname, port, gateway, SFTP or repeater), how it checks the server (host key or"
+            + " certificates), its protocol or its guacd.";
 
     /**
      * Whether the user of this context is an administrator now: read again

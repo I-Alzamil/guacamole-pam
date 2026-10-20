@@ -195,11 +195,20 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   pam-admin-bypass-requests: true
   ```
 - Only administrators can change a connection's *Password management* and
-  *Access requests* sections, platforms, or who may approve, nor the
-  username, hostname or port of a connection whose password is managed (they
-  decide whose password its platform rotates, and where), its protocol, or
-  the guacd it is opened through (guacd receives the password). Other users
-  who may create or edit connections can still change everything else.
+  *Access requests* sections, platforms, or who may approve. Nor can anyone
+  else change, on a connection whose password is managed:
+  - its credentials (username, password, domain, private key and
+    passphrase), which decide whose password its platform rotates;
+  - where it connects, so where guacd sends the password: its hostname and
+    port, an RDP gateway, SFTP, a VNC repeater;
+  - how it checks the server: SSH's host key, RDP's security mode and
+    certificate settings, Kubernetes' TLS settings; and where Telnet types
+    the credentials (its prompt patterns);
+  - its protocol, and the guacd it is opened through (guacd receives the
+    password).
+
+  Other users who may create or edit connections can still change
+  everything else, such as display and recording settings.
 - **Holders don't see a connection's password**, only a Connect button, so
   they can't use it outside Guacamole. To let them see it, tick **Let users
   holding access see the password** in the connection's *Access requests*
@@ -368,10 +377,10 @@ openssl s_client -connect <host>:5986 </dev/null 2>/dev/null | openssl x509 -noo
 - **Editors can read passwords, unless a key is set.** Users with *edit*
   permission on a connection can read its parameters, including its password.
   With a key set, they only see `********` in their place. They can still
-  change a connection's other parameters, and some protocols have parameters
-  that could send the password elsewhere (such as its hostname, or a VNC
-  repeater, unless the connection is managed), so give edit permission on
-  sensitive connections and Accounts to administrators only.
+  change the parameters of a connection whose password isn't managed,
+  including those sending it elsewhere (its hostname, an RDP gateway, SFTP,
+  a VNC repeater), so give edit permission on sensitive connections and
+  Accounts to administrators only, or have their passwords managed.
 - **A Guacamole 1.6 issue can end sessions.** Guacamole remembers the first
   request whose error it handles, and ends that request's session whenever a
   later request is refused as unauthorized, from anyone. The extension's own

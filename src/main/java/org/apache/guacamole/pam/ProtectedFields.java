@@ -2,20 +2,25 @@ package org.apache.guacamole.pam;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * What only administrators may change. Besides this extension's attributes,
- * the parameters naming the account and host of a managed connection are
- * protected: platforms can act as an administrator of the target (an LDAP,
- * Kerberos or WinRM administrator), and rotate the account named by the
- * connection's username on the host it names. Anyone else able to edit the
- * connection, who can read its password, could otherwise point it at
- * another account and read that account's new password after the next
- * rotation, or send the platform's administrator login to a host of their
- * choosing.
+ * the parameters of a managed connection deciding whose password it holds,
+ * where guacd sends it and how that server is verified are protected:
+ * platforms can act as an administrator of the target (an LDAP, Kerberos or
+ * WinRM administrator), and rotate the account named by the connection's
+ * username on the host it names. Anyone else able to edit the connection
+ * could otherwise point it at another account, then hold it and use that
+ * account's new password after the next rotation; or have guacd send the
+ * password to a host of their choosing (another host, an RDP gateway, an
+ * SFTP server, a VNC repeater), or to any host claiming to be the server
+ * (no host key, certificates ignored). So is the password itself, which
+ * the platform may not be able to set again once replaced.
  *
  * So are its protocol and the guacd it is opened through: guacd receives
  * every parameter with the password in place of its token, so another guacd
@@ -25,10 +30,24 @@ import java.util.Objects;
 public final class ProtectedFields {
 
     /**
-     * Parameters of managed connections only administrators may change.
+     * Parameters of managed connections only administrators may change,
+     * besides those starting with {@link #MANAGED_PARAMETER_PREFIXES}: the
+     * credentials, where they are sent, how the server is verified, and
+     * where Telnet types them.
      */
-    public static final List<String> MANAGED_PARAMETERS =
-            Collections.unmodifiableList(Arrays.asList("username", "hostname", "port"));
+    public static final List<String> MANAGED_PARAMETERS = Collections.unmodifiableList(Arrays.asList(
+            "username", "password", "domain", "private-key", "passphrase",
+            "hostname", "port", "dest-host", "dest-port", "enable-sftp",
+            "host-key", "security", "disable-auth", "ignore-cert", "cert-tofu", "cert-fingerprints",
+            "use-ssl", "ca-cert", "client-cert", "client-key",
+            "username-regex", "password-regex"));
+
+    /**
+     * Prefixes of further protected parameters: the RDP gateway, and SFTP
+     * to another server.
+     */
+    public static final List<String> MANAGED_PARAMETER_PREFIXES = Collections.unmodifiableList(Arrays.asList(
+            "gateway-", "sftp-"));
 
     /**
      * Guacamole's attributes of managed connections only administrators may
@@ -55,13 +74,28 @@ public final class ProtectedFields {
     }
 
     /**
-     * Whether any of the given parameters differs. A missing parameter and
-     * an empty value are alike.
+     * Whether a parameter of managed connections is protected.
      */
-    public static boolean parametersChanged(List<String> names, Map<String, String> stored,
-            Map<String, String> updated) {
+    public static boolean isManagedParameter(String name) {
+        if (MANAGED_PARAMETERS.contains(name))
+            return true;
+        for (String prefix : MANAGED_PARAMETER_PREFIXES) {
+            if (name.startsWith(prefix))
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * Whether any protected parameter of managed connections differs. A
+     * missing parameter and an empty value are alike.
+     */
+    public static boolean managedParametersChanged(Map<String, String> stored, Map<String, String> updated) {
+        Set<String> names = new HashSet<>(stored.keySet());
+        names.addAll(updated.keySet());
         for (String name : names) {
-            if (!Objects.equals(normalizeParameter(stored, name), normalizeParameter(updated, name)))
+            if (isManagedParameter(name)
+                    && !Objects.equals(normalizeParameter(stored, name), normalizeParameter(updated, name)))
                 return true;
         }
         return false;
