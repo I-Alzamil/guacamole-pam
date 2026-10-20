@@ -306,8 +306,9 @@
         "SECTION_HEADER_APPROVALS": "Approvals",
         "HELP_APPROVE_CONNECTION": "May approve requests for this connection",
         "HELP_APPROVE_GROUP": "May approve requests for every connection in this group, including ones added later",
-        "HELP_SELECT_GROUP": "Members may approve requests for the connections and connection groups ticked \"Approve\" in the connections list below ({COUNT} selected).",
-        "HELP_SELECT_USER": "This user may approve requests for the connections and connection groups ticked \"Approve\" in the connections list below ({COUNT} selected)."
+        "HELP_SELECT_GROUP": "Members may approve requests for the connections and connection groups ticked \"Approve\" in the connections list below.",
+        "HELP_SELECT_USER": "This user may approve requests for the connections and connection groups ticked \"Approve\" in the connections list below.",
+        "INFO_SELECTED": "{COUNT, plural, =0{Tick \"Approve\" in the connections list below} one{1 ticked \"Approve\" below} other{# ticked \"Approve\" below}}"
     },
     "PAM_PLATFORM_TRANSFER": {
         "ACTION_EXPORT": "Export",

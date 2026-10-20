@@ -10,11 +10,11 @@
                     <td>
                         <input type="checkbox" ng-model="approver" ng-model-options="{ getterSetter: true }"
                                ng-disabled="!editable">
-                    </td>
-                </tr>
-                <tr class="pam-approval-row" ng-show="isApplicable() && selection.isApprover()">
-                    <td colspan="2" class="pam-approval-hint">
-                        {{ (group ? 'PAM_APPROVAL_PERMISSIONS.HELP_SELECT_GROUP' : 'PAM_APPROVAL_PERMISSIONS.HELP_SELECT_USER') | translate:{ COUNT: selection.count() } }}
+                        <!-- Beside the checkbox, so the table keeps its width -->
+                        <span class="pam-approval-hint" ng-show="selection.isApprover()"
+                              title="{{ (group ? 'PAM_APPROVAL_PERMISSIONS.HELP_SELECT_GROUP' : 'PAM_APPROVAL_PERMISSIONS.HELP_SELECT_USER') | translate }}">
+                            {{ 'PAM_APPROVAL_PERMISSIONS.INFO_SELECTED' | translate:{ COUNT: selection.count() } }}
+                        </span>
                     </td>
                 </tr>
             </tbody>

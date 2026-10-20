@@ -574,21 +574,18 @@
     white-space: nowrap;
 }
 
-.pam-approve-choice input {
+/* As specific as Guacamole's ".choice input[type=checkbox]", which would
+   leave no space before the label */
+.choice .pam-approve-choice input[type=checkbox] {
     margin: 0 0.3em 0 0;
-    vertical-align: middle;
 }
 
 .pam-approval-hint {
-    font-size: 0.9em;
-    opacity: 0.8;
-}
-
-/* As a row of the permissions table: kept from widening the table */
-td.pam-approval-hint {
-    max-width: 30em;
-    padding-top: 0;
-    white-space: normal;
+    margin-left: 0.5em;
+    font-size: 0.85em;
+    opacity: 0.75;
+    white-space: nowrap;
+    vertical-align: middle;
 }
 
 /* Count of requests awaiting the user's approval, next to the user menu */
