@@ -67,6 +67,8 @@ GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO guacamole_us
 GRANT SELECT,USAGE ON ALL SEQUENCES IN SCHEMA public TO guacamole_user;
 ```
 
+Tables created this way start without the two default platforms.
+
 Do the same after upgrading to a version that changes the tables: until then,
 connections stored in the database can't be opened, as above.
 

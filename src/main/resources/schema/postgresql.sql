@@ -36,39 +36,6 @@ CREATE TABLE IF NOT EXISTS pam_platform (
 
 );
 
--- Default platforms, only on a fresh install
-INSERT INTO pam_platform (name, description, type, settings)
-SELECT name, description, 'ssh', json_build_object('script', script)::text FROM (VALUES
-  (
-    'Linux (passwd)',
-    'The connection account changes its own password with passwd.',
-    E'# Changes the password of the connection account itself.\n'
- || E'passwd\n'
- || E'@expect assword:\n'
- || E'<OLDPASS>\n'
- || E'@expect assword:\n'
- || E'<NEWPASS>\n'
- || E'@expect assword:\n'
- || E'<NEWPASS>\n'
- || E'@regex (?i)(success|updated|changed)\n'
-  ),
-  (
-    'Windows (net user)',
-    'Windows OpenSSH with cmd.exe as the default shell. The account must be a local administrator.',
-    E'# Changes the password of the connection account itself.\n'
- || E'@timeout 20\n'
- || E'@expect >\n'
- || E'net user <USER> *\n'
- || E'@expect password\n'
- || E'<NEWPASS>\n'
- || E'@expect password\n'
- || E'<NEWPASS>\n'
- || E'@expect successfully\n'
-  )
-) AS defaults (name, description, script)
-WHERE NOT EXISTS (SELECT 1 FROM pam_schema_version)
-ON CONFLICT (name) DO NOTHING;
-
 -- Outcome of the latest rotation of each managed connection
 CREATE TABLE IF NOT EXISTS pam_rotation_state (
 

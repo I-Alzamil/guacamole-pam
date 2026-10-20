@@ -1,0 +1,24 @@
+{
+  "format": "guacamole-pam-platforms",
+  "version": 1,
+  "platforms": [
+    {
+      "name": "Linux (passwd)",
+      "description": "The connection account changes its own password with passwd.",
+      "type": "ssh",
+      "settings": {
+        "script": "# Changes the password of the connection account itself.\npasswd\n@expect assword:\n<OLDPASS>\n@expect assword:\n<NEWPASS>\n@expect assword:\n<NEWPASS>\n@regex (?i)(success|updated|changed)\n"
+      },
+      "policy": {}
+    },
+    {
+      "name": "Windows (net user)",
+      "description": "Windows OpenSSH with cmd.exe as the default shell. The account must be a local administrator.",
+      "type": "ssh",
+      "settings": {
+        "script": "# Changes the password of the connection account itself.\n@timeout 20\n@expect >\nnet user <USER> *\n@expect password\n<NEWPASS>\n@expect password\n<NEWPASS>\n@expect successfully\n"
+      },
+      "policy": {}
+    }
+  ]
+}

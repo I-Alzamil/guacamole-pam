@@ -9,7 +9,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -25,7 +27,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Access to the Guacamole PostgreSQL database. Reuses the "postgresql-*"
  * properties and the driver of Guacamole's PostgreSQL authentication, and
- * creates this extension's own tables on first use. The driver is loaded by
+ * creates this extension's own tables on first use, then runs what a fresh
+ * install starts with ({@link #onFreshInstall}). The driver is loaded by
  * name, so this class loads (and {@link #getUnavailableReason} can tell why
  * the database cannot be used) even where the driver is missing.
  *
@@ -128,6 +131,25 @@ public class PamDatabase {
     private boolean closed = false;
 
     private volatile boolean schemaReady = false;
+
+    /**
+     * Run once the schema script created the tables of a fresh install.
+     */
+    @FunctionalInterface
+    public interface Initializer {
+        void initialize(Connection connection) throws SQLException, GuacamoleException;
+    }
+
+    private final List<Initializer> initializers = new CopyOnWriteArrayList<>();
+
+    /**
+     * Adds what to run, through the connection that just created them, once
+     * the tables of a fresh install exist. Not run where they were created
+     * by hand, nor on later starts.
+     */
+    public void onFreshInstall(Initializer initializer) {
+        initializers.add(initializer);
+    }
 
     /**
      * Returns why this extension cannot use the Guacamole database here, or
@@ -278,6 +300,9 @@ public class PamDatabase {
         // without the privilege to create tables use tables created for it
         // (PostgreSQL refuses even "CREATE TABLE IF NOT EXISTS" to it)
         if (!hasVersion(connection, SCHEMA_VERSION)) {
+
+            boolean fresh = !hasAnyVersion(connection);
+
             try (Statement statement = connection.createStatement()) {
                 // Statements end with a semicolon at the end of a line
                 for (String sql : schema.split(";[ \\t]*\\r?\\n")) {
@@ -285,6 +310,18 @@ public class PamDatabase {
                         statement.execute(sql);
                 }
             }
+
+            if (fresh) {
+                for (Initializer initializer : initializers) {
+                    try {
+                        initializer.initialize(connection);
+                    }
+                    catch (GuacamoleException e) {
+                        logger.warn("Unable to complete the fresh install: {}", e.getMessage());
+                    }
+                }
+            }
+
         }
 
         schemaReady = true;
@@ -302,6 +339,19 @@ public class PamDatabase {
         try (Statement statement = connection.createStatement();
              ResultSet results = statement.executeQuery(
                  "SELECT 1 FROM pam_schema_version WHERE version = " + version)) {
+            return results.next();
+        }
+    }
+
+    /**
+     * Whether any version of the schema was installed, so it is not a fresh
+     * install.
+     */
+    private static boolean hasAnyVersion(Connection connection) throws SQLException {
+        if (!hasTable(connection, "pam_schema_version"))
+            return false;
+        try (Statement statement = connection.createStatement();
+             ResultSet results = statement.executeQuery("SELECT 1 FROM pam_schema_version LIMIT 1")) {
             return results.next();
         }
     }

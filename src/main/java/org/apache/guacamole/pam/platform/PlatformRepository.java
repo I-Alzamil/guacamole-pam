@@ -63,6 +63,16 @@ public class PlatformRepository {
     public PlatformRepository(PamDatabase database, Secrets secrets) {
         this.database = database;
         this.secrets = secrets;
+        database.onFreshInstall(this::insertDefaults);
+    }
+
+    /**
+     * Adds the default platforms ({@link DefaultPlatforms}) missing by name,
+     * through the given connection.
+     */
+    private void insertDefaults(Connection connection) throws SQLException, GuacamoleException {
+        for (Platform platform : DefaultPlatforms.read())
+            insert(connection, sanitize(platform, null), true);
     }
 
     /**
