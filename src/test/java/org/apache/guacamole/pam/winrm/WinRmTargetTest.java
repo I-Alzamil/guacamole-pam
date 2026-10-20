@@ -41,6 +41,17 @@ public class WinRmTargetTest {
         assertNull(target.getCertificate());
     }
 
+    /**
+     * Spaces around a password are part of it.
+     */
+    @Test
+    public void keepsPasswordsAsTyped() {
+        WinRmTarget target = WinRmTarget.fromParameters(settings(WinRmTarget.PASSWORD, " Pw with spaces ",
+                WinRmTarget.ADMIN_USERNAME, "admin", WinRmTarget.ADMIN_PASSWORD, " Admin pw "));
+        assertEquals(" Pw with spaces ", target.getPassword());
+        assertEquals(" Admin pw ", target.getAdminPassword());
+    }
+
     @Test
     public void localAccountForms() {
         assertEquals("pamtest", WinRmTarget.fromParameters(settings(WinRmTarget.USERNAME, ".\\pamtest"))

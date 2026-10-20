@@ -77,13 +77,13 @@ public final class KerberosTarget {
                 "The connection has no Kerberos principal and no username.");
 
         String adminPrincipal = Values.trimToNull(parameters.get(ADMIN_PRINCIPAL));
-        String adminPassword = Values.trimToNull(parameters.get(ADMIN_PASSWORD));
+        String adminPassword = Values.emptyToNull(parameters.get(ADMIN_PASSWORD));
         if (adminPrincipal != null && adminPassword == null)
             throw new IllegalArgumentException("The admin principal has no password.");
 
         return new KerberosTarget(realm, kdc, Values.parsePort(parameters.get(KDC_PORT), DEFAULT_KDC_PORT),
                 kpasswd != null ? kpasswd : kdc, Values.parsePort(parameters.get(KPASSWD_PORT), DEFAULT_KPASSWD_PORT),
-                qualify(principal, realm), Values.trimToNull(parameters.get(PASSWORD)),
+                qualify(principal, realm), Values.emptyToNull(parameters.get(PASSWORD)),
                 adminPrincipal == null ? null : qualify(adminPrincipal, realm), adminPassword);
 
     }

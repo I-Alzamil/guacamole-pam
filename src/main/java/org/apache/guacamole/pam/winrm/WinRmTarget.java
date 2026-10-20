@@ -130,7 +130,7 @@ public final class WinRmTarget {
             throw new IllegalArgumentException("Invalid Windows account name: " + username);
 
         String adminUsername = Values.trimToNull(parameters.get(ADMIN_USERNAME));
-        String adminPassword = Values.trimToNull(parameters.get(ADMIN_PASSWORD));
+        String adminPassword = Values.emptyToNull(parameters.get(ADMIN_PASSWORD));
         if (adminUsername != null && adminPassword == null)
             throw new IllegalArgumentException("The administrator account has no password.");
 
@@ -140,7 +140,7 @@ public final class WinRmTarget {
                     + " (expected \"name\", \"DOMAIN\\name\" or \"name@domain\").");
 
         return new WinRmTarget(hostname, Values.parsePort(parameters.get(PORT), DEFAULT_PORT), normalize(parameters.get(CERTIFICATE)),
-                account, Values.trimToNull(parameters.get(PASSWORD)), admin, adminPassword);
+                account, Values.emptyToNull(parameters.get(PASSWORD)), admin, adminPassword);
 
     }
 
