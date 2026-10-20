@@ -18,7 +18,9 @@ import org.apache.guacamole.pam.platform.Platform;
  * Connection attributes added by this extension: the "Password management"
  * of every connection. The web UI shows only the sections that apply:
  * policy and type sections only for managed connections, the section of the
- * platform's type only, and checkout settings only for Account connections.
+
+ * platform's type only, and the setting showing a connection's password to its
+ * holder only for connections other than Accounts, which always show theirs.
  */
 public final class PamAttributes {
 

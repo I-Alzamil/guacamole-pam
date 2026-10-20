@@ -41,10 +41,10 @@ import org.apache.guacamole.protocol.GuacamoleConfiguration;
  * passwords are managed, who must request access, or who approves, nor the
  * account and host of a managed connection (see {@link ProtectedFields}).
  * Balancing connection groups, which Guacamole connects through without
- * this extension's connections, refuse connections it must check. Account
- * passwords are stored encrypted when a key is set, wherever the connection
- * is saved from, and the passwords and keys of other connections kept apart
- * (see {@link ConnectionSecrets}).
+
+ * this extension's connections, refuse connections it must check. Wherever a
+ * connection is saved from, its passwords and keys are kept apart, encrypted,
+ * when a key is set (see {@link ConnectionSecrets}).
  */
 public class PamUserContextDecorator extends DelegatingUserContext {
 

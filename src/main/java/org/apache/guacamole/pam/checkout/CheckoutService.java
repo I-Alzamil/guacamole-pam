@@ -35,10 +35,11 @@ import org.slf4j.LoggerFactory;
  * Who may request is decided by Guacamole itself: a user may request any
  * connection they can read, checked through their own UserContext of the
  * managed data source. Every checkout has a time limit. Exclusive checkouts
- * allow a single holder, which managed connections use by default because
- * ending a checkout rotates the password. Connections may require approval:
- * requests then wait for enough distinct approvers, and the checkout starts
- * at the final approval.
+
+ * allow a single holder, which managed connections use by default, as ending a
+ * checkout may rotate the password. Connections may require approval: requests
+ * then wait for enough distinct approvers, and the checkout starts at the final
+ * approval.
  */
 public class CheckoutService {
 

@@ -33,8 +33,9 @@ import org.slf4j.LoggerFactory;
 /**
  * Decides when connections are rotated, and performs rotations.
  *
- * A rotation sets a new password on the target (over SSH with a sequence
- * profile, or over LDAP for managed "pam-account" connections), then checks which
+
+ * A rotation sets a new password on the target, as its platform's type does it
+ * (over SSH with a sequence script, LDAP, Kerberos or WinRM), then checks which
  * password the target accepts. The new password is only stored in Guacamole
  * once the target accepts it.
  *

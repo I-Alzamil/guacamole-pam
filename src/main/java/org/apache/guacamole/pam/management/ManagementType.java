@@ -14,8 +14,10 @@ import org.apache.guacamole.pam.platform.Platform;
  * (and to {@link ManagementTypes}) is all it takes to offer it: the settings
  * page and the connection editor build their forms from these definitions.
  *
- * The account being managed is always the connection's own "username" and
- * "password" parameters.
+
+ * The account being managed is named by the connection (its username, or an
+ * attribute of the type, such as an LDAP DN), and its current password is the
+ * connection's "password" parameter.
  */
 public interface ManagementType {
 

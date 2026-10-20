@@ -1,8 +1,10 @@
 package org.apache.guacamole.pam.checkout;
 
 /**
- * Result of requesting a password: the password itself, or, when the
- * account needs approval, the request now awaiting it.
+
+ * Result of a request: the checkout handed over (with the password of an
+ * Account), or, when the connection needs approval, the request now awaiting
+ * it.
  */
 public final class RequestOutcome {
 

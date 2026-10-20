@@ -10,7 +10,8 @@ import java.util.Map;
 import org.apache.guacamole.form.Form;
 
 /**
- * Every available management type. New types (such as WinRM) are added here.
+
+ * Every available management type. New types are added here.
  */
 public final class ManagementTypes {
 

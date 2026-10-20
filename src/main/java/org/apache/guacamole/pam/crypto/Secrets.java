@@ -15,8 +15,9 @@ import org.apache.guacamole.properties.StringGuacamoleProperty;
 
 /**
  * Encryption at rest of the secrets this extension stores: platform secrets,
- * passwords kept from unconfirmed rotations, Account passwords, and the
- * sensitive parameters of other connections (see ConnectionSecrets).
+
+ * passwords kept from unconfirmed rotations, and the passwords, keys and
+ * passphrases of every connection, Accounts included (see ConnectionSecrets).
  *
  * Without "pam-encryption-key", values are stored as plaintext, as before.
  * With it, new values are encrypted, and existing ones are encrypted by

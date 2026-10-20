@@ -1,7 +1,8 @@
 package org.apache.guacamole.pam.rotation;
 
 /**
- * What happened while changing a password on a target, over SSH or LDAP.
+
+ * What happened while changing a password on a target.
  */
 public final class ChangeOutcome {
 
