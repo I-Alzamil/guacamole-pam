@@ -3,8 +3,9 @@
 # passwords encrypted; every connection's passwords, keys and passphrases,
 # Accounts' included, kept apart, encrypted, behind tokens such as
 # ${PAM_PASSWORD_17}; Guacamole's own tokens left alone), what the API
-# returns, saving connections from the editor, and sessions, also through
-# balancing groups. Skipped when the test setup has no key.
+# returns (******** in their place), saving connections from the editor, and
+# sessions, also through balancing groups. Skipped when the test setup has
+# no key.
 
 if [ -z "$PAM_TEST_KEY" ]; then
     section "Skipped: build.sh was run without an encryption key"
@@ -55,7 +56,7 @@ check "no platform secrets are stored as plaintext" 0 "$(sql "SELECT count(*) FR
 
 # ---------------------------------------------------------------- API
 section "What the API returns"
-check "the connection API returns only the Account's token" "\${PAM_PASSWORD_$ACCOUNT}" "$(raw_parameter "$ACCOUNT")"
+check "the connection API shows the Account's password masked, not even its token" '********' "$(raw_parameter "$ACCOUNT")"
 check "a checkout hands over the plaintext" "$ACCOUNT_PASSWORD" "$(checkout_password "$ACCOUNT")"
 check_contains "the platform editor only says which secrets are stored" "['kerberos-admin-password'] {}" \
     "$(json_get "$(curl -s "$PAM/platforms/$KRB?token=$ADMIN")" "str(d.get('storedSecrets')) + ' ' + str({k: v for k, v in d['settings'].items() if 'password' in k})")"
@@ -163,7 +164,7 @@ check "the password parameter is the token naming its connection" "$TOKEN" "$(st
 KEPT=$(kept "$MANAGED")
 check "...the password is kept encrypted" yes "$(is_encrypted "$KEPT")"
 check "...for this connection and field alone" "$CURRENT" "$(reveal "connection-secret:$MANAGED:password" "$KEPT")"
-check "...and the API shows editors only the token" "$TOKEN" "$(raw_parameter "$MANAGED")"
+check "...and the API shows editors only ********" '********' "$(raw_parameter "$MANAGED")"
 check "a session logs in with the kept password" yes "$(session_of "$MANAGED")"
 
 check "rotation succeeds" SUCCESS "$(rotate "$MANAGED" | cut -d: -f1)"
@@ -174,7 +175,20 @@ check "...and a session logs in with it" yes "$(session_of "$MANAGED")"
 
 KEPT=$(kept "$MANAGED")
 edit_connection "$ADMIN" "$MANAGED" '' '' "t2 enc managed renamed" >/dev/null
-check "saved unchanged (the editor sends the token back), the kept password is unchanged" "$KEPT" "$(kept "$MANAGED")"
+check "saved unchanged (the editor sends ******** back), the kept password is unchanged" "$KEPT" "$(kept "$MANAGED")"
+check "...behind its token" "$TOKEN" "$(stored_password "$MANAGED")"
+R=$(edit_connection "$ADMIN" "$MANAGED" "{\"password\":\"$TOKEN\"}")
+check "an API client sending the token back keeps it too" "204 $KEPT" "$(status_of "$R") $(kept "$MANAGED")"
+
+R=$(api POST "$DATA/connections" "$ADMIN" "$(curl -s "$DATA/connections/$MANAGED?token=$ADMIN" | python3 -I -c "
+import sys, json; c = json.load(sys.stdin); c.pop('identifier', None); c['name'] = 't2 enc clone'
+c['parameters'] = json.loads(sys.argv[1]); print(json.dumps(c))" "$(curl -s "$DATA/connections/$MANAGED/parameters?token=$ADMIN")")")
+check "a clone, given ******** for the password, is refused" 400 "$(status_of "$R")"
+check_contains "...as it only stands for the stored value of its own connection" "cannot be copied" "$(message_of "$R")"
+check "...and not created" "" "$(connection_id "t2 enc clone")"
+R=$(edit_connection "$ADMIN" "$SSH" '{"passphrase":"********"}')
+check "******** where no value is stored is refused" 400 "$(status_of "$R")"
+check "...storing nothing" "" "$(kept "$SSH" passphrase)"
 
 R=$(edit_connection "$ADMIN" "$MANAGED" "{\"command\":\"echo $TOKEN\"}")
 check "the token in another field, where Guacamole would replace it too, is refused" 400 "$(status_of "$R")"
@@ -209,8 +223,11 @@ podman exec -i mysshtest sh -c 'cat >> /config/.ssh/authorized_keys' < "$T2_TMP/
 on_cleanup "podman exec mysshtest sed -i '/t2-test-key/d' /config/.ssh/authorized_keys"
 PRIVATE_KEY=$(cat "$T2_TMP/key")
 ssh_connection KEYED "t2 enc keyed" "$(python3 -I -c 'import json,sys; print(json.dumps({"private-key": sys.argv[1], "passphrase": sys.argv[2]}))' "$PRIVATE_KEY" "$PASSPHRASE")"
-check "the private key is kept apart" "\${PAM_PRIVATE_KEY_$KEYED}" "$(json_get "$(curl -s "$DATA/connections/$KEYED/parameters?token=$ADMIN")" "d.get('private-key')")"
-check "...and the passphrase" "\${PAM_PASSPHRASE_$KEYED}" "$(json_get "$(curl -s "$DATA/connections/$KEYED/parameters?token=$ADMIN")" "d.get('passphrase')")"
+stored_parameter() { sql "SELECT parameter_value FROM guacamole_connection_parameter WHERE connection_id = $1 AND parameter_name = '$2'"; }
+check "the private key is kept apart" "\${PAM_PRIVATE_KEY_$KEYED}" "$(stored_parameter "$KEYED" private-key)"
+check "...and the passphrase" "\${PAM_PASSPHRASE_$KEYED}" "$(stored_parameter "$KEYED" passphrase)"
+check "...both shown masked" "******** ********" \
+    "$(json_get "$(curl -s "$DATA/connections/$KEYED/parameters?token=$ADMIN")" "d.get('private-key') + ' ' + d.get('passphrase')")"
 check "...both encrypted" "yes yes" "$(is_encrypted "$(kept "$KEYED" private-key)") $(is_encrypted "$(kept "$KEYED" passphrase)")"
 check "...the key as given" "$PRIVATE_KEY" "$(reveal "connection-secret:$KEYED:private-key" "$(kept "$KEYED" private-key)")"
 check "a session logs in with the kept key and passphrase" yes "$(session_of "$KEYED")"
@@ -223,7 +240,7 @@ CURRENT=$(parameter "$MANAGED" password)
 ssh_connection MEMBER_PW "t2 enc member password" "{\"password\": \"$CURRENT\"}" '{}' "$BALANCE"
 ssh_connection MEMBER_KEY "t2 enc member key" "$(python3 -I -c 'import json,sys; print(json.dumps({"private-key": sys.argv[1], "passphrase": sys.argv[2]}))' "$PRIVATE_KEY" "$PASSPHRASE")" '{}' "$BALANCE"
 check "members keep their secrets apart" "\${PAM_PASSWORD_$MEMBER_PW} \${PAM_PRIVATE_KEY_$MEMBER_KEY}" \
-    "$(stored_password "$MEMBER_PW") $(json_get "$(curl -s "$DATA/connections/$MEMBER_KEY/parameters?token=$ADMIN")" "d.get('private-key')")"
+    "$(stored_password "$MEMBER_PW") $(stored_parameter "$MEMBER_KEY" private-key)"
 
 # Two sessions at once: the group opens each member once
 SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)

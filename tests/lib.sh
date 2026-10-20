@@ -160,10 +160,14 @@ grant_read() { grant "$1" "[{\"op\":\"add\",\"path\":\"/connectionPermissions/$2
 
 # parameter ID NAME: a connection parameter; secrets as plaintext, also
 # when kept apart by the extension (the parameter is then a token such as
-# ${PAM_PASSWORD_17})
+# ${PAM_PASSWORD_17}, which the API shows as ********)
 parameter() {
     local value
     value=$(json_get "$(curl -s "$DATA/connections/$1/parameters?token=$ADMIN")" "d.get('$2')")
+    if [ "$value" = '********' ]; then
+        value=$(podman exec myguacdbtest psql -U postgres -tAc "SELECT parameter_value
+            FROM guacamole_connection_parameter WHERE connection_id = $1 AND parameter_name = '$2'")
+    fi
     if [[ "$value" == '${PAM_'*"_$1}" ]]; then
         value=$(reveal "connection-secret:$1:$2" "$(podman exec myguacdbtest psql -U postgres -tAc \
             "SELECT value FROM pam_connection_secret WHERE connection_id = $1 AND parameter_name = '$2'")")

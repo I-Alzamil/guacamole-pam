@@ -117,17 +117,19 @@ naming both, such as `${PAM_PASSWORD_17}` or `${PAM_PRIVATE_KEY_17}`, which
 the extension replaces with the value when the connection opens, as
 Guacamole's vault extensions do. Balancing groups are given the values of all
 their connections, as Guacamole chooses which one to open. Editors of the
-connection only see the tokens: saving them unchanged keeps the values, and
-typing a new value replaces it. A token can't be used in any other field or
-connection, where Guacamole would replace it too, and encrypted values can't
-be pasted into a connection.
+connection, and Guacamole's API, see neither the values nor the tokens, only
+`********`, as for a platform's stored passwords: saving it unchanged keeps
+the value, and typing a new value replaces it. `********` can't be copied to
+another connection (cloning one asks for its passwords again), nor can a
+token be used in any other field or connection, where Guacamole would replace
+it too, and encrypted values can't be pasted into a connection.
 
 Values containing one of Guacamole's own tokens, such as `${GUAC_PASSWORD}`
 to pass the user's own password on, stay in their field for Guacamole to
 replace.
 
 Accounts' passwords never reach Guacamole's connections, but are kept the same
-way, so every connection shows its password as a token.
+way, so every connection shows its password the same way.
 
 Generate a key once with `openssl rand -base64 32` and set it in
 `guacamole.properties` (or `PAM_ENCRYPTION_KEY` in the Docker image), then
@@ -365,7 +367,7 @@ openssl s_client -connect <host>:5986 </dev/null 2>/dev/null | openssl x509 -noo
   each connection, which only administrators can change.
 - **Editors can read passwords, unless a key is set.** Users with *edit*
   permission on a connection can read its parameters, including its password.
-  With a key set, they see passwords and keys only as tokens. They can still
+  With a key set, they only see `********` in their place. They can still
   change a connection's other parameters, and some protocols have parameters
   that could send the password elsewhere (such as its hostname, or a VNC
   repeater, unless the connection is managed), so give edit permission on

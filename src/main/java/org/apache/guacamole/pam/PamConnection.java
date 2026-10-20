@@ -16,14 +16,15 @@ import org.apache.guacamole.pam.checkout.CheckoutService;
 import org.apache.guacamole.pam.db.ConnectionSecrets;
 import org.apache.guacamole.pam.rotation.RotationService;
 import org.apache.guacamole.protocol.GuacamoleClientInformation;
+import org.apache.guacamole.protocol.GuacamoleConfiguration;
 
 /**
  * Connection which refuses sessions without the checkout its access
  * requires, gives its secrets when kept apart (see {@link ConnectionSecrets}),
  * reports when its tunnels open and close (so the rotation service knows
  * when it is in use, and can close them when a checkout ends or the user's
- * access is revoked), and always exposes its password management attributes
- * to the editor.
+ * access is revoked), shows its editors those secrets masked, and always
+ * exposes its password management attributes to the editor.
  */
 public class PamConnection extends DelegatingConnection {
 
@@ -49,6 +50,18 @@ public class PamConnection extends DelegatingConnection {
 
     public Connection getUndecorated() {
         return getDelegateConnection();
+    }
+
+    /**
+     * The configuration, with the tokens of secrets kept apart masked, as
+     * the editor and Guacamole's API show it. Sessions are opened by the
+     * wrapped connection, from its own.
+     */
+    @Override
+    public GuacamoleConfiguration getConfiguration() {
+        GuacamoleConfiguration configuration = super.getConfiguration();
+        Integer id = Values.parseId(getIdentifier());
+        return configuration == null || id == null ? configuration : ConnectionSecrets.masked(configuration, id);
     }
 
     /**

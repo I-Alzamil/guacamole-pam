@@ -20,6 +20,7 @@ import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.pam.crypto.MigrationReport;
 import org.apache.guacamole.pam.crypto.SecretCipher;
 import org.apache.guacamole.pam.crypto.Secrets;
+import org.apache.guacamole.protocol.GuacamoleConfiguration;
 
 /**
  * Sensitive parameters of connections ({@link #SENSITIVE}: passwords, private
@@ -27,7 +28,8 @@ import org.apache.guacamole.pam.crypto.Secrets;
  * key is set. The parameter then holds a token naming its parameter and
  * connection, such as "${PAM_PASSWORD_17}", which the extension replaces with
  * the value when the connection opens, as Guacamole's vault extensions do.
- * Editors of the connection only see the token. Each value is encrypted for
+ * Editors of the connection see {@link #MASK} in its place, which saving
+ * unchanged keeps the value, as the token itself does. Each value is encrypted for
  * its parameter and connection alone, so it cannot be moved elsewhere and
  * used there. Naming the connection lets a balancing group, through which
  * Guacamole opens a connection it chooses itself, be given the values of all
@@ -50,6 +52,13 @@ public class ConnectionSecrets {
 
     private static final String TOKEN_PREFIX = "${PAM_";
 
+    /**
+     * What editors see in place of a value kept here, masked as any
+     * password: it looks set, and tells nothing of where the value is. It
+     * only ever stands for the value of its own field and connection.
+     */
+    public static final String MASK = "********";
+
     private static final String GUACAMOLE_TOKEN = "${";
 
     private final PamDatabase database;
@@ -71,6 +80,35 @@ public class ConnectionSecrets {
 
     public static String token(String parameter, int connectionId) {
         return "${" + tokenName(parameter, connectionId) + "}";
+    }
+
+    /**
+     * The configuration of a connection as its editors see it: its tokens
+     * are {@link #MASK}. The same configuration if it has none.
+     */
+    public static GuacamoleConfiguration masked(GuacamoleConfiguration configuration, int connectionId) {
+
+        // Read as Guacamole's API reads them: the database's configurations
+        // only load their parameters for getParameters()
+        Map<String, String> parameters = new HashMap<>(configuration.getParameters());
+
+        boolean changed = false;
+        for (String parameter : SENSITIVE) {
+            if (token(parameter, connectionId).equals(parameters.get(parameter))) {
+                parameters.put(parameter, MASK);
+                changed = true;
+            }
+        }
+
+        if (!changed)
+            return configuration;
+
+        GuacamoleConfiguration masked = new GuacamoleConfiguration();
+        masked.setConnectionID(configuration.getConnectionID());
+        masked.setProtocol(configuration.getProtocol());
+        masked.setParameters(parameters);
+        return masked;
+
     }
 
     private static String purpose(int connectionId, String parameter) {
@@ -173,6 +211,14 @@ public class ConnectionSecrets {
                 continue;
             }
 
+            // The mask an editor saw keeps the value, as the token would
+            if (sensitive && MASK.equals(value)) {
+                if (connectionId == null || !holdsToken(connectionId, name))
+                    throw new GuacamoleClientException(MASK + " only stands for a value already stored in the same"
+                            + " field of the same connection, so it cannot be copied. Type the value instead.");
+                value = token(name, connectionId);
+            }
+
             boolean own = sensitive && connectionId != null && value.equals(token(name, connectionId));
             if (!own && value.contains(TOKEN_PREFIX))
                 throw new GuacamoleClientException("Tokens such as " + (connectionId == null ? "${PAM_PASSWORD_17}"
@@ -193,8 +239,11 @@ public class ConnectionSecrets {
                         + " value instead.");
 
             if (keeps) {
-                if (own)
+                if (own) {
+                    // Written back, as the editor sent the mask in its place
                     require(id, name);
+                    saving.changes.put(name, token(name, connectionId));
+                }
                 else {
                     // Left out until the token naming the connection can be written
                     saving.changes.put(name, connectionId == null ? null : token(name, connectionId));
@@ -286,6 +335,29 @@ public class ConnectionSecrets {
             throw new GuacamoleServerException("The " + parameter + " of connection " + connectionId + " is "
                     + token(parameter, connectionId) + ", but the extension keeps no value for it. Set it again.");
         return secrets.reveal(purpose(connectionId, parameter), stored);
+
+    }
+
+    /**
+     * Whether the stored parameter of a connection is its token.
+     */
+    private boolean holdsToken(int connectionId, String parameter) throws GuacamoleException {
+
+        try (Connection connection = database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "SELECT parameter_value FROM guacamole_connection_parameter"
+               + " WHERE connection_id = ? AND parameter_name = ?")) {
+
+            statement.setInt(1, connectionId);
+            statement.setString(2, parameter);
+            try (ResultSet results = statement.executeQuery()) {
+                return results.next() && token(parameter, connectionId).equals(results.getString(1));
+            }
+
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to read the connection's parameters.", e);
+        }
 
     }
 
