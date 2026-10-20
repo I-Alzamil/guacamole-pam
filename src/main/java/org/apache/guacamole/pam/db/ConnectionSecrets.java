@@ -250,12 +250,13 @@ public class ConnectionSecrets {
     }
 
     /**
-     * The value of a stored parameter: kept here if it is its token, or as
-     * it is.
+     * The value of a stored parameter, read through the caller's database
+     * connection: kept here if it is its token, or as it is.
      */
-    String resolve(int connectionId, String parameter, String value) throws GuacamoleException {
+    String resolve(Connection connection, int connectionId, String parameter, String value)
+            throws GuacamoleException {
         if (SENSITIVE.contains(parameter) && token(parameter, connectionId).equals(value))
-            return require(connectionId, parameter);
+            return require(connection, connectionId, parameter);
         return value;
     }
 
@@ -263,21 +264,29 @@ public class ConnectionSecrets {
      * The value kept for a parameter of the connection, which must be there.
      */
     private String require(int connectionId, String parameter) throws GuacamoleException {
-        String value = read(connectionId, parameter);
-        if (value == null)
-            throw new GuacamoleServerException("The " + parameter + " of connection " + connectionId + " is "
-                    + token(parameter, connectionId) + ", but the extension keeps no value for it. Set it again.");
-        return value;
-    }
-
-    private String read(int connectionId, String parameter) throws GuacamoleException {
         try (Connection connection = database.getConnection()) {
-            String stored = readRaw(connection, connectionId, parameter);
-            return stored == null ? null : secrets.reveal(purpose(connectionId, parameter), stored);
+            return require(connection, connectionId, parameter);
         }
         catch (SQLException e) {
             throw new GuacamoleServerException("Unable to read the connection's secrets.", e);
         }
+    }
+
+    private String require(Connection connection, int connectionId, String parameter) throws GuacamoleException {
+
+        String stored;
+        try {
+            stored = readRaw(connection, connectionId, parameter);
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to read the connection's secrets.", e);
+        }
+
+        if (stored == null)
+            throw new GuacamoleServerException("The " + parameter + " of connection " + connectionId + " is "
+                    + token(parameter, connectionId) + ", but the extension keeps no value for it. Set it again.");
+        return secrets.reveal(purpose(connectionId, parameter), stored);
+
     }
 
     private static String readRaw(Connection connection, int connectionId, String parameter) throws SQLException {

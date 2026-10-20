@@ -74,7 +74,8 @@ public class SecretMigration {
      */
     MigrationReport run() throws GuacamoleException {
 
-        try (Connection lock = database.getConnection()) {
+        // Its own connection: closing it releases the lock
+        try (Connection lock = database.getDedicatedConnection()) {
 
             try (PreparedStatement statement = lock.prepareStatement("SELECT pg_try_advisory_lock(?)")) {
                 statement.setInt(1, LOCK);
@@ -84,7 +85,6 @@ public class SecretMigration {
                 }
             }
 
-            // Closing the lock's connection releases it
             MigrationReport report = new MigrationReport();
             platforms.migrateSecrets(report);
             connections.migrateSecrets(report);

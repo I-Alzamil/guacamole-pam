@@ -107,7 +107,7 @@ public class CheckoutRepository {
                 }
 
                 connection.commit();
-                return get(id);
+                return query(connection, SELECT + " WHERE k.checkout_id = ?", id).get(0);
 
             }
             catch (SQLException | GuacamoleException e) {

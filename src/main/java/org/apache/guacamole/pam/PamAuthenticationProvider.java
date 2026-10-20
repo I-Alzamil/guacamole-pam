@@ -83,6 +83,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     private final ConnectionSecrets connectionSecrets;
 
+    private final PamDatabase database;
+
     /**
      * The PostgreSQL UserContext of each session, used for permission checks.
      * Keys are weak and compared by identity, so entries vanish with their
@@ -115,13 +117,14 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             approvalService = null;
             secretMigration = null;
             connectionSecrets = null;
+            database = null;
             return;
         }
 
         Secrets secrets = Secrets.fromEnvironment(environment);
         logEncryption(secrets);
 
-        PamDatabase database = new PamDatabase(environment);
+        database = new PamDatabase(environment);
         CheckoutRepository checkouts = new CheckoutRepository(database);
         connectionSecrets = new ConnectionSecrets(database, secrets);
         platforms = new PlatformRepository(database, secrets);
@@ -257,6 +260,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             rotationService.shutdown();
         if (secretMigration != null)
             secretMigration.shutdown();
+        if (database != null)
+            database.close();
     }
 
 }

@@ -11,6 +11,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.environment.Environment;
@@ -25,6 +28,12 @@ import org.slf4j.LoggerFactory;
  * creates this extension's own tables on first use. The driver is loaded by
  * name, so this class loads (and {@link #getUnavailableReason} can tell why
  * the database cannot be used) even where the driver is missing.
+ *
+ * Connections come from a pool, opened on first use and holding at most
+ * "pam-database-max-connections" (10 by default). Code holding a pooled
+ * connection never asks for another, so a busy pool cannot deadlock.
+ * Session-level advisory locks, released by closing their connection, use a
+ * dedicated connection instead ({@link #getDedicatedConnection}).
  */
 public class PamDatabase {
 
@@ -54,6 +63,23 @@ public class PamDatabase {
         @Override
         public String getName() { return "postgresql-password"; }
     };
+
+    private static final IntegerGuacamoleProperty MAX_CONNECTIONS = new IntegerGuacamoleProperty() {
+        @Override
+        public String getName() { return "pam-database-max-connections"; }
+    };
+
+    private static final int DEFAULT_MAX_CONNECTIONS = 10;
+
+    /**
+     * Pooled connections kept open while unused.
+     */
+    private static final int MIN_IDLE_CONNECTIONS = 2;
+
+    /**
+     * How long a request waits for a pooled connection before failing.
+     */
+    private static final long CONNECTION_TIMEOUT_MS = 30000;
 
     /**
      * Classpath resource holding the schema of this extension's tables.
@@ -90,6 +116,16 @@ public class PamDatabase {
     private final String url;
 
     private final Properties connectionProperties = new Properties();
+
+    private final int maxConnections;
+
+    /**
+     * The pool, created on first use so the extension starts while the
+     * database is unreachable. Null until then, and once closed.
+     */
+    private HikariDataSource pool;
+
+    private boolean closed = false;
 
     private volatile boolean schemaReady = false;
 
@@ -136,13 +172,54 @@ public class PamDatabase {
         connectionProperties.setProperty("password", environment.getRequiredProperty(POSTGRESQL_PASSWORD));
         connectionProperties.setProperty("ApplicationName", "guacamole-pam");
 
+        maxConnections = Math.max(2, environment.getProperty(MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS));
+
+    }
+
+    private synchronized HikariDataSource pool() throws GuacamoleServerException {
+
+        if (closed)
+            throw new GuacamoleServerException("The PAM database is closed.");
+
+        if (pool == null) {
+            HikariConfig config = new HikariConfig();
+            config.setPoolName("guacamole-pam");
+            config.setDriverClassName(DRIVER_CLASS);
+            config.setJdbcUrl(url);
+            config.setDataSourceProperties(connectionProperties);
+            config.setMaximumPoolSize(maxConnections);
+            config.setMinimumIdle(Math.min(MIN_IDLE_CONNECTIONS, maxConnections));
+            config.setConnectionTimeout(CONNECTION_TIMEOUT_MS);
+            // Connect on first use, not here: the database may be down
+            config.setInitializationFailTimeout(-1);
+            pool = new HikariDataSource(config);
+        }
+
+        return pool;
+
     }
 
     /**
-     * Opens a new database connection, creating the extension's tables first
-     * if this is the first use.
+     * Returns a pooled database connection, creating the extension's tables
+     * first if this is the first use. Closing it returns it to the pool.
      */
     public Connection getConnection() throws GuacamoleException {
+        Connection connection;
+        try {
+            connection = pool().getConnection();
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to connect to the PAM database.", e);
+        }
+        return withSchema(connection);
+    }
+
+    /**
+     * Opens a database connection of its own, outside the pool, for
+     * session-level advisory locks: closing it ends the database session,
+     * releasing them.
+     */
+    public Connection getDedicatedConnection() throws GuacamoleException {
         Connection connection;
         try {
             connection = driver.connect(url, connectionProperties);
@@ -150,6 +227,20 @@ public class PamDatabase {
         catch (SQLException e) {
             throw new GuacamoleServerException("Unable to connect to the PAM database.", e);
         }
+        return withSchema(connection);
+    }
+
+    /**
+     * Closes the pool's connections. Later requests for one fail.
+     */
+    public synchronized void close() {
+        closed = true;
+        if (pool != null)
+            pool.close();
+        pool = null;
+    }
+
+    private Connection withSchema(Connection connection) throws GuacamoleException {
 
         if (!schemaReady) {
             try {
@@ -167,6 +258,7 @@ public class PamDatabase {
         }
 
         return connection;
+
     }
 
     private synchronized void ensureSchema(Connection connection) throws SQLException {

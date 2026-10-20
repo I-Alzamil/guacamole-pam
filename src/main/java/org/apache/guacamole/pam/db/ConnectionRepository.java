@@ -194,7 +194,7 @@ public class ConnectionRepository {
                 if (!target.parameters.containsKey(name))
                     continue;
                 try {
-                    target.parameters.put(name, connectionSecrets.resolve(connectionId, name,
+                    target.parameters.put(name, connectionSecrets.resolve(connection, connectionId, name,
                             target.parameters.get(name)));
                 }
                 catch (GuacamoleException e) {
@@ -205,7 +205,7 @@ public class ConnectionRepository {
             readPairs(connection, "SELECT attribute_name, attribute_value FROM guacamole_connection_attribute"
                     + " WHERE connection_id = ?", connectionId, target.attributes);
 
-            Map<Integer, State> states = readStates(connection);
+            Map<Integer, State> states = readStates(connection, connectionId);
             if (states.containsKey(connectionId))
                 target.state = states.get(connectionId);
 
@@ -253,7 +253,7 @@ public class ConnectionRepository {
 
             }
 
-            Map<Integer, State> states = readStates(connection);
+            Map<Integer, State> states = readStates(connection, null);
             for (Target target : targets.values()) {
                 if (states.containsKey(target.id))
                     target.state = states.get(target.id);
@@ -538,24 +538,34 @@ public class ConnectionRepository {
         }
     }
 
-    private static Map<Integer, State> readStates(Connection connection) throws SQLException {
+    /**
+     * Rotation states by connection id: of the given connection only, or of
+     * all if null.
+     */
+    private static Map<Integer, State> readStates(Connection connection, Integer connectionId)
+            throws SQLException {
 
         Map<Integer, State> states = new HashMap<>();
 
         try (PreparedStatement statement = connection.prepareStatement(
                 "SELECT connection_id, last_attempt, last_success, last_status, last_message, host_key,"
-              + " pending_password IS NOT NULL FROM pam_rotation_state");
-             ResultSet results = statement.executeQuery()) {
+              + " pending_password IS NOT NULL FROM pam_rotation_state"
+              + (connectionId == null ? "" : " WHERE connection_id = ?"))) {
 
-            while (results.next()) {
-                State state = new State();
-                state.lastAttempt = results.getTimestamp(2);
-                state.lastSuccess = results.getTimestamp(3);
-                state.status = results.getString(4);
-                state.message = results.getString(5);
-                state.hostKey = results.getString(6);
-                state.pendingPassword = results.getBoolean(7);
-                states.put(results.getInt(1), state);
+            if (connectionId != null)
+                statement.setInt(1, connectionId);
+
+            try (ResultSet results = statement.executeQuery()) {
+                while (results.next()) {
+                    State state = new State();
+                    state.lastAttempt = results.getTimestamp(2);
+                    state.lastSuccess = results.getTimestamp(3);
+                    state.status = results.getString(4);
+                    state.message = results.getString(5);
+                    state.hostKey = results.getString(6);
+                    state.pendingPassword = results.getBoolean(7);
+                    states.put(results.getInt(1), state);
+                }
             }
 
         }

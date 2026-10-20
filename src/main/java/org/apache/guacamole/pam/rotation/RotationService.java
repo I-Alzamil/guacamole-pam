@@ -1,6 +1,7 @@
 package org.apache.guacamole.pam.rotation;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -313,6 +314,14 @@ public class RotationService {
 
             Map<String, Platform> all = platforms.getAll();
             Set<Integer> shown = checkouts.listShownSinceRotation(AccountProtocol.NAME);
+
+            // Read once for every connection; a rotation checks again for
+            // checkouts once it claims its connection
+            Map<Integer, Integer> sessionCounts = sessions.countAll();
+            Set<Integer> held = new HashSet<>();
+            for (Checkout checkout : checkouts.listActive())
+                held.add(Integer.valueOf(checkout.getConnectionIdentifier()));
+
             for (Target target : connections.listManaged()) {
 
                 // Missed or failed after its use, such as while the server
@@ -323,7 +332,7 @@ public class RotationService {
 
                 // Rotating while in use would break the password a user is
                 // relying on; wait until the session or checkout ends
-                if (isInUse(target.getId()))
+                if (sessionCounts.containsKey(target.getId()) || held.contains(target.getId()))
                     continue;
 
                 if (wasShown)

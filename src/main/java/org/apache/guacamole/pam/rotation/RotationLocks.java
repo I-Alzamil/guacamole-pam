@@ -14,8 +14,9 @@ import org.apache.guacamole.pam.db.PamDatabase;
 /**
  * Claims of connections being rotated, as PostgreSQL advisory locks, so
  * Guacamole servers sharing the database never rotate the same connection
- * at once. A claim holds a database connection for the rotation's duration;
- * if that connection drops, PostgreSQL releases the lock.
+ * at once. A claim holds a database connection of its own, outside the pool,
+ * for the rotation's duration; closing it, or its dropping, releases the
+ * lock.
  *
  * Locks use the two-key form, keyed by {@link #NAMESPACE} and the connection
  * id, which never collides with the one-key locks of checkouts.
@@ -66,7 +67,7 @@ class RotationLocks {
      */
     Claim tryClaim(int connectionId) throws GuacamoleException {
 
-        Connection connection = database.getConnection();
+        Connection connection = database.getDedicatedConnection();
         try (PreparedStatement statement = connection.prepareStatement("SELECT pg_try_advisory_lock(?, ?)")) {
 
             statement.setInt(1, NAMESPACE);

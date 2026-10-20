@@ -178,6 +178,7 @@ public class PlatformRepository {
 
         Platform clean = sanitize(platform, null);
 
+        int id;
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                  "INSERT INTO pam_platform (name, description, type, settings, secrets, policy)"
@@ -192,13 +193,15 @@ public class PlatformRepository {
 
             try (ResultSet results = statement.executeQuery()) {
                 results.next();
-                return getWithSecrets(results.getInt(1));
+                id = results.getInt(1);
             }
 
         }
         catch (SQLException e) {
             throw translate(e, clean);
         }
+
+        return getWithSecrets(id);
 
     }
 

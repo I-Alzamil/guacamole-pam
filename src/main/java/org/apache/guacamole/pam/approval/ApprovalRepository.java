@@ -11,8 +11,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -49,6 +51,13 @@ public class ApprovalRepository {
      * How long a request may stay pending, in hours.
      */
     private static final int PENDING_HOURS = 24;
+
+    /**
+     * How often reads expire stale requests first, in milliseconds.
+     */
+    private static final long EXPIRY_CHECK_MS = 60000;
+
+    private volatile long lastExpiry = 0;
 
     private static final String SELECT = "SELECT r.request_id, r.connection_id, c.connection_name,"
             + " (SELECT parameter_value FROM guacamole_connection_parameter p"
@@ -210,8 +219,9 @@ public class ApprovalRepository {
     public ApprovalRequest create(int connectionId, String username, String reason, int approvalsRequired)
             throws GuacamoleException {
 
-        expireStale();
+        expireStale(true);
 
+        int id;
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                  "INSERT INTO pam_request (connection_id, username, reason, approvals_required)"
@@ -224,7 +234,7 @@ public class ApprovalRepository {
 
             try (ResultSet results = statement.executeQuery()) {
                 results.next();
-                return get(results.getInt(1));
+                id = results.getInt(1);
             }
 
         }
@@ -233,6 +243,8 @@ public class ApprovalRepository {
                 throw new GuacamoleClientException("You already have a request for this password awaiting approval.");
             throw new GuacamoleServerException("Unable to create the request.", e);
         }
+
+        return get(id);
 
     }
 
@@ -245,29 +257,48 @@ public class ApprovalRepository {
      * Returns the user's pending request for a connection, or null.
      */
     public ApprovalRequest getPending(int connectionId, String username) throws GuacamoleException {
-        expireStale();
-        for (ApprovalRequest request : query(SELECT + " WHERE r.connection_id = ? AND r.status = 'PENDING'",
-                connectionId)) {
-            if (request.getUsername().equals(username))
-                return request;
-        }
-        return null;
+        expireStale(false);
+        List<ApprovalRequest> requests = query(SELECT
+                + " WHERE r.connection_id = ? AND r.username = ? AND r.status = 'PENDING'", connectionId, username);
+        return requests.isEmpty() ? null : requests.get(0);
     }
 
     /**
      * Returns the user's most recent request for a connection, or null.
      */
     public ApprovalRequest getLatest(int connectionId, String username) throws GuacamoleException {
-        for (ApprovalRequest request : query(SELECT + " WHERE r.connection_id = ? ORDER BY r.requested DESC LIMIT 20",
-                connectionId)) {
-            if (request.getUsername().equals(username))
-                return request;
-        }
-        return null;
+        List<ApprovalRequest> requests = query(SELECT
+                + " WHERE r.connection_id = ? AND r.username = ? ORDER BY r.requested DESC LIMIT 1",
+                connectionId, username);
+        return requests.isEmpty() ? null : requests.get(0);
+    }
+
+    /**
+     * Returns the user's pending requests, by connection id.
+     */
+    public Map<Integer, ApprovalRequest> listPendingOf(String username) throws GuacamoleException {
+        expireStale(false);
+        return byConnection(query(SELECT + " WHERE r.username = ? AND r.status = 'PENDING'", username));
+    }
+
+    /**
+     * Returns the user's most recent request for each connection, by
+     * connection id.
+     */
+    public Map<Integer, ApprovalRequest> listLatestOf(String username) throws GuacamoleException {
+        return byConnection(query(SELECT.replaceFirst("^SELECT ", "SELECT DISTINCT ON (r.connection_id) ")
+                + " WHERE r.username = ? ORDER BY r.connection_id, r.requested DESC", username));
+    }
+
+    private static Map<Integer, ApprovalRequest> byConnection(List<ApprovalRequest> requests) {
+        Map<Integer, ApprovalRequest> map = new HashMap<>();
+        for (ApprovalRequest request : requests)
+            map.put(Integer.valueOf(request.getConnectionIdentifier()), request);
+        return map;
     }
 
     public List<ApprovalRequest> listPending() throws GuacamoleException {
-        expireStale();
+        expireStale(false);
         return query(SELECT + " WHERE r.status = 'PENDING' ORDER BY r.requested");
     }
 
@@ -281,7 +312,7 @@ public class ApprovalRepository {
     public List<ApprovalRequest> searchDecided(List<String> terms, int limit, Set<String> connections)
             throws GuacamoleException {
 
-        expireStale();
+        expireStale(false);
 
         StringBuilder sql = new StringBuilder(SELECT).append(" WHERE r.status <> 'PENDING'");
         List<Object> parameters = new ArrayList<>();
@@ -334,7 +365,7 @@ public class ApprovalRepository {
      */
     public ApprovalRequest approve(int requestId, String approver) throws GuacamoleException {
 
-        expireStale();
+        expireStale(true);
 
         try (Connection connection = database.getConnection()) {
 
@@ -415,7 +446,7 @@ public class ApprovalRepository {
      */
     public void decide(int requestId, String status, String decidedBy, String reason) throws GuacamoleException {
 
-        expireStale();
+        expireStale(true);
 
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
@@ -437,9 +468,16 @@ public class ApprovalRepository {
     }
 
     /**
-     * Expires requests left pending for too long.
+     * Expires requests left pending for too long: always before a decision,
+     * at most once a minute before a read, so reads may show a request for
+     * up to a minute past its expiry.
      */
-    private void expireStale() throws GuacamoleException {
+    private void expireStale(boolean always) throws GuacamoleException {
+
+        long now = System.currentTimeMillis();
+        if (!always && now - lastExpiry < EXPIRY_CHECK_MS)
+            return;
+
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                  "UPDATE pam_request SET status = 'EXPIRED', decided = CURRENT_TIMESTAMP"
@@ -450,6 +488,9 @@ public class ApprovalRepository {
         catch (SQLException e) {
             throw new GuacamoleServerException("Unable to expire requests.", e);
         }
+
+        lastExpiry = now;
+
     }
 
     private static void requirePending(Connection connection, int requestId, String approver)

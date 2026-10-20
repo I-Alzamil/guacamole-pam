@@ -2,6 +2,8 @@ package org.apache.guacamole.pam.checkout;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -112,11 +114,21 @@ public class CheckoutService {
         Set<String> readable = context.getConnectionDirectory().getIdentifiers();
         Map<String, Platform> all = platforms.getAll();
 
+        // Read once for every connection, not once per connection
+        Map<Integer, List<Checkout>> active = new HashMap<>();
+        for (Checkout checkout : checkouts.listActive())
+            active.computeIfAbsent(Integer.valueOf(checkout.getConnectionIdentifier()), id -> new ArrayList<>())
+                    .add(checkout);
+        Map<Integer, ApprovalRequest> pending = approvals.listPendingOf(username);
+        Map<Integer, ApprovalRequest> latest = approvals.listLatestOf(username);
+
         List<PasswordRequest> requests = new ArrayList<>();
         for (Target target : connections.listRequestCandidates(AccountProtocol.NAME, PUBLIC_PARAMETERS)) {
-            if (isRequestable(target) && readable.contains(Integer.toString(target.getId())))
+            int id = target.getId();
+            if (isRequestable(target) && readable.contains(Integer.toString(id)))
                 requests.add(toRequest(target, all.get(target.getAttribute(PamAttributes.PLATFORM)), username,
-                        administrator));
+                        administrator, active.getOrDefault(id, Collections.<Checkout>emptyList()),
+                        pending.get(id), latest.get(id)));
         }
 
         return requests;
@@ -492,6 +504,19 @@ public class CheckoutService {
 
     private PasswordRequest toRequest(Target target, Platform platform, String username, boolean administrator)
             throws GuacamoleException {
+        int id = target.getId();
+        boolean approval = !administrator && getApprovalsRequired(target) > 0;
+        return toRequest(target, platform, username, administrator, checkouts.listActive(id),
+                approval ? approvals.getPending(id, username) : null,
+                approval ? approvals.getLatest(id, username) : null);
+    }
+
+    /**
+     * The connection as shown to the user, given its active checkouts, and
+     * the user's pending and latest requests for it (or null).
+     */
+    private PasswordRequest toRequest(Target target, Platform platform, String username, boolean administrator,
+            List<Checkout> active, ApprovalRequest pending, ApprovalRequest latest) throws GuacamoleException {
 
         int approvalsRequired = administrator ? 0 : getApprovalsRequired(target);
         boolean account = isAccount(target);
@@ -501,15 +526,13 @@ public class CheckoutService {
                 account ? accountDetail(target, platform) : null,
                 account ? Values.trimToNull(target.getParameters().get(AccountProtocol.URL)) : null,
                 account ? Values.trimToNull(target.getParameters().get(AccountProtocol.NOTES)) : null,
-                isManaged(target), isExclusive(target), getDuration(target),
-                checkouts.listActive(target.getId()), username)
+                isManaged(target), isExclusive(target), getDuration(target), active, username)
             .withAccount(account)
             .withPasswordShown(revealsPassword(target))
             .withBypass(bypassesRequests(administrator))
             .withNoRequest(!requiresRequest(target) || bypassesRequests(administrator))
-            .withApproval(approvalsRequired,
-                approvalsRequired > 0 ? approvals.getPending(target.getId(), username) : null,
-                approvalsRequired > 0 ? approvals.getLatest(target.getId(), username) : null);
+            .withApproval(approvalsRequired, approvalsRequired > 0 ? pending : null,
+                approvalsRequired > 0 ? latest : null);
 
     }
 

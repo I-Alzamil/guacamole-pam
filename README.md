@@ -89,6 +89,11 @@ Guacamole itself needs). Nothing needs configuring:
 
 With encrypted secrets, every server needs the same keys.
 
+Each server keeps its own pool of up to 10 database connections, besides
+Guacamole's own, plus one for each rotation running. Change the limit with
+`pam-database-max-connections` in `guacamole.properties`, keeping the total
+across servers within PostgreSQL's `max_connections`.
+
 ### Encrypting stored secrets
 
 The secrets the extension stores can be encrypted (AES-256-GCM) with a key
