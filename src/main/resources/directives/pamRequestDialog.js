@@ -16,8 +16,7 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
             // Required services
             var $document         = $injector.get('$document');
             var $interval         = $injector.get('$interval');
-            var $q                = $injector.get('$q');
-            var $window           = $injector.get('$window');
+            var pamPasswordCopy   = $injector.get('pamPasswordCopy');
             var pamRequestService = $injector.get('pamRequestService');
             var pamService        = $injector.get('pamService');
 
@@ -282,8 +281,8 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
             };
 
             /**
-             * Copies the password, falling back to execCommand where the
-             * Clipboard API is unavailable (plain HTTP).
+             * Copies the password; if the browser refuses, shows it to be
+             * copied by hand.
              */
             $scope.copyPassword = function copyPassword() {
 
@@ -291,26 +290,7 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                 if (!password)
                     return;
 
-                var copied;
-                if ($window.navigator.clipboard && $window.isSecureContext)
-                    copied = $q.when($window.navigator.clipboard.writeText(password));
-                else {
-                    var textarea = $document[0].createElement('textarea');
-                    textarea.value = password;
-                    textarea.setAttribute('readonly', '');
-                    textarea.style.position = 'fixed';
-                    textarea.style.opacity = '0';
-                    $document[0].body.appendChild(textarea);
-                    textarea.select();
-                    try {
-                        copied = $document[0].execCommand('copy') ? $q.resolve() : $q.reject();
-                    }
-                    finally {
-                        $document[0].body.removeChild(textarea);
-                    }
-                }
-
-                copied.then(function passwordCopied() {
+                pamPasswordCopy(password).then(function passwordCopied() {
                     $scope.copied = true;
                     $interval.cancel(copiedTimer);
                     copiedTimer = $interval(function hideCopied() {

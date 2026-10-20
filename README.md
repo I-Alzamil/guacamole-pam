@@ -192,13 +192,14 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   they can't use it outside Guacamole. To let them see it, tick **Let users
   holding access see the password** in the connection's *Access requests*
   section (off by default; Accounts always show theirs). The holder then gets
-  a **Show password** button; each time they use it is recorded in the
-  checkout history. If the password is managed, it is rotated once the
-  connection is no longer in use, whatever its rotation mode, and retried
-  every 15 minutes if that fails. If it isn't managed, it keeps working
-  outside Guacamole, without approvals, time limits or session recording.
-  Connections allowing access without a request have no checkout, so their
-  password is never shown.
+  a **Show password** button, in the request dialog and in the menu within
+  the session (Ctrl+Alt+Shift), under the clipboard; each time they use it is
+  recorded in the checkout history. If the password is managed, it is
+  rotated once the connection is no longer in use, whatever its rotation
+  mode, and retried every 15 minutes if that fails. If it isn't managed, it
+  keeps working outside Guacamole, without approvals, time limits or session
+  recording. Connections allowing access without a request have no
+  checkout, so their password is never shown.
 - Balancing connection groups refuse to connect when one of their
   connections requires a request, is an Account, or has its password
   managed: open those connections directly.

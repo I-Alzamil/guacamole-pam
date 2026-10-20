@@ -186,6 +186,9 @@
             "TEXT_LAST_EXPIRED": "Your last request expired before it was approved.",
             "TEXT_NEEDS_APPROVAL": "This password needs {REQUIRED, plural, one{1 approval} other{# approvals}}. Once approved, it is checked out to you for {MINUTES} minutes.",
             "TEXT_PENDING": "Waiting for approval: {APPROVED} of {REQUIRED}."
+        },
+        "SESSION": {
+            "SECTION_HEADER_PASSWORD": "Password"
         }
     },
     "PROTOCOL_PAM_ACCOUNT": {

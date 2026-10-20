@@ -83,11 +83,13 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
             angular.forEach(requests, function addRequest(request) {
                 identifiers[request.identifier] = {
                     account : request.account,
+                    managed : request.managed,
                     mine    : request.mine,
                     bypass  : request.bypass,
                     expires : request.mine ? request.expires : null,
                     pending : !!request.pending,
-                    holders : (request.holders ? request.holders.length : 0) + (request.mine ? 1 : 0)
+                    holders : (request.holders ? request.holders.length : 0) + (request.mine ? 1 : 0),
+                    passwordShown : !!request.passwordShown
                 };
             });
             requestable = identifiers;

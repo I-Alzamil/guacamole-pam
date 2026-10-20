@@ -528,6 +528,16 @@
     font-family: monospace;
 }
 
+/* Session menu: the password close under its heading (the menu spaces the
+   blocks of a section, with an id selector) */
+#guac-menu .pam-session-password .content > .pam-request-username {
+    margin: 0;
+}
+
+#guac-menu .pam-session-password .content > .pam-request-password {
+    margin-top: 0.25em;
+}
+
 /* Request dialog: account URL and notes */
 .pam-request-url a {
     word-break: break-all;

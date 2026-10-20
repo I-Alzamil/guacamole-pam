@@ -20,7 +20,8 @@
         "templates/pamBadgeUserMenu.html",
         "templates/pamBadgePageList.html",
         "templates/pamConnectionStatus.html",
-        "templates/pamBadgePreferencesPatch.html"
+        "templates/pamBadgePreferencesPatch.html",
+        "templates/pamSessionPasswordPatch.html"
     ],
     "translations": [
         "translations/en.json"
@@ -35,6 +36,7 @@
         "templates/pamScriptField.html": "text/html",
         "templates/settingsPamHistory.html": "text/html",
         "templates/settingsPamApprovals.html": "text/html",
-        "templates/pamApprovalPermissions.html": "text/html"
+        "templates/pamApprovalPermissions.html": "text/html",
+        "templates/pamSessionPassword.html": "text/html"
     }
 }
