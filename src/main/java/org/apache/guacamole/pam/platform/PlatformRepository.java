@@ -25,6 +25,7 @@ import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.form.Field;
 import org.apache.guacamole.form.Form;
 import org.apache.guacamole.pam.PamAttributes;
+import org.apache.guacamole.pam.Values;
 import org.apache.guacamole.pam.crypto.MigrationReport;
 import org.apache.guacamole.pam.crypto.Secrets;
 import org.apache.guacamole.pam.db.PamDatabase;
@@ -143,7 +144,7 @@ public class PlatformRepository {
      * secrets, or null.
      */
     public Platform getWithSecrets(String id) throws GuacamoleException {
-        Integer number = parseId(id);
+        Integer number = Values.parseId(id);
         return number == null ? null : get(number, true);
     }
 
@@ -169,17 +170,8 @@ public class PlatformRepository {
      * secrets, or null.
      */
     public Platform get(String id) throws GuacamoleException {
-        Integer number = parseId(id);
+        Integer number = Values.parseId(id);
         return number == null ? null : get(number, false);
-    }
-
-    private static Integer parseId(String id) {
-        try {
-            return id == null ? null : Integer.valueOf(id.trim());
-        }
-        catch (NumberFormatException e) {
-            return null;
-        }
     }
 
     public Platform create(Platform platform) throws GuacamoleException {
@@ -371,7 +363,7 @@ public class PlatformRepository {
 
         Map<String, String> clean = new HashMap<>();
 
-        String mode = blankToNull(policy.get(Platform.POLICY_ROTATION_MODE));
+        String mode = Values.trimToNull(policy.get(Platform.POLICY_ROTATION_MODE));
         if (mode != null) {
             if (!mode.equals(Platform.MODE_NEVER) && !mode.equals(Platform.MODE_AFTER_USE)
                     && !mode.equals(Platform.MODE_PERIODIC))
@@ -398,7 +390,7 @@ public class PlatformRepository {
 
     private static Integer parseNumber(String value, int min, int max, String error)
             throws GuacamoleClientException {
-        if (blankToNull(value) == null)
+        if (Values.trimToNull(value) == null)
             return null;
         try {
             int number = Integer.parseInt(value.trim());
@@ -498,10 +490,6 @@ public class PlatformRepository {
         catch (IOException e) {
             throw new SQLException("Unable to decode platform settings.", e);
         }
-    }
-
-    private static String blankToNull(String value) {
-        return value == null || value.trim().isEmpty() ? null : value;
     }
 
 }

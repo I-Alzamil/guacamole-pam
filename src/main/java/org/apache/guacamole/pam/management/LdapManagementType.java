@@ -3,7 +3,6 @@ package org.apache.guacamole.pam.management;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -123,8 +122,7 @@ public class LdapManagementType implements ManagementType {
      * the form LdapTarget reads.
      */
     private static Map<String, String> merge(Platform platform, String dn, String username, String password) {
-        Map<String, String> values = new HashMap<>(platform.getSettings());
-        values.putAll(platform.getSecrets());
+        Map<String, String> values = platform.settingsWithSecrets();
         values.put(LdapTarget.USER_DN, dn);
         if (username != null)
             values.put(LdapTarget.USERNAME, username);

@@ -15,6 +15,7 @@ import org.apache.guacamole.GuacamoleResourceNotFoundException;
 import org.apache.guacamole.net.GuacamoleTunnel;
 import org.apache.guacamole.pam.AccountProtocol;
 import org.apache.guacamole.pam.PamAttributes;
+import org.apache.guacamole.pam.Values;
 import org.apache.guacamole.pam.checkout.Checkout;
 import org.apache.guacamole.pam.checkout.CheckoutRepository;
 import org.apache.guacamole.pam.db.ConnectionRepository;
@@ -206,7 +207,7 @@ public class RotationService {
     private void rotateAfterUse(String identifier) {
         try {
 
-            Integer id = parseInt(identifier);
+            Integer id = Values.parseId(identifier);
             if (id == null || isInUse(id))
                 return;
 
@@ -379,7 +380,7 @@ public class RotationService {
      */
     public RotationResult rotateNow(String identifier) throws GuacamoleException {
 
-        Integer id = parseInt(identifier);
+        Integer id = Values.parseId(identifier);
         if (id == null)
             throw new GuacamoleResourceNotFoundException("No such connection.");
 
@@ -618,17 +619,6 @@ public class RotationService {
         connections.recordFailure(id, status, full, outcome.getHostKey(), keepPendingPassword);
         return new RotationResult(status, full);
 
-    }
-
-    static Integer parseInt(String value) {
-        if (value == null)
-            return null;
-        try {
-            return Integer.valueOf(value.trim());
-        }
-        catch (NumberFormatException e) {
-            return null;
-        }
     }
 
     public void shutdown() {

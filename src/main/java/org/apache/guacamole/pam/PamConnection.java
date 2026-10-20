@@ -128,7 +128,7 @@ public class PamConnection extends DelegatingConnection {
         // detail of a server error, only logs it
         Map<String, String> withSecrets = tokens;
         try {
-            Integer id = toId(identifier);
+            Integer id = Values.parseId(identifier);
             Map<String, String> secrets = id == null ? Collections.<String, String>emptyMap()
                     : connectionSecrets.getTokens(id);
             if (!secrets.isEmpty()) {
@@ -163,15 +163,6 @@ public class PamConnection extends DelegatingConnection {
         rotationService.sessionStarted(identifier, username, tracked);
         return tracked;
 
-    }
-
-    private static Integer toId(String identifier) {
-        try {
-            return identifier == null ? null : Integer.valueOf(identifier);
-        }
-        catch (NumberFormatException e) {
-            return null;
-        }
     }
 
     /**

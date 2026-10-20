@@ -11,6 +11,7 @@ import org.apache.guacamole.form.Field;
 import org.apache.guacamole.form.Form;
 import org.apache.guacamole.form.NumericField;
 import org.apache.guacamole.form.TextField;
+import org.apache.guacamole.pam.Values;
 import org.apache.guacamole.pam.db.ConnectionRepository.Target;
 import org.apache.guacamole.pam.platform.Platform;
 import org.apache.guacamole.pam.ssh.SequenceScript;
@@ -93,7 +94,7 @@ public class SshManagementType implements ManagementType {
         if (!script.isValid())
             throw new GuacamoleClientException("The sequence has errors. " + script.getErrors().get(0));
 
-        if (platform.get(PORT) != null && parsePort(platform.get(PORT)) == null)
+        if (platform.get(PORT) != null && Values.toPort(platform.get(PORT)) == null)
             throw new GuacamoleClientException("The SSH port must be a number between 1 and 65535.");
 
     }
@@ -121,30 +122,30 @@ public class SshManagementType implements ManagementType {
 
         String hostname = target.getAttribute(SSH_HOSTNAME);
         if (hostname == null)
-            hostname = blankToNull(parameters.get("hostname"));
+            hostname = Values.emptyToNull(parameters.get("hostname"));
         if (hostname == null)
             throw new IllegalArgumentException("The connection has no hostname. Set the SSH hostname"
                     + " in its password management settings.");
 
-        Integer port = parsePort(target.getAttribute(SSH_PORT));
+        Integer port = Values.toPort(target.getAttribute(SSH_PORT));
         if (port == null && "ssh".equals(target.getProtocol()))
-            port = parsePort(parameters.get("port"));
+            port = Values.toPort(parameters.get("port"));
         if (port == null)
-            port = parsePort(platform.get(PORT));
+            port = Values.toPort(platform.get(PORT));
         if (port == null)
             port = DEFAULT_PORT;
 
-        String username = blankToNull(parameters.get("username"));
+        String username = Values.emptyToNull(parameters.get("username"));
         if (username == null)
             throw new IllegalArgumentException("The connection has no username.");
 
-        String password = blankToNull(parameters.get("password"));
-        String privateKey = blankToNull(parameters.get("private-key"));
+        String password = Values.emptyToNull(parameters.get("password"));
+        String privateKey = Values.emptyToNull(parameters.get("private-key"));
         if (password == null && privateKey == null)
             throw new IllegalArgumentException("The connection has neither a password nor a private key.");
 
         return new SshTarget(hostname, port, username, password, privateKey,
-                blankToNull(parameters.get("passphrase")), trustedHostKey(target));
+                Values.emptyToNull(parameters.get("passphrase")), trustedHostKey(target));
 
     }
 
@@ -155,31 +156,15 @@ public class SshManagementType implements ManagementType {
      */
     private static String trustedHostKey(Target target) {
 
-        String pinned = blankToNull(target.getAttribute(SSH_HOST_KEY));
+        String pinned = Values.emptyToNull(target.getAttribute(SSH_HOST_KEY));
         if (pinned != null)
             return pinned;
 
         // Only an SSH key counts: the same state records the certificate of
         // an LDAP target, should the connection have been managed over LDAP
-        String recorded = blankToNull(target.getState().getHostKey());
+        String recorded = Values.emptyToNull(target.getState().getHostKey());
         return recorded != null && recorded.startsWith(SSH_FINGERPRINT_PREFIX) ? recorded : null;
 
-    }
-
-    private static Integer parsePort(String value) {
-        if (value == null)
-            return null;
-        try {
-            int port = Integer.parseInt(value.trim());
-            return port >= 1 && port <= 65535 ? port : null;
-        }
-        catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
-    private static String blankToNull(String value) {
-        return value == null || value.isEmpty() ? null : value;
     }
 
 }

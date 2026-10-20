@@ -109,6 +109,16 @@ public class Platform {
     }
 
     /**
+     * Settings and secrets together, as a type's targets read them. Not a
+     * getter, so it is never serialized.
+     */
+    public Map<String, String> settingsWithSecrets() {
+        Map<String, String> values = new HashMap<>(settings);
+        values.putAll(secrets);
+        return values;
+    }
+
+    /**
      * Names of the secrets that have a stored value, so clients can say so
      * without seeing them.
      */

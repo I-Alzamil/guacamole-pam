@@ -18,6 +18,7 @@ import java.util.concurrent.ConcurrentMap;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.net.GuacamoleTunnel;
+import org.apache.guacamole.pam.Values;
 import org.apache.guacamole.pam.db.PamDatabase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -108,20 +109,12 @@ class SessionRegistry {
         }
     }
 
-    /**
-     * Connection id as stored in the database, or null for connections
-     * outside it.
-     */
-    private static Integer toId(String identifier) {
-        return RotationService.parseInt(identifier);
-    }
-
     void started(String identifier, String username, GuacamoleTunnel tunnel) {
 
         Session session = new Session(identifier, username, tunnel);
         local.put(tunnel, session);
 
-        if (toId(identifier) == null || !database.hasSessionTable())
+        if (Values.parseId(identifier) == null || !database.hasSessionTable())
             return;
 
         try (Connection connection = database.getConnection()) {
@@ -146,7 +139,7 @@ class SessionRegistry {
               + " ON CONFLICT (session_id) DO UPDATE SET heartbeat = CURRENT_TIMESTAMP"
               + " RETURNING started")) {
             statement.setString(1, session.id);
-            statement.setInt(2, toId(session.identifier));
+            statement.setInt(2, Values.parseId(session.identifier));
             statement.setString(3, session.username);
             statement.setString(4, server);
             try (ResultSet results = statement.executeQuery()) {
@@ -168,7 +161,7 @@ class SessionRegistry {
         if (session == null)
             return false;
 
-        if (toId(session.identifier) != null && database.hasSessionTable()) {
+        if (Values.parseId(session.identifier) != null && database.hasSessionTable()) {
             try (Connection connection = database.getConnection();
                  PreparedStatement statement = connection.prepareStatement(
                      "DELETE FROM pam_session WHERE session_id = ?")) {
@@ -220,7 +213,7 @@ class SessionRegistry {
 
         if (!database.hasSessionTable()) {
             for (Session session : local.values()) {
-                Integer id = toId(session.identifier);
+                Integer id = Values.parseId(session.identifier);
                 if (id != null)
                     counts.merge(id, 1, Integer::sum);
             }
@@ -259,7 +252,7 @@ class SessionRegistry {
             // Rows this server failed to remove are not refreshed, and go
             // stale like those of a stopped server
             for (Session session : local.values()) {
-                if (toId(session.identifier) != null)
+                if (Values.parseId(session.identifier) != null)
                     record(connection, session);
             }
 

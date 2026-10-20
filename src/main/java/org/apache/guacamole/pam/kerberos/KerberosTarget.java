@@ -2,6 +2,8 @@ package org.apache.guacamole.pam.kerberos;
 
 import java.util.Map;
 
+import org.apache.guacamole.pam.Values;
+
 /**
  * A Kerberos principal and the realm servers holding it, read from the
  * settings of a Kerberos platform combined with the account of a connection.
@@ -69,19 +71,19 @@ public final class KerberosTarget {
 
         String realm = require(parameters, REALM, "The platform has no Kerberos realm.");
         String kdc = require(parameters, KDC, "The platform has no KDC.");
-        String kpasswd = blankToNull(parameters.get(KPASSWD_SERVER));
+        String kpasswd = Values.trimToNull(parameters.get(KPASSWD_SERVER));
 
         String principal = require(parameters, PRINCIPAL,
                 "The connection has no Kerberos principal and no username.");
 
-        String adminPrincipal = blankToNull(parameters.get(ADMIN_PRINCIPAL));
-        String adminPassword = blankToNull(parameters.get(ADMIN_PASSWORD));
+        String adminPrincipal = Values.trimToNull(parameters.get(ADMIN_PRINCIPAL));
+        String adminPassword = Values.trimToNull(parameters.get(ADMIN_PASSWORD));
         if (adminPrincipal != null && adminPassword == null)
             throw new IllegalArgumentException("The admin principal has no password.");
 
-        return new KerberosTarget(realm, kdc, parsePort(parameters.get(KDC_PORT), DEFAULT_KDC_PORT),
-                kpasswd != null ? kpasswd : kdc, parsePort(parameters.get(KPASSWD_PORT), DEFAULT_KPASSWD_PORT),
-                qualify(principal, realm), blankToNull(parameters.get(PASSWORD)),
+        return new KerberosTarget(realm, kdc, Values.parsePort(parameters.get(KDC_PORT), DEFAULT_KDC_PORT),
+                kpasswd != null ? kpasswd : kdc, Values.parsePort(parameters.get(KPASSWD_PORT), DEFAULT_KPASSWD_PORT),
+                qualify(principal, realm), Values.trimToNull(parameters.get(PASSWORD)),
                 adminPrincipal == null ? null : qualify(adminPrincipal, realm), adminPassword);
 
     }
@@ -99,29 +101,10 @@ public final class KerberosTarget {
     }
 
     private static String require(Map<String, String> parameters, String name, String message) {
-        String value = blankToNull(parameters.get(name));
+        String value = Values.trimToNull(parameters.get(name));
         if (value == null)
             throw new IllegalArgumentException(message);
         return value;
-    }
-
-    private static int parsePort(String value, int defaultPort) {
-        value = blankToNull(value);
-        if (value == null)
-            return defaultPort;
-        try {
-            int port = Integer.parseInt(value);
-            if (port > 0 && port < 65536)
-                return port;
-        }
-        catch (NumberFormatException e) {
-            // Reported below
-        }
-        throw new IllegalArgumentException("Invalid port: " + value);
-    }
-
-    private static String blankToNull(String value) {
-        return value == null || value.trim().isEmpty() ? null : value.trim();
     }
 
     public String getRealm() {

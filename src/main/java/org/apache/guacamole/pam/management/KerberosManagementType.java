@@ -3,7 +3,6 @@ package org.apache.guacamole.pam.management;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -124,8 +123,7 @@ public class KerberosManagementType implements ManagementType {
      * the form KerberosTarget reads.
      */
     private static Map<String, String> merge(Platform platform, String principal, String password) {
-        Map<String, String> values = new HashMap<>(platform.getSettings());
-        values.putAll(platform.getSecrets());
+        Map<String, String> values = platform.settingsWithSecrets();
         if (principal != null)
             values.put(KerberosTarget.PRINCIPAL, principal);
         if (password != null)

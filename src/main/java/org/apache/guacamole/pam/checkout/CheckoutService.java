@@ -13,6 +13,7 @@ import org.apache.guacamole.GuacamoleSecurityException;
 import org.apache.guacamole.net.auth.UserContext;
 import org.apache.guacamole.pam.AccountProtocol;
 import org.apache.guacamole.pam.PamAttributes;
+import org.apache.guacamole.pam.Values;
 import org.apache.guacamole.pam.approval.ApprovalRepository;
 import org.apache.guacamole.pam.approval.ApprovalRequest;
 import org.apache.guacamole.pam.db.ConnectionRepository;
@@ -229,7 +230,7 @@ public class CheckoutService {
         logger.info("User \"{}\" viewed the password of \"{}\" (checkout {}).",
                 username, target.getName(), checkout.getId());
 
-        String user = blankToNull(target.getParameters().get(USERNAME_PARAMETER));
+        String user = Values.trimToNull(target.getParameters().get(USERNAME_PARAMETER));
         return new PasswordGrant(checkout, user == null || user.contains("${") ? null : user, null, password);
 
     }
@@ -247,7 +248,7 @@ public class CheckoutService {
     public void requireAccess(String identifier, String username, boolean administrator)
             throws GuacamoleException {
 
-        Integer id = parseId(identifier);
+        Integer id = Values.parseId(identifier);
         if (id == null)
             return;
 
@@ -281,7 +282,7 @@ public class CheckoutService {
             throws GuacamoleException {
 
         for (String identifier : connectionIdentifiers) {
-            Integer id = parseId(identifier);
+            Integer id = Values.parseId(identifier);
             Target target = id == null ? null : connections.load(id);
             if (target != null && (isRequestable(target) || isManaged(target)))
                 throw new GuacamoleSecurityException("Connection group \"" + groupName + "\" balances over \""
@@ -476,7 +477,7 @@ public class CheckoutService {
      */
     private Target requireRequestable(UserContext context, String identifier) throws GuacamoleException {
 
-        Integer id = parseId(identifier);
+        Integer id = Values.parseId(identifier);
         if (id == null || context.getConnectionDirectory().get(identifier) == null)
             throw new GuacamoleSecurityException("Permission denied.");
 
@@ -497,8 +498,8 @@ public class CheckoutService {
         return new PasswordRequest(Integer.toString(target.getId()), target.getName(),
                 account ? accountName(target) : null,
                 account ? accountDetail(target, platform) : null,
-                account ? blankToNull(target.getParameters().get(AccountProtocol.URL)) : null,
-                account ? blankToNull(target.getParameters().get(AccountProtocol.NOTES)) : null,
+                account ? Values.trimToNull(target.getParameters().get(AccountProtocol.URL)) : null,
+                account ? Values.trimToNull(target.getParameters().get(AccountProtocol.NOTES)) : null,
                 isManaged(target), isExclusive(target), getDuration(target),
                 checkouts.listActive(target.getId()), username)
             .withAccount(account)
@@ -612,19 +613,6 @@ public class CheckoutService {
         catch (NumberFormatException | NullPointerException e) {
             return DEFAULT_MINUTES;
         }
-    }
-
-    private static Integer parseId(String identifier) {
-        try {
-            return identifier == null ? null : Integer.valueOf(identifier);
-        }
-        catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
-    private static String blankToNull(String value) {
-        return value == null || value.trim().isEmpty() ? null : value;
     }
 
 }

@@ -24,6 +24,7 @@ import org.apache.guacamole.GuacamoleResourceNotFoundException;
 import org.apache.guacamole.GuacamoleSecurityException;
 import org.apache.guacamole.net.auth.AuthenticatedUser;
 import org.apache.guacamole.pam.PamAuthenticationProvider;
+import org.apache.guacamole.pam.Values;
 import org.apache.guacamole.pam.approval.ApprovalRequest;
 import org.apache.guacamole.pam.approval.Approver;
 import org.apache.guacamole.pam.checkout.Checkout;
@@ -361,12 +362,10 @@ public class PamREST {
     }
 
     private static int parseId(String id) throws GuacamoleResourceNotFoundException {
-        try {
-            return Integer.parseInt(id);
-        }
-        catch (NumberFormatException e) {
+        Integer parsed = Values.parseId(id);
+        if (parsed == null)
             throw new GuacamoleResourceNotFoundException("Not found.");
-        }
+        return parsed;
     }
 
 }

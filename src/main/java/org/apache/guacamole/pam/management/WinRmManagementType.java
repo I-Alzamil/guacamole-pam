@@ -3,7 +3,6 @@ package org.apache.guacamole.pam.management;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -91,7 +90,7 @@ public class WinRmManagementType implements ManagementType {
 
     @Override
     public void validate(Platform platform) throws GuacamoleClientException {
-        Map<String, String> values = merge(platform);
+        Map<String, String> values = platform.settingsWithSecrets();
         values.put(WinRmTarget.HOSTNAME, "validation");
         values.put(WinRmTarget.USERNAME, "validation");
         try {
@@ -106,7 +105,7 @@ public class WinRmManagementType implements ManagementType {
     public PasswordChanger createChanger(Platform platform, Target target) {
 
         Map<String, String> parameters = target.getParameters();
-        Map<String, String> values = merge(platform);
+        Map<String, String> values = platform.settingsWithSecrets();
 
         String hostname = target.getAttribute(HOSTNAME);
         values.put(WinRmTarget.HOSTNAME, hostname != null ? hostname : parameters.get("hostname"));
@@ -136,10 +135,5 @@ public class WinRmManagementType implements ManagementType {
 
     }
 
-    private static Map<String, String> merge(Platform platform) {
-        Map<String, String> values = new HashMap<>(platform.getSettings());
-        values.putAll(platform.getSecrets());
-        return values;
-    }
 
 }

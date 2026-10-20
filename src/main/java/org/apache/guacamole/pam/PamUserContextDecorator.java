@@ -81,7 +81,7 @@ public class PamUserContextDecorator extends DelegatingUserContext {
 
         ConnectionSecrets.Saving saving;
         try {
-            saving = connectionSecrets.prepare(toId(object.getIdentifier()), configuration.getProtocol(),
+            saving = connectionSecrets.prepare(Values.parseId(object.getIdentifier()), configuration.getProtocol(),
                     configuration.getParameters());
         }
         catch (GuacamoleServerException e) {
@@ -103,21 +103,12 @@ public class PamUserContextDecorator extends DelegatingUserContext {
 
     }
 
-    private static Integer toId(String identifier) {
-        try {
-            return identifier == null ? null : Integer.valueOf(identifier);
-        }
-        catch (NumberFormatException e) {
-            return null;
-        }
-    }
-
     /**
      * Completes storing the sensitive parameters of a saved connection.
      */
     private static void completeSecrets(ConnectionSecrets.Saving saving, Connection object)
             throws GuacamoleException {
-        Integer id = toId(object.getIdentifier());
+        Integer id = Values.parseId(object.getIdentifier());
         if (saving != null && id != null)
             saving.complete(id);
     }
@@ -227,7 +218,7 @@ public class PamUserContextDecorator extends DelegatingUserContext {
             // Guacamole shows users no detail of a server error, only logs it
             Map<String, String> withSecrets = new HashMap<>(tokens);
             for (String identifier : getConnectionIdentifiers()) {
-                Integer id = toId(identifier);
+                Integer id = Values.parseId(identifier);
                 try {
                     if (id != null)
                         withSecrets.putAll(connectionSecrets.getTokens(id));

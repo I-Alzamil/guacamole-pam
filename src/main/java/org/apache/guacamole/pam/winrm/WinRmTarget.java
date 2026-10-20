@@ -3,6 +3,8 @@ package org.apache.guacamole.pam.winrm;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import org.apache.guacamole.pam.Values;
+
 /**
  * A local Windows account and the host holding it, reached over WinRM
  * (HTTPS), read from the settings of a WinRM platform combined with the
@@ -111,12 +113,12 @@ public final class WinRmTarget {
      */
     public static WinRmTarget fromParameters(Map<String, String> parameters) {
 
-        String hostname = blankToNull(parameters.get(HOSTNAME));
+        String hostname = Values.trimToNull(parameters.get(HOSTNAME));
         if (hostname == null)
             throw new IllegalArgumentException("The connection has no hostname. Set the WinRM hostname in its"
                     + " password management settings.");
 
-        String username = blankToNull(parameters.get(USERNAME));
+        String username = Values.trimToNull(parameters.get(USERNAME));
         if (username == null)
             throw new IllegalArgumentException("The connection has no username.");
 
@@ -127,8 +129,8 @@ public final class WinRmTarget {
         if (account.getName().isEmpty() || INVALID_ACCOUNT_CHARACTERS.matcher(account.getName()).find())
             throw new IllegalArgumentException("Invalid Windows account name: " + username);
 
-        String adminUsername = blankToNull(parameters.get(ADMIN_USERNAME));
-        String adminPassword = blankToNull(parameters.get(ADMIN_PASSWORD));
+        String adminUsername = Values.trimToNull(parameters.get(ADMIN_USERNAME));
+        String adminPassword = Values.trimToNull(parameters.get(ADMIN_PASSWORD));
         if (adminUsername != null && adminPassword == null)
             throw new IllegalArgumentException("The administrator account has no password.");
 
@@ -137,8 +139,8 @@ public final class WinRmTarget {
             throw new IllegalArgumentException("Invalid administrator name: " + adminUsername
                     + " (expected \"name\", \"DOMAIN\\name\" or \"name@domain\").");
 
-        return new WinRmTarget(hostname, parsePort(parameters.get(PORT)), normalize(parameters.get(CERTIFICATE)),
-                account, blankToNull(parameters.get(PASSWORD)), admin, adminPassword);
+        return new WinRmTarget(hostname, Values.parsePort(parameters.get(PORT), DEFAULT_PORT), normalize(parameters.get(CERTIFICATE)),
+                account, Values.trimToNull(parameters.get(PASSWORD)), admin, adminPassword);
 
     }
 
@@ -155,7 +157,7 @@ public final class WinRmTarget {
      * prints it, or null if empty.
      */
     static String normalize(String fingerprint) {
-        String value = blankToNull(fingerprint);
+        String value = Values.trimToNull(fingerprint);
         if (value == null)
             return null;
         if (value.regionMatches(true, 0, "sha256 fingerprint=", 0, 19))
@@ -172,25 +174,6 @@ public final class WinRmTarget {
      */
     static boolean isFingerprint(String value) {
         return value != null && value.matches("([0-9A-F]{2}:){31}[0-9A-F]{2}");
-    }
-
-    private static int parsePort(String value) {
-        value = blankToNull(value);
-        if (value == null)
-            return DEFAULT_PORT;
-        try {
-            int port = Integer.parseInt(value);
-            if (port > 0 && port < 65536)
-                return port;
-        }
-        catch (NumberFormatException e) {
-            // Reported below
-        }
-        throw new IllegalArgumentException("Invalid port: " + value);
-    }
-
-    private static String blankToNull(String value) {
-        return value == null || value.trim().isEmpty() ? null : value.trim();
     }
 
     public String getHostname() {
