@@ -4,9 +4,10 @@ Privileged access management for [Apache Guacamole](https://guacamole.apache.org
 
 - **Password rotation.** Each connection's password is either just stored, or
   managed by a *platform*. A platform describes how passwords are changed: over
-  SSH with a send/expect script, over LDAP / Active Directory, over Kerberos
-  (kpasswd, for MIT Kerberos, Heimdal and Active Directory realms), or over
-  WinRM (local Windows accounts). It also sets
+  SSH with a send/expect script, over LDAP (OpenLDAP, Active Directory and
+  other directories), over Kerberos (kpasswd, for MIT Kerberos, Heimdal and
+  Active Directory realms), or over WinRM (local Windows accounts, HTTPS
+  only): its *type*. It also sets
   when they're changed: never, after each use, or periodically. The new password
   is only stored once the target accepts it.
 - **Accounts.** An "Account" connection type holds a password that users check
