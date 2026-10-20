@@ -95,9 +95,9 @@ for c in $IN_GATED $IN_MANAGED $IN_OPEN $IN_FOLDER; do P="$P{\"op\":\"add\",\"pa
 grant t2-viewer "${P%,}]"
 VIEWER=$(token t2-viewer t2-viewer-pw)
 
-check_contains "a group over a connection requiring a request is refused" "400 Connection group \"t2 balancing gated\" balances over" "$(tunnel "$VIEWER" "$BALANCED_GATED" g)"
-check_contains "...for administrators too" "400 Connection group" "$(tunnel "$ADMIN" "$BALANCED_GATED" g)"
-check_contains "a group over a managed connection is refused" "400 Connection group \"t2 balancing managed\"" "$(tunnel "$VIEWER" "$BALANCED_MANAGED" g)"
+check_contains "a group over a connection requiring a request is refused" "403 Connection group \"t2 balancing gated\" balances over" "$(tunnel "$VIEWER" "$BALANCED_GATED" g)"
+check_contains "...for administrators too" "403 Connection group" "$(tunnel "$ADMIN" "$BALANCED_GATED" g)"
+check_contains "a group over a managed connection is refused" "403 Connection group \"t2 balancing managed\"" "$(tunnel "$VIEWER" "$BALANCED_MANAGED" g)"
 check "a group over unchecked connections connects" 200 "$(tunnel "$VIEWER" "$BALANCED_OPEN" g)"
 check "a folder's connection opens as usual" 200 "$(tunnel "$VIEWER" "$IN_FOLDER" c)"
 check "the connection tree still loads" 200 "$(status_of "$(api GET "$DATA/connectionGroups/ROOT/tree" "$VIEWER")")"

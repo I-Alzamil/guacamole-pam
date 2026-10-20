@@ -240,8 +240,9 @@ public class CheckoutService {
      * administrators bypass requests (which is logged). The same applies to
      * Accounts, through {@link #request}.
      *
-     * @throws GuacamoleClientException
-     *     If the user must request access first.
+     * @throws GuacamoleSecurityException
+     *     If the user must request access first: forbidden, which the web
+     *     UI explains when refusing a session.
      */
     public void requireAccess(String identifier, String username, boolean administrator)
             throws GuacamoleException {
@@ -262,7 +263,7 @@ public class CheckoutService {
             return;
         }
 
-        throw new GuacamoleClientException("You must request access to this connection, and have it approved"
+        throw new GuacamoleSecurityException("You must request access to this connection, and have it approved"
                     + " if needed, before connecting.");
 
     }
@@ -273,7 +274,7 @@ public class CheckoutService {
      * connection Guacamole picks would be opened without its checks, and its
      * session would not be tracked for rotation.
      *
-     * @throws GuacamoleClientException
+     * @throws GuacamoleSecurityException
      *     If the group contains such a connection.
      */
     public void requireBalanceable(String groupName, Iterable<String> connectionIdentifiers)
@@ -283,7 +284,7 @@ public class CheckoutService {
             Integer id = parseId(identifier);
             Target target = id == null ? null : connections.load(id);
             if (target != null && (isRequestable(target) || isManaged(target)))
-                throw new GuacamoleClientException("Connection group \"" + groupName + "\" balances over \""
+                throw new GuacamoleSecurityException("Connection group \"" + groupName + "\" balances over \""
                         + target.getName() + "\", which requires a request or has its password managed."
                         + " Open that connection directly instead.");
         }

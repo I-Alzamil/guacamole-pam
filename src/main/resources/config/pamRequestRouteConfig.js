@@ -1,18 +1,22 @@
 /**
  * Opens the request dialog, instead of the client, when a connection needing
  * a request is opened from anywhere in the web UI (home screen, recent
- * connections, bookmarks): always for Accounts, and for other connections
- * unless the user holds access. The server refuses sessions without access
- * regardless, so this only decides what the user sees.
+ * connections, bookmarks, the connections of the menu within a session,
+ * also when added beside the current session): always for Accounts, and for
+ * other connections unless the user holds access. The server refuses
+ * sessions without access regardless, so this only decides what the user
+ * sees.
  */
 angular.module('guacPam').run(['$injector', function pamRequestRouteConfig($injector) {
 
     // Required types
-    var ClientIdentifier = $injector.get('ClientIdentifier');
+    var ClientIdentifier   = $injector.get('ClientIdentifier');
+    var ManagedClientGroup = $injector.get('ManagedClientGroup');
 
     // Required services
     var $compile              = $injector.get('$compile');
     var $location             = $injector.get('$location');
+    var $route                = $injector.get('$route');
     var $rootScope            = $injector.get('$rootScope');
     var authenticationService = $injector.get('authenticationService');
     var pamRequestService     = $injector.get('pamRequestService');
@@ -23,28 +27,68 @@ angular.module('guacPam').run(['$injector', function pamRequestRouteConfig($inje
     var DATA_SOURCE = 'postgresql';
 
     /**
-     * Returns the identifier of the connection a client route opens, or null
-     * if the route does not open a connection of the managed data source.
+     * Returns the connections of the managed data source a client route
+     * opens, as { client: client identifier, id: connection identifier }.
+     * A route may open several clients side by side, such as when one is
+     * added beside the current session from the menu.
      */
-    var getRequestedConnection = function getRequestedConnection(route) {
+    var getRequestedConnections = function getRequestedConnections(route) {
+        if (!isClientRoute(route) || !route.params.id)
+            return [];
+        return getConnectionsOfClients(route.params.id);
+    };
 
-        if (!route || !route.$$route || route.$$route.originalPath !== '/client/:id' || !route.params.id)
-            return null;
+    var isClientRoute = function isClientRoute(route) {
+        return !!route && !!route.$$route && route.$$route.originalPath === '/client/:id';
+    };
 
-        var clientIdentifier;
-        try {
-            clientIdentifier = ClientIdentifier.fromString(route.params.id);
+    /**
+     * The connections of the managed data source among the clients of a
+     * client route's identifier (several joined by ".").
+     */
+    var getConnectionsOfClients = function getConnectionsOfClients(clients) {
+
+        var connections = [];
+        angular.forEach(ManagedClientGroup.getClientIdentifiers(clients), function addClient(client) {
+
+            var clientIdentifier;
+            try {
+                clientIdentifier = ClientIdentifier.fromString(client);
+            }
+            catch (e) {
+                return;
+            }
+
+            if (clientIdentifier.type === ClientIdentifier.Types.CONNECTION
+                    && clientIdentifier.dataSource === DATA_SOURCE)
+                connections.push({ client : client, id : clientIdentifier.id });
+
+        });
+
+        return connections;
+
+    };
+
+    /**
+     * Returns the first of the given connections the user must request, or
+     * null.
+     */
+    var findMustRequest = function findMustRequest(connections) {
+        for (var i = 0; i < connections.length; i++) {
+            if (pamRequestService.mustRequest(connections[i].id))
+                return connections[i];
         }
-        catch (e) {
-            return null;
-        }
+        return null;
+    };
 
-        if (clientIdentifier.type !== ClientIdentifier.Types.CONNECTION
-                || clientIdentifier.dataSource !== DATA_SOURCE)
-            return null;
-
-        return clientIdentifier.id;
-
+    /**
+     * Unticks a connection added beside the current session in the menu,
+     * as it was not added.
+     */
+    var untick = function untick(current, connection) {
+        var context = current && current.scope && current.scope.connectionListContext;
+        if (context && context.attachedClients)
+            delete context.attachedClients[connection.client];
     };
 
     /**
@@ -58,16 +102,58 @@ angular.module('guacPam').run(['$injector', function pamRequestRouteConfig($inje
         pamRequestService.open(identifier);
     };
 
-    $rootScope.$on('$routeChangeStart', function interceptRequestConnection(event, next, current) {
+    /**
+     * Within a session, the client page stays open when the clients it
+     * shows change (another connection opened, or added beside it, from the
+     * menu): the route is only updated, so the change of URL is intercepted
+     * instead. Connections already shown are left alone.
+     */
+    $rootScope.$on('$locationChangeStart', function interceptClientUpdate(event, newUrl, oldUrl) {
 
-        var identifier = getRequestedConnection(next);
-        if (identifier === null)
+        var current = $route.current;
+        if (!isClientRoute(current) || !pamRequestService.isLoaded())
             return;
 
+        var match = /#\/client\/([^?\/]+)/.exec(newUrl || '');
+        if (!match)
+            return;
+
+        var shown = {};
+        angular.forEach(getRequestedConnections(current), function addShown(connection) {
+            shown[connection.client] = true;
+        });
+
+        var added = getConnectionsOfClients(decodeURIComponent(match[1])).filter(function isAdded(connection) {
+            return !shown[connection.client];
+        });
+
+        var mustRequest = findMustRequest(added);
+        if (mustRequest) {
+            event.preventDefault();
+            untick(current, mustRequest);
+            showDialog(mustRequest.id, current);
+        }
+
+    });
+
+    $rootScope.$on('$routeChangeStart', function interceptRequestConnection(event, next, current) {
+
+        var connections = getRequestedConnections(next);
+        if (!connections.length)
+            return;
+
+        // Stays on the current page (such as the session the connection was
+        // to be added beside), showing the dialog over it
+        var refuse = function refuse(connection) {
+            untick(current, connection);
+            showDialog(connection.id, current);
+        };
+
         if (pamRequestService.isLoaded()) {
-            if (pamRequestService.mustRequest(identifier)) {
+            var mustRequest = findMustRequest(connections);
+            if (mustRequest) {
                 event.preventDefault();
-                showDialog(identifier, current);
+                refuse(mustRequest);
             }
             return;
         }
@@ -76,8 +162,9 @@ angular.module('guacPam').run(['$injector', function pamRequestRouteConfig($inje
         var url = $location.url();
         event.preventDefault();
         pamRequestService.refresh().then(function requestsLoaded() {
-            if (pamRequestService.mustRequest(identifier))
-                showDialog(identifier, current);
+            var mustRequest = findMustRequest(connections);
+            if (mustRequest)
+                refuse(mustRequest);
             else
                 $location.url(url);
         });

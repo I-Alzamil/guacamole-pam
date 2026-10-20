@@ -5,8 +5,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
+import org.apache.guacamole.GuacamoleSecurityException;
 import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.net.DelegatingGuacamoleTunnel;
 import org.apache.guacamole.net.GuacamoleTunnel;
@@ -114,9 +114,10 @@ public class PamConnection extends DelegatingConnection {
             throws GuacamoleException {
 
         // Accounts never open a session, even if the web UI is bypassed;
-        // their password is checked out instead
+        // their password is checked out instead. Refused as forbidden, which
+        // the web UI explains (it shows any other client error as internal)
         if (AccountProtocol.NAME.equals(getConfiguration().getProtocol()))
-            throw new GuacamoleClientException("This is an Account, which has no session."
+            throw new GuacamoleSecurityException("This is an Account, which has no session."
                     + " Select it on the home screen to check out its password.");
 
         // Connections requiring a request need an active checkout

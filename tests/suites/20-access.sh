@@ -95,8 +95,9 @@ api DELETE "$PAM/requests/$ACCOUNT/pending" "$APPROVER1" >/dev/null
 
 # ---------------------------------------------------------------- connections needing a checkout
 section "Connections that need a checkout"
-check_contains "the gated connection refuses a session without a checkout" "400 You must request access" "$(tunnel "$REQUESTER" "$GATED" c)"
+check_contains "the gated connection refuses a session without a checkout" "403 You must request access" "$(tunnel "$REQUESTER" "$GATED" c)"
 check "the open connection needs no request" 200 "$(tunnel "$REQUESTER" "$OPEN" c)"
+check_contains "an Account refuses any session, as forbidden (which the web UI explains)" "403 This is an Account" "$(tunnel "$REQUESTER" "$ACCOUNT" c)"
 check "the requester checks out the gated connection" 200 "$(status_of "$(api POST "$PAM/requests/$GATED" "$REQUESTER" '{"reason":"T2 maintenance"}')")"
 check "...and can now open it" 200 "$(tunnel "$REQUESTER" "$GATED" c)"
 ACTIVE=$(curl -s "$PAM/checkouts/active?token=$ADMIN" | python3 -I -c "
@@ -105,7 +106,7 @@ m=[c['id'] for c in json.load(sys.stdin) if c['username']=='t2-requester' and c[
 print(m[0] if m else '')" "$GATED")
 check "the administrator sees the active checkout" yes "$([ -n "$ACTIVE" ] && echo yes)"
 check "the administrator revokes it" 204 "$(status_of "$(api POST "$PAM/checkouts/$ACTIVE/revoke" "$ADMIN")")"
-check_contains "...and the connection refuses a new session" "400 You must request access" "$(tunnel "$REQUESTER" "$GATED" c)"
+check_contains "...and the connection refuses a new session" "403 You must request access" "$(tunnel "$REQUESTER" "$GATED" c)"
 
 # ---------------------------------------------------------------- administrators
 section "Administrators (default: give a reason, skip approvals)"
@@ -113,4 +114,4 @@ check_contains "an administrator must give a reason too" "reason" "$(message_of 
 GRANT=$(api POST "$PAM/requests/$ACCOUNT" "$ADMIN" '{"reason":"T2 admin access"}')
 check "...but gets the password without approvals" "200 $ACCOUNT_PASSWORD" "$(status_of "$GRANT") $(json_get "${GRANT#* }" "d.get('password')")"
 api POST "$PAM/requests/$ACCOUNT/release" "$ADMIN" >/dev/null
-check_contains "an administrator also needs a checkout to connect" "400 You must request access" "$(tunnel "$ADMIN" "$GATED" c)"
+check_contains "an administrator also needs a checkout to connect" "403 You must request access" "$(tunnel "$ADMIN" "$GATED" c)"
