@@ -179,10 +179,29 @@ public class PlatformRepository {
         Platform clean = sanitize(platform, null);
 
         int id;
-        try (Connection connection = database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                 "INSERT INTO pam_platform (name, description, type, settings, secrets, policy)"
-               + " VALUES (?, ?, ?, ?, ?, ?) RETURNING platform_id")) {
+        try (Connection connection = database.getConnection()) {
+            id = insert(connection, clean, false);
+        }
+        catch (SQLException e) {
+            throw translate(e, clean);
+        }
+
+        return getWithSecrets(id);
+
+    }
+
+    /**
+     * Inserts a sanitized platform through the caller's connection,
+     * returning its identifier, or -1 if one of that name exists and
+     * existing ones are to be left alone.
+     */
+    int insert(Connection connection, Platform clean, boolean unlessExisting)
+            throws SQLException, GuacamoleException {
+
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT INTO pam_platform (name, description, type, settings, secrets, policy)"
+              + " VALUES (?, ?, ?, ?, ?, ?)"
+              + (unlessExisting ? " ON CONFLICT (name) DO NOTHING" : "") + " RETURNING platform_id")) {
 
             statement.setString(1, clean.getName());
             statement.setString(2, clean.getDescription());
@@ -192,16 +211,10 @@ public class PlatformRepository {
             statement.setString(6, toJson(clean.getPolicy()));
 
             try (ResultSet results = statement.executeQuery()) {
-                results.next();
-                id = results.getInt(1);
+                return results.next() ? results.getInt(1) : -1;
             }
 
         }
-        catch (SQLException e) {
-            throw translate(e, clean);
-        }
-
-        return getWithSecrets(id);
 
     }
 
@@ -223,19 +236,8 @@ public class PlatformRepository {
 
         Platform clean = sanitize(platform, existing);
 
-        try (Connection connection = database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                 "UPDATE pam_platform SET name = ?, description = ?, settings = ?, secrets = ?, policy = ?,"
-               + " last_modified = CURRENT_TIMESTAMP WHERE platform_id = ?")) {
-
-            statement.setString(1, clean.getName());
-            statement.setString(2, clean.getDescription());
-            statement.setString(3, toJson(clean.getSettings()));
-            statement.setString(4, secrets.protect(Secrets.PLATFORM_SECRETS, toJson(clean.getSecrets())));
-            statement.setString(5, toJson(clean.getPolicy()));
-            statement.setInt(6, id);
-            statement.executeUpdate();
-
+        try (Connection connection = database.getConnection()) {
+            update(connection, id, clean);
         }
         catch (SQLException e) {
             throw translate(e, clean);
@@ -243,6 +245,52 @@ public class PlatformRepository {
 
         return getWithSecrets(id);
 
+    }
+
+    /**
+     * Updates a platform with a sanitized one, through the caller's
+     * connection.
+     */
+    void update(Connection connection, int id, Platform clean) throws SQLException, GuacamoleException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE pam_platform SET name = ?, description = ?, settings = ?, secrets = ?, policy = ?,"
+              + " last_modified = CURRENT_TIMESTAMP WHERE platform_id = ?")) {
+            statement.setString(1, clean.getName());
+            statement.setString(2, clean.getDescription());
+            statement.setString(3, toJson(clean.getSettings()));
+            statement.setString(4, secrets.protect(Secrets.PLATFORM_SECRETS, toJson(clean.getSecrets())));
+            statement.setString(5, toJson(clean.getPolicy()));
+            statement.setInt(6, id);
+            statement.executeUpdate();
+        }
+    }
+
+    /**
+     * Returns every platform by name, with its secrets decrypted for
+     * server-side use.
+     */
+    Map<String, Platform> getAllWithSecretsByName() throws GuacamoleException {
+
+        Map<String, Platform> platforms = new HashMap<>();
+
+        try (Connection connection = database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(SELECT);
+             ResultSet results = statement.executeQuery()) {
+            while (results.next()) {
+                Platform platform = toPlatform(results, true);
+                platforms.put(platform.getName(), platform);
+            }
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to list platforms.", e);
+        }
+
+        return platforms;
+
+    }
+
+    Connection getConnection() throws GuacamoleException {
+        return database.getConnection();
     }
 
     /**

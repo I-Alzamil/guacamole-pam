@@ -75,6 +75,15 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
         return request('POST', 'platforms', body);
     };
 
+    /**
+     * Imports platforms, all or none, resolving with the report of each:
+     * those named as existing ones update them if "update" is true, and
+     * otherwise refuse the import.
+     */
+    service.importPlatforms = function importPlatforms(platforms, update) {
+        return request('POST', 'platforms/import', { platforms : platforms, update : !!update });
+    };
+
     service.deletePlatform = function deletePlatform(id) {
         return request('DELETE', 'platforms/' + encodeURIComponent(id));
     };

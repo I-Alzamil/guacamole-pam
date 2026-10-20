@@ -19,6 +19,7 @@ import javax.ws.rs.core.CacheControl;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
+import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleResourceNotFoundException;
 import org.apache.guacamole.GuacamoleSecurityException;
@@ -34,6 +35,7 @@ import org.apache.guacamole.pam.checkout.PasswordRequest;
 import org.apache.guacamole.pam.management.ManagementType;
 import org.apache.guacamole.pam.management.ManagementTypes;
 import org.apache.guacamole.pam.platform.Platform;
+import org.apache.guacamole.pam.platform.PlatformImport;
 import org.apache.guacamole.pam.ssh.SequenceScript;
 import org.apache.guacamole.pam.ssh.ValidationResult;
 import org.apache.guacamole.pam.rotation.ManagedConnection;
@@ -183,6 +185,20 @@ public class PamREST {
     @Path("platforms")
     public List<Platform> listPlatforms() throws GuacamoleException {
         return provider.getPlatforms().list(provider.isAdministrator(user));
+    }
+
+    /**
+     * Imports platforms, all or none: those named as existing ones fail the
+     * import unless asked to update them.
+     */
+    @POST
+    @Path("platforms/import")
+    public PlatformImport.Report importPlatforms(PlatformImport.Request request) throws GuacamoleException {
+        requireAdministrator();
+        if (request == null)
+            throw new GuacamoleClientException("There is no platform to import.");
+        return provider.getPlatformImport().run(request.getPlatforms(),
+                request.isUpdate() ? PlatformImport.Existing.UPDATE : PlatformImport.Existing.REFUSE);
     }
 
     @GET

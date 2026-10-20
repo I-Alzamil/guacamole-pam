@@ -814,3 +814,86 @@ td.pam-truncate {
     width: 313.2px;
     height: 60px;
 }
+
+/* Import and export of platforms, next to the filter */
+.pam-platform-transfer {
+    display: flex;
+    gap: 0.25em;
+    margin-left: auto;
+    padding-left: 0.5em;
+}
+
+.pam-platform-transfer button {
+    margin: 0;
+}
+
+.pam-import-dialog {
+    max-width: 40em;
+}
+
+/* Choosing the file to import, or dropping it */
+.pam-import-drop {
+    display: block;
+    margin: 0.75em 0;
+    padding: 1em;
+    border: 2px dashed rgba(0, 0, 0, 0.25);
+    border-radius: 0.3em;
+    text-align: center;
+    cursor: pointer;
+}
+
+.pam-import-drop:hover,
+.pam-import-drop.pam-drop-target {
+    border-color: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.03);
+}
+
+/* The whole area is the input's label, which opens the file chooser */
+.pam-import-drop input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+}
+
+.pam-import-drop:focus-within {
+    outline: 2px solid rgba(0, 0, 0, 0.5);
+}
+
+.pam-import-drop strong {
+    display: block;
+    margin-bottom: 0.25em;
+}
+
+.pam-import-option {
+    display: block;
+    margin: 0.5em 0;
+}
+
+.pam-import-error {
+    color: #8a1c1c;
+}
+
+.pam-import-done {
+    color: #1c5e1c;
+    font-weight: bold;
+}
+
+.pam-import-results {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5em 0;
+}
+
+.pam-import-results th,
+.pam-import-results td {
+    text-align: left;
+    vertical-align: top;
+    padding: 0.3em 0.5em;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.pam-import-results tr.pam-import-invalid td {
+    color: #8a1c1c;
+}

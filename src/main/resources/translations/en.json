@@ -302,5 +302,29 @@
         "HELP_APPROVE_GROUP": "May approve requests for every connection in this group, including ones added later",
         "HELP_SELECT_GROUP": "Members may approve requests for the connections and connection groups ticked \"Approve\" in the connections list below ({COUNT} selected).",
         "HELP_SELECT_USER": "This user may approve requests for the connections and connection groups ticked \"Approve\" in the connections list below ({COUNT} selected)."
+    },
+    "PAM_PLATFORM_TRANSFER": {
+        "ACTION_EXPORT": "Export",
+        "ACTION_IMPORT": "Import",
+        "DIALOG_HEADER_IMPORT": "Import platforms",
+        "ERROR_EMPTY": "This file holds no platform.",
+        "ERROR_FORMAT": "This file is not a platforms export.",
+        "ERROR_NOT_JSON": "This file is not JSON.",
+        "ERROR_READ": "The file could not be read.",
+        "ERROR_VERSION": "This file comes from a newer version of the extension.",
+        "FIELD_UPDATE_EXISTING": "Update platforms that already exist (by name)",
+        "HELP_EXPORT": "Download the platforms listed, without their passwords, to import them here or on another server.",
+        "HELP_IMPORT": "Add or update platforms from a file exported on this page.",
+        "HELP_IMPORT_FILE": "Each platform is checked as when saved in the editor: if any is invalid, nothing is imported. Exports carry no passwords. Updated platforms keep their stored ones; for new platforms that need one, add it to the platform's settings in the file (such as \"winrm-admin-password\"), or import them without the administrator and set it in the editor.",
+        "INFO_FILE_READ": "{FILE}: {COUNT, plural, one{1 platform} other{# platforms}}",
+        "OUTCOME_CREATED": "Would be created",
+        "OUTCOME_INVALID": "Invalid",
+        "OUTCOME_SKIPPED": "Already exists",
+        "OUTCOME_UPDATED": "Would be updated",
+        "TABLE_HEADER_OUTCOME": "Result",
+        "TEXT_DROP_ANOTHER_FILE": "Choose another file, or drop it here.",
+        "TEXT_DROP_FILE": "Choose a file, or drop it here.",
+        "TEXT_IMPORTED": "Imported: {CREATED} created, {UPDATED} updated.",
+        "TEXT_NOT_IMPORTED": "Nothing was imported. Fix the platforms marked invalid, then import again."
     }
 }

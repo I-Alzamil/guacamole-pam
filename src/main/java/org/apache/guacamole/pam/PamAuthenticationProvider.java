@@ -24,6 +24,7 @@ import org.apache.guacamole.pam.crypto.Secrets;
 import org.apache.guacamole.pam.db.ConnectionRepository;
 import org.apache.guacamole.pam.db.PamDatabase;
 import org.apache.guacamole.pam.db.ConnectionSecrets;
+import org.apache.guacamole.pam.platform.PlatformImport;
 import org.apache.guacamole.pam.platform.PlatformRepository;
 import org.apache.guacamole.pam.rotation.RotationService;
 import org.apache.guacamole.properties.BooleanGuacamoleProperty;
@@ -67,6 +68,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     private final PlatformRepository platforms;
 
+    private final PlatformImport platformImport;
+
     private final ConnectionRepository connections;
 
     private final RotationService rotationService;
@@ -109,6 +112,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         if (!active) {
             logger.warn("The PAM extension is inactive: {} Guacamole works as without it.", unavailable);
             platforms = null;
+            platformImport = null;
             connections = null;
             rotationService = null;
             approvals = null;
@@ -128,6 +132,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         CheckoutRepository checkouts = new CheckoutRepository(database);
         connectionSecrets = new ConnectionSecrets(database, secrets);
         platforms = new PlatformRepository(database, secrets);
+        platformImport = new PlatformImport(platforms);
         connections = new ConnectionRepository(database, secrets, connectionSecrets);
         secretMigration = new SecretMigration(database, platforms, connections, connectionSecrets, secrets);
         rotationService = new RotationService(database, platforms, connections, checkouts);
@@ -218,6 +223,10 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     public PlatformRepository getPlatforms() {
         return platforms;
+    }
+
+    public PlatformImport getPlatformImport() {
+        return platformImport;
     }
 
     public ConnectionRepository getConnections() {

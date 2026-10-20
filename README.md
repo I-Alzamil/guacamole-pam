@@ -222,6 +222,16 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   Rotation**, **Checkouts** and **Approvals**. Approvers who aren't
   administrators only get **Approvals**, for the connections their permission
   covers.
+- **Platforms can be exported and imported**, from the **Platforms** tab, to
+  copy them to another server or keep them under version control. **Export**
+  downloads the platforms listed (so the filter narrows it down) as JSON,
+  without their passwords, which never leave the server. **Import** checks
+  every platform as the editor does when saving one, and imports all of them
+  or none. Platforms are matched by name: a platform that already exists makes
+  the import fail, unless **Update platforms that already exist** is ticked.
+  Updated platforms keep their stored passwords, unless where they are sent
+  changes. A new platform that needs a password can be given it among its
+  settings in the file, such as `"winrm-admin-password"`.
 - Approvers see a yellow badge counting requests awaiting their decision.
   Administrators also see a red badge counting failed rotations. Each user can
   turn either off under **Preferences → Notification badges**.
