@@ -320,7 +320,7 @@ public class RotationService {
             Map<Integer, Integer> sessionCounts = sessions.countAll();
             Set<Integer> held = new HashSet<>();
             for (Checkout checkout : checkouts.listActive())
-                held.add(Integer.valueOf(checkout.getConnectionIdentifier()));
+                held.add(Values.parseId(checkout.getConnectionIdentifier()));
 
             for (Target target : connections.listManaged()) {
 

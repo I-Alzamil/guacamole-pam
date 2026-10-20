@@ -145,6 +145,15 @@ public class PamUserContextDecorator extends DelegatingUserContext {
                 completeSecrets(saving, object);
             }
 
+            // Its checkouts and pending requests end with it; their rows
+            // stay, as the audit log
+            @Override
+            public void remove(String identifier) throws GuacamoleException {
+                CheckoutService.Deletion deletion = checkoutService.prepareDeletion(identifier);
+                super.remove(identifier);
+                deletion.complete(self().getIdentifier());
+            }
+
             @Override
             protected Connection undecorate(Connection object) throws GuacamoleException {
                 Connection stored = object.getIdentifier() == null ? null : connections.get(object.getIdentifier());

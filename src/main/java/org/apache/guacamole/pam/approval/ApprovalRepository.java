@@ -59,7 +59,11 @@ public class ApprovalRepository {
 
     private volatile long lastExpiry = 0;
 
-    private static final String SELECT = "SELECT r.request_id, r.connection_id, c.connection_name,"
+    /**
+     * The connection's current name, or the one it had once deleted.
+     */
+    private static final String SELECT = "SELECT r.request_id, r.connection_id,"
+            + " coalesce(c.connection_name, r.connection_name),"
             + " (SELECT parameter_value FROM guacamole_connection_parameter p"
             + "   WHERE p.connection_id = r.connection_id AND p.parameter_name = '" + AccountProtocol.USERNAME + "'),"
             + " r.username, r.reason, r.requested, r.approvals_required, r.status, r.decided, r.decided_by,"
@@ -67,7 +71,7 @@ public class ApprovalRepository {
             + " (SELECT array_agg(a.approver ORDER BY a.approved) FROM pam_request_approval a"
             + "   WHERE a.request_id = r.request_id),"
             + " r.decision_reason"
-            + " FROM pam_request r JOIN guacamole_connection c ON c.connection_id = r.connection_id";
+            + " FROM pam_request r LEFT JOIN guacamole_connection c ON c.connection_id = r.connection_id";
 
     private final PamDatabase database;
 
@@ -224,16 +228,18 @@ public class ApprovalRepository {
         int id;
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                 "INSERT INTO pam_request (connection_id, username, reason, approvals_required)"
-               + " VALUES (?, ?, ?, ?) RETURNING request_id")) {
+                 "INSERT INTO pam_request (connection_id, connection_name, username, reason, approvals_required)"
+               + " SELECT connection_id, connection_name, ?, ?, ? FROM guacamole_connection"
+               + " WHERE connection_id = ? RETURNING request_id")) {
 
-            statement.setInt(1, connectionId);
-            statement.setString(2, username);
-            statement.setString(3, reason);
-            statement.setInt(4, approvalsRequired);
+            statement.setString(1, username);
+            statement.setString(2, reason);
+            statement.setInt(3, approvalsRequired);
+            statement.setInt(4, connectionId);
 
             try (ResultSet results = statement.executeQuery()) {
-                results.next();
+                if (!results.next())
+                    throw new GuacamoleResourceNotFoundException("The connection no longer exists.");
                 id = results.getInt(1);
             }
 
@@ -278,7 +284,8 @@ public class ApprovalRepository {
      */
     public Map<Integer, ApprovalRequest> listPendingOf(String username) throws GuacamoleException {
         expireStale(false);
-        return byConnection(query(SELECT + " WHERE r.username = ? AND r.status = 'PENDING'", username));
+        return byConnection(query(SELECT + " WHERE r.username = ? AND r.status = 'PENDING'"
+                + " AND r.connection_id IS NOT NULL", username));
     }
 
     /**
@@ -287,7 +294,8 @@ public class ApprovalRepository {
      */
     public Map<Integer, ApprovalRequest> listLatestOf(String username) throws GuacamoleException {
         return byConnection(query(SELECT.replaceFirst("^SELECT ", "SELECT DISTINCT ON (r.connection_id) ")
-                + " WHERE r.username = ? ORDER BY r.connection_id, r.requested DESC", username));
+                + " WHERE r.username = ? AND r.connection_id IS NOT NULL ORDER BY r.connection_id, r.requested DESC",
+                username));
     }
 
     private static Map<Integer, ApprovalRequest> byConnection(List<ApprovalRequest> requests) {
@@ -297,9 +305,17 @@ public class ApprovalRepository {
         return map;
     }
 
+    /**
+     * Returns every pending request for a connection.
+     */
+    public List<ApprovalRequest> listPending(int connectionId) throws GuacamoleException {
+        expireStale(false);
+        return query(SELECT + " WHERE r.connection_id = ? AND r.status = 'PENDING'", connectionId);
+    }
+
     public List<ApprovalRequest> listPending() throws GuacamoleException {
         expireStale(false);
-        return query(SELECT + " WHERE r.status = 'PENDING' ORDER BY r.requested");
+        return query(SELECT + " WHERE r.status = 'PENDING' AND r.connection_id IS NOT NULL ORDER BY r.requested");
     }
 
     /**
@@ -334,7 +350,8 @@ public class ApprovalRepository {
         for (String term : terms) {
             if (term == null || term.trim().isEmpty())
                 continue;
-            sql.append(" AND (r.username ILIKE ? ESCAPE '\\' OR c.connection_name ILIKE ? ESCAPE '\\'"
+            sql.append(" AND (r.username ILIKE ? ESCAPE '\\'"
+                    + " OR coalesce(c.connection_name, r.connection_name) ILIKE ? ESCAPE '\\'"
                     + " OR coalesce((SELECT parameter_value FROM guacamole_connection_parameter p"
                     + "   WHERE p.connection_id = r.connection_id AND p.parameter_name = '" + AccountProtocol.USERNAME
                     + "'), '') ILIKE ? ESCAPE '\\'"
@@ -548,7 +565,8 @@ public class ApprovalRepository {
                 while (results.next()) {
                     ApprovalRequest request = new ApprovalRequest();
                     request.setId(results.getInt(1));
-                    request.setConnectionIdentifier(Integer.toString(results.getInt(2)));
+                    int connectionId = results.getInt(2);
+                    request.setConnectionIdentifier(results.wasNull() ? null : Integer.toString(connectionId));
                     request.setConnectionName(results.getString(3));
                     request.setAccountName(results.getString(4));
                     request.setUsername(results.getString(5));

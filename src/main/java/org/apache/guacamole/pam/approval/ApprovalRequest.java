@@ -41,6 +41,9 @@ public class ApprovalRequest {
         this.id = id;
     }
 
+    /**
+     * The connection's identifier, or null once it was deleted.
+     */
     public String getConnectionIdentifier() {
         return connectionIdentifier;
     }
@@ -49,6 +52,9 @@ public class ApprovalRequest {
         this.connectionIdentifier = connectionIdentifier;
     }
 
+    /**
+     * The connection's name, or the one it had when it was deleted.
+     */
     public String getConnectionName() {
         return connectionName;
     }

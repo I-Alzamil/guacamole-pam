@@ -16,6 +16,7 @@ import java.util.Set;
 
 import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
+import org.apache.guacamole.GuacamoleResourceNotFoundException;
 import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.pam.db.PamDatabase;
 import org.apache.guacamole.pam.db.SearchPattern;
@@ -30,12 +31,16 @@ public class CheckoutRepository {
 
     private static final String UNIQUE_VIOLATION = "23505";
 
-    private static final String SELECT = "SELECT k.checkout_id, k.connection_id, c.connection_name, k.username,"
+    /**
+     * The connection's current name, or the one it had once deleted.
+     */
+    private static final String SELECT = "SELECT k.checkout_id, k.connection_id,"
+            + " coalesce(c.connection_name, k.connection_name), k.username,"
             + " k.reason, k.checked_out, k.expires, k.released, k.release_reason, k.released_by, k.reveal_count,"
             + " k.exclusive,"
             + " (SELECT array_agg(a.approver ORDER BY a.approved) FROM pam_request r"
             + "   JOIN pam_request_approval a ON a.request_id = r.request_id WHERE r.checkout_id = k.checkout_id)"
-            + " FROM pam_checkout k JOIN guacamole_connection c ON c.connection_id = k.connection_id";
+            + " FROM pam_checkout k LEFT JOIN guacamole_connection c ON c.connection_id = k.connection_id";
 
     private final PamDatabase database;
 
@@ -92,16 +97,19 @@ public class CheckoutRepository {
 
                 int id;
                 try (PreparedStatement statement = connection.prepareStatement(
-                        "INSERT INTO pam_checkout (connection_id, username, reason, expires, exclusive, reveal_count)"
-                      + " VALUES (?, ?, ?, CURRENT_TIMESTAMP + make_interval(mins => ?), ?, ?) RETURNING checkout_id")) {
-                    statement.setInt(1, connectionId);
-                    statement.setString(2, username);
-                    statement.setString(3, reason);
-                    statement.setInt(4, minutes);
-                    statement.setBoolean(5, exclusive);
-                    statement.setInt(6, revealCount);
+                        "INSERT INTO pam_checkout (connection_id, connection_name, username, reason, expires,"
+                      + " exclusive, reveal_count) SELECT connection_id, connection_name, ?, ?,"
+                      + " CURRENT_TIMESTAMP + make_interval(mins => ?), ?, ? FROM guacamole_connection"
+                      + " WHERE connection_id = ? RETURNING checkout_id")) {
+                    statement.setString(1, username);
+                    statement.setString(2, reason);
+                    statement.setInt(3, minutes);
+                    statement.setBoolean(4, exclusive);
+                    statement.setInt(5, revealCount);
+                    statement.setInt(6, connectionId);
                     try (ResultSet results = statement.executeQuery()) {
-                        results.next();
+                        if (!results.next())
+                            throw new GuacamoleResourceNotFoundException("The connection no longer exists.");
                         id = results.getInt(1);
                     }
                 }
@@ -194,7 +202,8 @@ public class CheckoutRepository {
         for (String term : terms) {
             if (term == null || term.trim().isEmpty())
                 continue;
-            sql.append(" AND (k.username ILIKE ? ESCAPE '\\' OR c.connection_name ILIKE ? ESCAPE '\\'"
+            sql.append(" AND (k.username ILIKE ? ESCAPE '\\'"
+                    + " OR coalesce(c.connection_name, k.connection_name) ILIKE ? ESCAPE '\\'"
                     + " OR k.reason ILIKE ? ESCAPE '\\' OR coalesce(k.release_reason, '') ILIKE ? ESCAPE '\\'"
                     + " OR coalesce(k.released_by, '') ILIKE ? ESCAPE '\\'"
                     + " OR EXISTS (SELECT 1 FROM pam_request r JOIN pam_request_approval a ON a.request_id = r.request_id"
@@ -360,7 +369,8 @@ public class CheckoutRepository {
             while (results.next()) {
                 Checkout checkout = new Checkout();
                 checkout.setId(results.getInt(1));
-                checkout.setConnectionIdentifier(Integer.toString(results.getInt(2)));
+                int connectionId = results.getInt(2);
+                checkout.setConnectionIdentifier(results.wasNull() ? null : Integer.toString(connectionId));
                 checkout.setConnectionName(results.getString(3));
                 checkout.setUsername(results.getString(4));
                 checkout.setReason(results.getString(5));

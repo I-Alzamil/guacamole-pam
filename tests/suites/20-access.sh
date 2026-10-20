@@ -115,3 +115,25 @@ GRANT=$(api POST "$PAM/requests/$ACCOUNT" "$ADMIN" '{"reason":"T2 admin access"}
 check "...but gets the password without approvals" "200 $ACCOUNT_PASSWORD" "$(status_of "$GRANT") $(json_get "${GRANT#* }" "d.get('password')")"
 api POST "$PAM/requests/$ACCOUNT/release" "$ADMIN" >/dev/null
 check_contains "an administrator also needs a checkout to connect" "403 You must request access" "$(tunnel "$ADMIN" "$GATED" c)"
+
+# ---------------------------------------------------------------- deletion
+section "Deleting a connection keeps its history"
+# Created without a cleanup: deleting it is the test. Its history stays, so
+# its name is new on every run
+DOOMED_NAME="t2 doomed $(date +%s%N)"
+DOOMED=$(json_get "$(api POST "$DATA/connections" "$ADMIN" "{\"name\":\"$DOOMED_NAME\",\"parentIdentifier\":\"ROOT\",
+    \"protocol\":\"ssh\",\"parameters\":{\"hostname\":\"mysshtest\",\"port\":\"22\"},
+    \"attributes\":{\"pam-approvals-required\":\"1\"}}" | cut -d' ' -f2-)" "d.get('identifier')")
+grant_read t2-requester "$DOOMED"
+check "a request awaits approval" 202 "$(status_of "$(api POST "$PAM/requests/$DOOMED" "$REQUESTER" '{"reason":"T2 doomed"}')")"
+check "the administrator holds it" 200 "$(status_of "$(api POST "$PAM/requests/$DOOMED" "$ADMIN" '{"reason":"T2 doomed admin"}')")"
+check "the connection is deleted" 204 "$(status_of "$(api DELETE "$DATA/connections/$DOOMED" "$ADMIN")")"
+ENDED=$(curl -s -G --data-urlencode "contains=$DOOMED_NAME" "$PAM/checkouts/history?token=$ADMIN" | python3 -I -c "
+import sys,json
+print(' '.join('%s/%s/%s' % (c['connectionName'], c.get('releaseReason'), c.get('connectionIdentifier')) for c in json.load(sys.stdin)))")
+check "its checkout stays in the history, ended by the deletion" "$DOOMED_NAME/DELETED/None" "$ENDED"
+CANCELLED=$(curl -s -G --data-urlencode "contains=$DOOMED_NAME" "$PAM/approvals/history?token=$ADMIN" | python3 -I -c "
+import sys,json
+print(' '.join('%s/%s' % (r['connectionName'], r['status']) for r in json.load(sys.stdin)))")
+check "its pending request stays too, cancelled" "$DOOMED_NAME/CANCELLED" "$CANCELLED"
+check "nothing is left awaiting approval for it" "" "$(pending_id t2-requester)"

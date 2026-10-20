@@ -92,27 +92,32 @@ CREATE TABLE IF NOT EXISTS pam_rotation_state (
 
 -- Checkouts: who held which Account's password, or access to which
 -- connection, why, and until when. Rows are never deleted, so the table
--- doubles as the audit log
+-- doubles as the audit log: deleting a connection keeps its checkouts, with
+-- the name it had
 CREATE TABLE IF NOT EXISTS pam_checkout (
 
-  checkout_id    serial        NOT NULL,
-  connection_id  integer       NOT NULL,
-  username       varchar(128)  NOT NULL,
-  reason         varchar(500)  NOT NULL,
-  checked_out    timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  expires        timestamptz   NOT NULL,
-  released       timestamptz,
-  release_reason varchar(16),
-  released_by    varchar(128),
-  reveal_count   integer       NOT NULL DEFAULT 1,
+  checkout_id     serial        NOT NULL,
+
+  -- Null once the connection is deleted
+  connection_id   integer,
+  connection_name varchar(128)  NOT NULL,
+
+  username        varchar(128)  NOT NULL,
+  reason          varchar(500)  NOT NULL,
+  checked_out     timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires         timestamptz   NOT NULL,
+  released        timestamptz,
+  release_reason  varchar(16),
+  released_by     varchar(128),
+  reveal_count    integer       NOT NULL DEFAULT 1,
 
   -- Whether the checkout excluded every other holder
-  exclusive      boolean       NOT NULL DEFAULT TRUE,
+  exclusive       boolean       NOT NULL DEFAULT TRUE,
 
   PRIMARY KEY (checkout_id),
   CONSTRAINT pam_checkout_connection
     FOREIGN KEY (connection_id)
-    REFERENCES guacamole_connection (connection_id) ON DELETE CASCADE
+    REFERENCES guacamole_connection (connection_id) ON DELETE SET NULL
 
 );
 
@@ -133,11 +138,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS pam_checkout_holder
 -- Requests needing approval. A request is PENDING until enough
 -- distinct approvers approve it (APPROVED, which starts its checkout), one
 -- denies it (DENIED), its requester cancels it (CANCELLED), or it is left
--- pending for too long (EXPIRED)
+-- pending for too long (EXPIRED). Like checkouts, kept with the name of
+-- their connection once it is deleted
 CREATE TABLE IF NOT EXISTS pam_request (
 
   request_id         serial        NOT NULL,
-  connection_id      integer       NOT NULL,
+
+  -- Null once the connection is deleted
+  connection_id      integer,
+  connection_name    varchar(128)  NOT NULL,
+
   username           varchar(128)  NOT NULL,
   reason             varchar(500)  NOT NULL,
   requested          timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -153,7 +163,7 @@ CREATE TABLE IF NOT EXISTS pam_request (
   PRIMARY KEY (request_id),
   CONSTRAINT pam_request_connection
     FOREIGN KEY (connection_id)
-    REFERENCES guacamole_connection (connection_id) ON DELETE CASCADE,
+    REFERENCES guacamole_connection (connection_id) ON DELETE SET NULL,
   CONSTRAINT pam_request_checkout
     FOREIGN KEY (checkout_id)
     REFERENCES pam_checkout (checkout_id) ON DELETE SET NULL

@@ -116,9 +116,11 @@ public class CheckoutService {
 
         // Read once for every connection, not once per connection
         Map<Integer, List<Checkout>> active = new HashMap<>();
-        for (Checkout checkout : checkouts.listActive())
-            active.computeIfAbsent(Integer.valueOf(checkout.getConnectionIdentifier()), id -> new ArrayList<>())
-                    .add(checkout);
+        for (Checkout checkout : checkouts.listActive()) {
+            Integer id = Values.parseId(checkout.getConnectionIdentifier());
+            if (id != null)
+                active.computeIfAbsent(id, key -> new ArrayList<>()).add(checkout);
+        }
         Map<Integer, ApprovalRequest> pending = approvals.listPendingOf(username);
         Map<Integer, ApprovalRequest> latest = approvals.listLatestOf(username);
 
@@ -310,7 +312,8 @@ public class CheckoutService {
      * password, or connects, by opening the connection again.
      */
     public Checkout startApprovedCheckout(ApprovalRequest request) throws GuacamoleException {
-        Target target = connections.load(Integer.parseInt(request.getConnectionIdentifier()));
+        Integer id = Values.parseId(request.getConnectionIdentifier());
+        Target target = id == null ? null : connections.load(id);
         if (target == null)
             throw new GuacamoleResourceNotFoundException("The connection no longer exists.");
         return startCheckout(target, request.getUsername(), request.getReason(), 0);
@@ -329,6 +332,51 @@ public class CheckoutService {
         approvals.decide(pending.getId(), ApprovalRequest.CANCELLED, username);
         logger.info("User \"{}\" cancelled request {} for \"{}\".", username, pending.getId(), target.getName());
 
+    }
+
+    /**
+     * What deleting a connection ends: its active checkouts, and the
+     * requests awaiting approval for it. Read before the deletion, as their
+     * rows then no longer name the connection, and ended once it succeeded.
+     */
+    public final class Deletion {
+
+        private final List<Checkout> active;
+
+        private final List<ApprovalRequest> pending;
+
+        private Deletion(List<Checkout> active, List<ApprovalRequest> pending) {
+            this.active = active;
+            this.pending = pending;
+        }
+
+        /**
+         * Ends them, once the connection was deleted by the given user. The
+         * holders' sessions close with their checkouts.
+         */
+        public void complete(String username) throws GuacamoleException {
+            for (Checkout checkout : active)
+                end(checkout, Checkout.DELETED, username);
+            for (ApprovalRequest request : pending) {
+                try {
+                    approvals.decide(request.getId(), ApprovalRequest.CANCELLED, username);
+                }
+                catch (GuacamoleClientException e) {
+                    // Decided meanwhile
+                }
+            }
+        }
+
+    }
+
+    /**
+     * Prepares ending what deleting the given connection ends.
+     */
+    public Deletion prepareDeletion(String identifier) throws GuacamoleException {
+        Integer id = Values.parseId(identifier);
+        if (id == null)
+            return new Deletion(Collections.<Checkout>emptyList(), Collections.<ApprovalRequest>emptyList());
+        return new Deletion(checkouts.listActive(id), approvals.listPending(id));
     }
 
     private Checkout startCheckout(Target target, String username, String reason, int revealCount)

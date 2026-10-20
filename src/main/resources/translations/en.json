@@ -99,6 +99,7 @@
         "MODE_NEVER": "Never",
         "MODE_PERIODIC": "Periodically",
         "RELEASE_CANCELLED": "cancelled",
+        "RELEASE_DELETED": "connection deleted",
         "RELEASE_EXPIRED": "expired",
         "RELEASE_RELEASED": "released",
         "RELEASE_REVOKED": "revoked",

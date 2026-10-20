@@ -32,6 +32,11 @@ public class Checkout {
      */
     public static final String CANCELLED = "CANCELLED";
 
+    /**
+     * Ended because its connection was deleted.
+     */
+    public static final String DELETED = "DELETED";
+
     private int id;
     private String connectionIdentifier;
     private String connectionName;
@@ -54,6 +59,9 @@ public class Checkout {
         this.id = id;
     }
 
+    /**
+     * The connection's identifier, or null once it was deleted.
+     */
     public String getConnectionIdentifier() {
         return connectionIdentifier;
     }
@@ -62,6 +70,9 @@ public class Checkout {
         this.connectionIdentifier = connectionIdentifier;
     }
 
+    /**
+     * The connection's name, or the one it had when it was deleted.
+     */
     public String getConnectionName() {
         return connectionName;
     }
@@ -114,7 +125,8 @@ public class Checkout {
     }
 
     /**
-     * RELEASED, EXPIRED or REVOKED, or null while active.
+     * RELEASED, EXPIRED, REVOKED, CANCELLED or DELETED, or null while
+     * active.
      */
     public String getReleaseReason() {
         return releaseReason;

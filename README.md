@@ -208,6 +208,10 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
 - Balancing connection groups refuse to connect when one of their
   connections requires a request, is an Account, or has its password
   managed: open those connections directly.
+- **Deleting a connection keeps its history.** Its checkouts and requests
+  stay in the history under the name it had. Deleting it ends its active
+  checkouts ("connection deleted"), closing their sessions, and cancels its
+  requests awaiting approval.
 - Administrators get four new settings tabs: **Platforms**, **Password
   Rotation**, **Checkouts** and **Approvals**. Approvers who aren't
   administrators only get **Approvals**, for the connections their permission
