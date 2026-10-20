@@ -77,7 +77,7 @@
         "HELP_PLATFORMS": "Platforms describe how passwords of a group of systems are changed, and when. A connection is managed once it is assigned a platform in its \"Password management\" settings.",
         "HELP_READ_FULL": "Read the request in full",
         "HELP_ROTATE_ALL": "Rotate the passwords of every connection listed, as filtered, a few at a time",
-        "HELP_STORED_SECRETS": "Passwords of this platform are stored. Leave their fields empty to keep them, unless you change where they are sent (server, port, encryption, trusted certificate or CA certificates): enter them again then.",
+        "HELP_STORED_SECRETS": "Passwords of this platform are stored, shown masked. Leave them as they are to keep them, unless you change where they are sent (server, port, encryption, trusted certificate or CA certificates): enter them again then.",
         "HELP_SYNTAX_CASE": "Wait until the output since the last send matches the regular expression of one of the cases, run the lines of the case matching first in the output, then continue after @end. Cases cannot hold other cases",
         "HELP_SYNTAX_FAIL": "End the script, reporting this text as the problem, such as in a case matching an error",
         "HELP_SYNTAX_COMMENT": "Comment, ignored, as are empty lines",

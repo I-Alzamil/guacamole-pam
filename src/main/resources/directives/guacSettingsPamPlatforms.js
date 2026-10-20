@@ -41,6 +41,13 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
             };
 
             /**
+             * What a secret field holds while its stored value is kept, as
+             * the connection editor shows a stored password: masked, it
+             * looks set, and is sent as empty, which keeps the stored value.
+             */
+            var STORED_SECRET = '********';
+
+            /**
              * Form of the rotation policy of a platform. Its values are the
              * policy keys of the server.
              */
@@ -183,6 +190,9 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
             var edit = function edit(platform) {
                 platform.settings = platform.settings || {};
                 platform.policy = platform.policy || {};
+                angular.forEach(platform.storedSecrets, function markStored(name) {
+                    platform.settings[name] = STORED_SECRET;
+                });
                 if (!platform.policy['rotation-mode'])
                     platform.policy['rotation-mode'] = 'never';
                 $scope.editing = platform;
@@ -214,8 +224,21 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
                     $scope.editing = original = null;
             };
 
+            /**
+             * The editing platform as the server takes it: the secrets still
+             * showing as stored are sent empty, keeping their stored value.
+             */
+            var toSend = function toSend(platform) {
+                var sent = angular.copy(platform);
+                angular.forEach(platform.storedSecrets, function keepStored(name) {
+                    if (sent.settings[name] === STORED_SECRET)
+                        delete sent.settings[name];
+                });
+                return sent;
+            };
+
             $scope.savePlatform = function savePlatform() {
-                pamService.savePlatform($scope.editing).then(function platformSaved(platform) {
+                pamService.savePlatform(toSend($scope.editing)).then(function platformSaved(platform) {
                     edit(platform);
                     $scope.saved = true;
                     loadPlatforms();
