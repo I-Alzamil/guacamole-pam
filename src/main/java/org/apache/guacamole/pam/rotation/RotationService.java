@@ -52,7 +52,8 @@ import org.slf4j.LoggerFactory;
  * ({@link SessionRegistry}), so every server knows whether a connection is in
  * use. When a checkout ends, the server ending it closes its own sessions of
  * the holder at once; the other servers close theirs when they next look for
- * ended checkouts.
+ * ended checkouts. Each server then also closes its sessions whose user lost
+ * access to their connection meanwhile (see {@link SessionAccess}).
  */
 public class RotationService {
 
@@ -136,8 +137,13 @@ public class RotationService {
         });
     }
 
-    public void sessionStarted(String identifier, String username, GuacamoleTunnel tunnel) {
-        sessions.started(identifier, username, tunnel);
+    /**
+     * Records a session opened on this server. Its access is checked again
+     * with every look for ended checkouts, and the session closed once it
+     * is no longer allowed.
+     */
+    public void sessionStarted(String identifier, String username, GuacamoleTunnel tunnel, SessionAccess access) {
+        sessions.started(identifier, username, tunnel, access);
     }
 
     public void sessionEnded(String identifier, GuacamoleTunnel tunnel) {
@@ -235,6 +241,42 @@ public class RotationService {
     private void endCheckouts() {
         expireCheckouts();
         closeSessionsOfEndedCheckouts();
+        closeSessionsNoLongerAllowed();
+    }
+
+    /**
+     * Closes this server's sessions whose user lost access to their
+     * connection since it opened: permission to read it revoked, or (for an
+     * administrator who connected without a request) no longer an
+     * administrator.
+     */
+    private void closeSessionsNoLongerAllowed() {
+        for (SessionRegistry.Session session : sessions.getAllLocal()) {
+
+            boolean allowed;
+            try {
+                allowed = session.getAccess().isAllowed();
+            }
+            catch (Exception e) {
+                logger.warn("Unable to check the access of \"{}\" to connection {}, leaving their session open: {}",
+                        session.getUsername(), session.getIdentifier(), e.getMessage());
+                continue;
+            }
+
+            if (allowed)
+                continue;
+
+            try {
+                logger.info("Closing the session of \"{}\" on connection {}: their access was revoked.",
+                        session.getUsername(), session.getIdentifier());
+                session.getTunnel().close();
+            }
+            catch (Exception e) {
+                logger.warn("Unable to close a session of \"{}\" on connection {}: {}", session.getUsername(),
+                        session.getIdentifier(), e.getMessage());
+            }
+
+        }
     }
 
     /**

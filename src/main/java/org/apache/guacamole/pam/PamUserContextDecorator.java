@@ -124,7 +124,7 @@ public class PamUserContextDecorator extends DelegatingUserContext {
             @Override
             protected Connection decorate(Connection object) throws GuacamoleException {
                 return new PamConnection(object, rotationService, checkoutService, connectionSecrets,
-                        self().getIdentifier(), isAdministrator());
+                        PamUserContextDecorator.this);
             }
 
             // DecoratingDirectory.add() does not go through undecorate()
@@ -267,15 +267,33 @@ public class PamUserContextDecorator extends DelegatingUserContext {
             + " password is managed.";
 
     /**
-     * Whether the user of this context is an administrator, determined once.
+     * Whether the user of this context is an administrator now: read again
+     * each time, so revoking it takes effect at once.
      */
-    private Boolean administrator;
+    boolean isAdministrator() throws GuacamoleException {
+        return self().getEffectivePermissions().getSystemPermissions()
+                .hasPermission(SystemPermission.Type.ADMINISTER);
+    }
 
-    private boolean isAdministrator() throws GuacamoleException {
-        if (administrator == null)
-            administrator = self().getEffectivePermissions().getSystemPermissions()
-                    .hasPermission(SystemPermission.Type.ADMINISTER);
-        return administrator;
+    /**
+     * Whether the user may still use a connection they opened a session
+     * of: they may still read it, and hold the checkout it requires (or, as
+     * an administrator, bypass requests). Asked of the database again, so a
+     * revoked permission is seen.
+     */
+    boolean mayStillUse(String identifier) throws GuacamoleException {
+
+        if (getDelegateUserContext().getConnectionDirectory().get(identifier) == null)
+            return false;
+
+        try {
+            checkoutService.requireAccess(identifier, self().getIdentifier(), isAdministrator());
+            return true;
+        }
+        catch (GuacamoleSecurityException e) {
+            return false;
+        }
+
     }
 
     @Override

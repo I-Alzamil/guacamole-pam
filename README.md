@@ -213,6 +213,10 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   stay in the history under the name it had. Deleting it ends its active
   checkouts ("connection deleted"), closing their sessions, and cancels its
   requests awaiting approval.
+- **Revoking access ends open sessions.** Within 15 seconds of a user losing
+  the permission to read a connection, or of its deletion, their sessions of
+  it close (Guacamole alone lets them run until they end). Removing a user's administrator permission takes effect at once, without
+  them logging in again.
 - Administrators get four new settings tabs: **Platforms**, **Password
   Rotation**, **Checkouts** and **Approvals**. Approvers who aren't
   administrators only get **Approvals**, for the connections their permission

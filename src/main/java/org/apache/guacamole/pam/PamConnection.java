@@ -21,8 +21,9 @@ import org.apache.guacamole.protocol.GuacamoleClientInformation;
  * Connection which refuses sessions without the checkout its access
  * requires, gives its secrets when kept apart (see {@link ConnectionSecrets}),
  * reports when its tunnels open and close (so the rotation service knows
- * when it is in use, and can close them when a checkout ends), and always
- * exposes its password management attributes to the editor.
+ * when it is in use, and can close them when a checkout ends or the user's
+ * access is revoked), and always exposes its password management attributes
+ * to the editor.
  */
 public class PamConnection extends DelegatingConnection {
 
@@ -33,22 +34,17 @@ public class PamConnection extends DelegatingConnection {
     private final ConnectionSecrets connectionSecrets;
 
     /**
-     * The user this connection is presented to, and whether they are an
-     * administrator (who skips approvals, and bypasses access requests if
-     * "pam-admin-bypass-requests" is set).
+     * The context of the user this connection is presented to.
      */
-    private final String username;
-    private final boolean administrator;
+    private final PamUserContextDecorator context;
 
     public PamConnection(Connection connection, RotationService rotationService,
-            CheckoutService checkoutService, ConnectionSecrets connectionSecrets, String username,
-            boolean administrator) {
+            CheckoutService checkoutService, ConnectionSecrets connectionSecrets, PamUserContextDecorator context) {
         super(connection);
         this.rotationService = rotationService;
         this.checkoutService = checkoutService;
         this.connectionSecrets = connectionSecrets;
-        this.username = username;
-        this.administrator = administrator;
+        this.context = context;
     }
 
     public Connection getUndecorated() {
@@ -122,7 +118,8 @@ public class PamConnection extends DelegatingConnection {
 
         // Connections requiring a request need an active checkout
         final String identifier = getIdentifier();
-        checkoutService.requireAccess(identifier, username, administrator);
+        final String username = context.self().getIdentifier();
+        checkoutService.requireAccess(identifier, username, context.isAdministrator());
 
         // Secrets kept apart replace their tokens. Guacamole shows users no
         // detail of a server error, only logs it
@@ -160,7 +157,7 @@ public class PamConnection extends DelegatingConnection {
 
         };
 
-        rotationService.sessionStarted(identifier, username, tracked);
+        rotationService.sessionStarted(identifier, username, tracked, () -> context.mayStillUse(identifier));
         return tracked;
 
     }

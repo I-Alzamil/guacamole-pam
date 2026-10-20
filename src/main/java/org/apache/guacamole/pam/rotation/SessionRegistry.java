@@ -58,6 +58,7 @@ class SessionRegistry {
         private final String identifier;
         private final String username;
         private final GuacamoleTunnel tunnel;
+        private final SessionAccess access;
 
         /**
          * When it started, by the database's clock where it was recorded, so
@@ -67,10 +68,11 @@ class SessionRegistry {
 
         private volatile boolean recorded = false;
 
-        private Session(String identifier, String username, GuacamoleTunnel tunnel) {
+        private Session(String identifier, String username, GuacamoleTunnel tunnel, SessionAccess access) {
             this.identifier = identifier;
             this.username = username;
             this.tunnel = tunnel;
+            this.access = access;
         }
 
         String getIdentifier() {
@@ -83,6 +85,10 @@ class SessionRegistry {
 
         GuacamoleTunnel getTunnel() {
             return tunnel;
+        }
+
+        SessionAccess getAccess() {
+            return access;
         }
 
         long getStarted() {
@@ -106,9 +112,9 @@ class SessionRegistry {
         }
     }
 
-    void started(String identifier, String username, GuacamoleTunnel tunnel) {
+    void started(String identifier, String username, GuacamoleTunnel tunnel, SessionAccess access) {
 
-        Session session = new Session(identifier, username, tunnel);
+        Session session = new Session(identifier, username, tunnel, access);
         local.put(tunnel, session);
 
         if (Values.parseId(identifier) == null)
@@ -190,6 +196,13 @@ class SessionRegistry {
 
     boolean hasLocal() {
         return !local.isEmpty();
+    }
+
+    /**
+     * Every session open on this server.
+     */
+    List<Session> getAllLocal() {
+        return new ArrayList<>(local.values());
     }
 
     /**
