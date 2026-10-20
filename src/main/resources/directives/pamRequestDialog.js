@@ -1,7 +1,8 @@
 /**
  * Dialog for requesting an Account's password or access to a connection,
- * showing the password while checked out, and releasing it. The password
- * is only kept while the dialog shows it, and is never written to storage.
+ * showing the password while checked out (of a connection, only if it
+ * allows it, and when asked), and releasing it. The password is only kept
+ * while the dialog shows it, and is never written to storage.
  */
 angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDialog() {
 
@@ -252,6 +253,25 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                     pamRequestService.refresh();
                     return load();
                 }, showError)['finally'](function releaseDone() {
+                    $scope.busy = false;
+                });
+
+            };
+
+            /**
+             * Shows the password of the connection held, where allowed.
+             */
+            $scope.showConnectionPassword = function showConnectionPassword() {
+
+                $scope.busy = true;
+                $scope.error = null;
+
+                pamService.revealPassword($scope.identifier).then(function revealed(grant) {
+                    $scope.grant = grant;
+                }, function revealFailed(error) {
+                    showError(error);
+                    load();
+                })['finally'](function revealDone() {
                     $scope.busy = false;
                 });
 

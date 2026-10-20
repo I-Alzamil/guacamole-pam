@@ -13,6 +13,7 @@ import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleResourceNotFoundException;
 import org.apache.guacamole.net.GuacamoleTunnel;
+import org.apache.guacamole.pam.AccountProtocol;
 import org.apache.guacamole.pam.PamAttributes;
 import org.apache.guacamole.pam.checkout.Checkout;
 import org.apache.guacamole.pam.checkout.CheckoutRepository;
@@ -37,7 +38,11 @@ import org.slf4j.LoggerFactory;
  * once the target accepts it.
  *
  * A connection is "in use" while it has open sessions or an active checkout;
- * automatic rotations wait until it is no longer in use.
+ * automatic rotations wait until it is no longer in use. A connection whose
+ * password a checkout showed (see {@link PamAttributes#REVEAL_PASSWORD}) is
+ * rotated once no longer in use, whatever its rotation mode, so the password
+ * stops working outside Guacamole; a failed rotation is retried as a
+ * periodic one would be.
  *
  * Several Guacamole servers may share the database: rotations are claimed
  * through the database ({@link RotationLocks}), so only one server rotates a
@@ -206,7 +211,13 @@ public class RotationService {
                 return;
 
             Target target = connections.load(id);
-            if (target != null && Platform.MODE_AFTER_USE.equals(policyOf(target).getMode()))
+            if (target == null || target.getAttribute(PamAttributes.PLATFORM) == null)
+                return;
+
+            if (isShown(id))
+                rotateUnlessDone(target, "password shown", current -> !isInUse(current.getId())
+                        && isShown(current.getId()));
+            else if (Platform.MODE_AFTER_USE.equals(policyOf(target).getMode()))
                 rotateUnlessDone(target, "after use", current -> !isInUse(current.getId()));
 
         }
@@ -287,15 +298,36 @@ public class RotationService {
         }
     }
 
+    /**
+     * Whether a checkout showed the connection's password since its last
+     * rotation.
+     */
+    private boolean isShown(int id) throws GuacamoleException {
+        return checkouts.listShownSinceRotation(AccountProtocol.NAME).contains(id);
+    }
+
     private void rotateDueConnections() {
         try {
 
             Map<String, Platform> all = platforms.getAll();
+            Set<Integer> shown = checkouts.listShownSinceRotation(AccountProtocol.NAME);
             for (Target target : connections.listManaged()) {
+
+                // Missed or failed after its use, such as while the server
+                // was down
+                boolean wasShown = shown.contains(target.getId()) && isRetryAllowed(target);
+                if (!wasShown && !isDue(target, all))
+                    continue;
 
                 // Rotating while in use would break the password a user is
                 // relying on; wait until the session or checkout ends
-                if (isDue(target, all) && !isInUse(target.getId()))
+                if (isInUse(target.getId()))
+                    continue;
+
+                if (wasShown)
+                    rotateUnlessDone(target, "password shown", current -> isShown(current.getId())
+                            && isRetryAllowed(current));
+                else
                     rotateUnlessDone(target, "periodic", current -> isDue(current, platforms.getAll()));
 
             }
@@ -324,15 +356,21 @@ public class RotationService {
         if (hours == null || hours <= 0)
             return false;
 
-        long now = System.currentTimeMillis();
+        ConnectionRepository.State state = target.getState();
+        long lastSuccess = state.getLastSuccess() == null ? 0 : state.getLastSuccess().getTime();
+        return System.currentTimeMillis() >= lastSuccess + TimeUnit.HOURS.toMillis(hours) && isRetryAllowed(target);
+
+    }
+
+    /**
+     * Whether an automatic rotation may be tried now: the last attempt
+     * succeeded, or failed long enough ago.
+     */
+    private static boolean isRetryAllowed(Target target) {
         ConnectionRepository.State state = target.getState();
         long lastSuccess = state.getLastSuccess() == null ? 0 : state.getLastSuccess().getTime();
         long lastAttempt = state.getLastAttempt() == null ? 0 : state.getLastAttempt().getTime();
-
-        boolean due = now >= lastSuccess + TimeUnit.HOURS.toMillis(hours);
-        boolean retryAllowed = now >= lastAttempt + RETRY_DELAY_MS || lastAttempt <= lastSuccess;
-        return due && retryAllowed;
-
+        return System.currentTimeMillis() >= lastAttempt + RETRY_DELAY_MS || lastAttempt <= lastSuccess;
     }
 
     /**

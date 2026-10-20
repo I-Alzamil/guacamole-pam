@@ -58,6 +58,15 @@ public final class PamAttributes {
     public static final String REQUEST_EXEMPT = "pam-request-exempt";
 
     /**
+     * "true" if the holder of a checkout of a connection (not an Account,
+     * whose password is always shown) may see its password, to use it
+     * outside Guacamole. Off by default. Once shown, a managed password is
+     * rotated when the connection is no longer in use, whatever the
+     * rotation mode.
+     */
+    public static final String REVEAL_PASSWORD = "pam-reveal-password";
+
+    /**
      * How many distinct approvers must approve a request before
      * its checkout starts. Empty or 0 means no approval is needed.
      */
@@ -135,7 +144,8 @@ public final class PamAttributes {
             new BooleanField(REQUEST_EXEMPT, "true"),
             new NumericField(CHECKOUT_DURATION),
             new EnumField(CHECKOUT_EXCLUSIVE, Arrays.asList("", EXCLUSIVE_YES, EXCLUSIVE_NO)),
-            new NumericField(APPROVALS_REQUIRED)
+            new NumericField(APPROVALS_REQUIRED),
+            new BooleanField(REVEAL_PASSWORD, "true")
         )));
 
         CONNECTION_FORMS = Collections.unmodifiableList(forms);

@@ -15,7 +15,8 @@ Privileged access management for [Apache Guacamole](https://guacamole.apache.org
 - **Access requests.** Users must request access to a connection, or an
   Account's password, giving a reason. They get a time-limited checkout, and
   their sessions are closed when it ends. Connections can require approval by
-  one or more distinct approvers.
+  one or more distinct approvers. A connection can also let the holder see its
+  password, which is then rotated once they're done.
 - **Audit.** The checkout and approval histories are searchable and can be
   exported as CSV.
 
@@ -187,6 +188,17 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   username, hostname or port of a connection whose password is managed (they
   decide whose password its platform rotates, and where). Other users who may
   create or edit connections can still change everything else.
+- **Holders don't see a connection's password**, only a Connect button, so
+  they can't use it outside Guacamole. To let them see it, tick **Let users
+  holding access see the password** in the connection's *Access requests*
+  section (off by default; Accounts always show theirs). The holder then gets
+  a **Show password** button; each time they use it is recorded in the
+  checkout history. If the password is managed, it is rotated once the
+  connection is no longer in use, whatever its rotation mode, and retried
+  every 15 minutes if that fails. If it isn't managed, it keeps working
+  outside Guacamole, without approvals, time limits or session recording.
+  Connections allowing access without a request have no checkout, so their
+  password is never shown.
 - Balancing connection groups refuse to connect when one of their
   connections requires a request, is an Account, or has its password
   managed: open those connections directly.

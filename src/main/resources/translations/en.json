@@ -31,7 +31,8 @@
         "FIELD_OPTION_PAM_CHECKOUT_EXCLUSIVE_YES": "Yes",
         "FIELD_OPTION_PAM_CHECKOUT_EXCLUSIVE_NO": "No",
         "FIELD_HEADER_PAM_APPROVALS_REQUIRED": "Approvals required (distinct approvers, empty: none):",
-        "FIELD_HEADER_PAM_REQUEST_EXEMPT": "Allow access without a request (ignored when approvals are required):"
+        "FIELD_HEADER_PAM_REQUEST_EXEMPT": "Allow access without a request (ignored when approvals are required):",
+        "FIELD_HEADER_PAM_REVEAL_PASSWORD": "Let users holding access see the password:"
     },
     "PAM": {
         "ACTION_CANCEL": "Cancel",
@@ -62,6 +63,7 @@
         "HELP_PLACEHOLDER_USER": "Connection username",
         "HELP_PLATFORMS": "Platforms describe how passwords of a group of systems are changed, and when. A connection is managed once it is assigned a platform in its \"Password management\" settings.",
         "HELP_READ_FULL": "Read the request in full",
+        "HELP_REVEAL_PASSWORD": "Users who see the password can log in outside Guacamole, without approvals, time limits or session recording, until it changes. If the password is managed, it is changed once the connection is no longer in use; if not, it keeps working. Only applies when users must request access.",
         "HELP_STORED_SECRETS": "Passwords of this platform are stored. Leave their fields empty to keep them.",
         "HELP_SYNTAX_COMMENT": "Comment, ignored, as are empty lines",
         "HELP_SYNTAX_ESCAPE": "Send a line starting with @ or # as-is",
@@ -91,6 +93,7 @@
         "INFO_POLICY_NEVER": "Never rotates",
         "INFO_POLICY_PERIODIC": "Rotates every {HOURS} h",
         "INFO_SAVED": "Saved.",
+        "INFO_SECURITY_NOTE": "Security note",
         "MODE_AFTER_USE": "After each use",
         "MODE_NEVER": "Never",
         "MODE_PERIODIC": "Periodically",
@@ -143,6 +146,8 @@
         "REQUEST": {
             "ACCESS_ACTION_RELEASE": "Release access",
             "ACCESS_ACTION_REQUEST": "Request access",
+            "ACCESS_HELP_PASSWORD": "You may see this connection's password. Each time you do is recorded.",
+            "ACCESS_HELP_PASSWORD_MANAGED": "You may see this connection's password. Each time you do is recorded, and the password is changed once your access ends.",
             "ACCESS_HELP_PENDING": "Once approved, you have access for {MINUTES} minutes. Open this connection again to connect.",
             "ACCESS_HELP_RELEASE": "Release access when you are done. Open sessions end when access ends.",
             "ACCESS_HELP_RELEASE_MANAGED": "Release access as soon as you are done, so its password can be changed. Open sessions end when access ends.",
@@ -165,6 +170,7 @@
             "FIELD_PASSWORD": "Password",
             "FIELD_REASON": "Reason for this request (recorded):",
             "FIELD_URL": "URL:",
+            "FIELD_USERNAME": "Username:",
             "HEADER": "Password request",
             "HELP_PENDING": "Once approved, the password is checked out to you for {MINUTES} minutes. Open this account again to see it.",
             "HELP_RELEASE": "Release the password when you are done.",

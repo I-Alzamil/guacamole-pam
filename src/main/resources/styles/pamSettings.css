@@ -450,6 +450,53 @@
     display: none !important;
 }
 
+/* Security note next to a connection setting: its text shows on hover,
+   or once clicked (focused) */
+.pam-field-warning {
+    position: relative;
+    display: inline-block;
+    margin-left: 0.5em;
+    font-size: 0.85em;
+    color: #a60;
+    cursor: help;
+    outline: none;
+}
+
+.pam-field-warning:hover,
+.pam-field-warning:focus {
+    text-decoration: underline dotted;
+}
+
+.pam-field-warning-text {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 10;
+    width: 28em;
+    max-width: 80vw;
+    margin-top: 0.4em;
+    padding: 0.5em 0.75em;
+    color: #000;
+    background: #fff8e6;
+    border: 1px solid #d9a440;
+    border-left-width: 3px;
+    border-radius: 0.2em;
+    box-shadow: 0 0.2em 0.6em rgba(0, 0, 0, 0.2);
+    white-space: normal;
+    cursor: default;
+}
+
+.pam-field-warning:hover .pam-field-warning-text,
+.pam-field-warning:focus .pam-field-warning-text {
+    display: block;
+}
+
+/* Request dialog: username shown with a connection's password */
+.pam-request-username span {
+    font-family: monospace;
+}
+
 /* Request dialog: account URL and notes */
 .pam-request-url a {
     word-break: break-all;

@@ -292,7 +292,22 @@ public class PamREST {
         if (outcome.getGrant() == null)
             return Response.status(Response.Status.ACCEPTED).entity(outcome.getPending()).build();
 
-        PasswordGrant grant = outcome.getGrant();
+        return uncached(outcome.getGrant());
+
+    }
+
+    /**
+     * Shows the password of a connection to the holder of its checkout,
+     * where the connection allows it. The response must never be cached.
+     */
+    @POST
+    @Path("requests/{id}/password")
+    public Response revealPassword(@PathParam("id") String id) throws GuacamoleException {
+        return uncached(provider.getCheckoutService().revealPassword(provider.getDataSourceContext(user),
+                user.getIdentifier(), id));
+    }
+
+    private static Response uncached(PasswordGrant grant) {
 
         CacheControl noStore = new CacheControl();
         noStore.setNoStore(true);

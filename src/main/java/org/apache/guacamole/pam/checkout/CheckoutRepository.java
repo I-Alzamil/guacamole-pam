@@ -9,8 +9,10 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
@@ -223,18 +225,53 @@ public class CheckoutRepository {
 
     /**
      * Counts one more display of the password of an active checkout.
+     * Returns false if the checkout has ended: the password must then not
+     * be shown.
      */
-    public void recordReveal(int checkoutId) throws GuacamoleException {
+    public boolean recordReveal(int checkoutId) throws GuacamoleException {
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                  "UPDATE pam_checkout SET reveal_count = reveal_count + 1"
                + " WHERE checkout_id = ? AND released IS NULL")) {
             statement.setInt(1, checkoutId);
-            statement.executeUpdate();
+            return statement.executeUpdate() > 0;
         }
         catch (SQLException e) {
             throw new GuacamoleServerException("Unable to update the checkout.", e);
         }
+    }
+
+    /**
+     * Connections other than Accounts whose password a checkout showed
+     * since the password last changed through a rotation (ever, if it never
+     * did). Accounts are checked out to be seen, so their rotation follows
+     * their policy alone.
+     */
+    public Set<Integer> listShownSinceRotation(String accountProtocol) throws GuacamoleException {
+
+        Set<Integer> shown = new HashSet<>();
+
+        try (Connection connection = database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "SELECT DISTINCT k.connection_id FROM pam_checkout k"
+               + " JOIN guacamole_connection c ON c.connection_id = k.connection_id"
+               + " LEFT JOIN pam_rotation_state s ON s.connection_id = k.connection_id"
+               + " WHERE k.reveal_count > 0 AND c.protocol <> ?"
+               + " AND (s.last_success IS NULL OR k.released IS NULL OR k.released > s.last_success)")) {
+
+            statement.setString(1, accountProtocol);
+            try (ResultSet results = statement.executeQuery()) {
+                while (results.next())
+                    shown.add(results.getInt(1));
+            }
+
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to read checkouts.", e);
+        }
+
+        return shown;
+
     }
 
     /**

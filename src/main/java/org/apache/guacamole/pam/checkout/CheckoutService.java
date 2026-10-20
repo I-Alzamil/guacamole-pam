@@ -28,7 +28,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Requests and checkouts. Account connections are checked out to see their
  * password; any other connection can require a checkout before connecting
- * (an access window, which never reveals a password).
+ * (an access window, which reveals no password unless the connection allows
+ * its holder to see it).
  *
  * Who may request is decided by Guacamole itself: a user may request any
  * connection they can read, checked through their own UserContext of the
@@ -70,6 +71,8 @@ public class CheckoutService {
      */
     private static final List<String> PUBLIC_PARAMETERS = Arrays.asList(
             AccountProtocol.USERNAME, AccountProtocol.URL, AccountProtocol.NOTES);
+
+    private static final String USERNAME_PARAMETER = "username";
 
     private final ConnectionRepository connections;
 
@@ -152,7 +155,8 @@ public class CheckoutService {
         Checkout checkout = checkouts.getActive(id, username);
         if (checkout != null) {
             if (account) {
-                checkouts.recordReveal(checkout.getId());
+                if (!checkouts.recordReveal(checkout.getId()))
+                    throw new GuacamoleClientException("This checkout has ended.");
                 logger.info("User \"{}\" viewed the password of \"{}\" (checkout {}).",
                         username, target.getName(), checkout.getId());
             }
@@ -191,6 +195,42 @@ public class CheckoutService {
 
         checkout = startCheckout(target, username, checkoutReason, account ? 1 : 0);
         return RequestOutcome.granted(toGrant(checkout, connections.load(id)));
+
+    }
+
+    /**
+     * Shows the password of a connection other than an Account to the
+     * holder of its checkout, if the connection allows it. Each display is
+     * recorded; a managed password is then rotated once the connection is
+     * no longer in use (see {@link RotationService}).
+     *
+     * @throws GuacamoleClientException
+     *     If the user holds no checkout of the connection, or it has no
+     *     password of its own to show.
+     */
+    public PasswordGrant revealPassword(UserContext context, String username, String identifier)
+            throws GuacamoleException {
+
+        Target target = requireRequestable(context, identifier);
+        if (!revealsPassword(target))
+            throw new GuacamoleSecurityException("The password of this connection is not shown.");
+
+        Checkout checkout = checkouts.getActive(target.getId(), username);
+        if (checkout == null)
+            throw new GuacamoleClientException("You do not hold this connection.");
+
+        // A Guacamole token, such as ${GUAC_PASSWORD}, is the user's own
+        String password = target.getPassword();
+        if (password == null || password.isEmpty() || password.contains("${"))
+            throw new GuacamoleClientException("This connection has no stored password to show.");
+
+        if (!checkouts.recordReveal(checkout.getId()))
+            throw new GuacamoleClientException("Your access has ended.");
+        logger.info("User \"{}\" viewed the password of \"{}\" (checkout {}).",
+                username, target.getName(), checkout.getId());
+
+        String user = blankToNull(target.getParameters().get(USERNAME_PARAMETER));
+        return new PasswordGrant(checkout, user == null || user.contains("${") ? null : user, null, password);
 
     }
 
@@ -461,6 +501,7 @@ public class CheckoutService {
                 isManaged(target), isExclusive(target), getDuration(target),
                 checkouts.listActive(target.getId()), username)
             .withAccount(account)
+            .withPasswordShown(revealsPassword(target))
             .withBypass(bypassesRequests(administrator))
             .withNoRequest(!requiresRequest(target) || bypassesRequests(administrator))
             .withApproval(approvalsRequired,
@@ -482,6 +523,14 @@ public class CheckoutService {
      */
     public static boolean isAccount(Target target) {
         return AccountProtocol.NAME.equals(target.getProtocol());
+    }
+
+    /**
+     * Whether the holder of a checkout of the connection, not an Account,
+     * may see its password.
+     */
+    public static boolean revealsPassword(Target target) {
+        return !isAccount(target) && "true".equals(target.getAttribute(PamAttributes.REVEAL_PASSWORD));
     }
 
     /**

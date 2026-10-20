@@ -31,6 +31,7 @@ public class PasswordRequest {
     private boolean account;
     private boolean bypass;
     private boolean noRequest;
+    private boolean passwordShown;
     private int approvalsRequired;
     private ApprovalRequest pending;
     private String lastStatus;
@@ -166,6 +167,19 @@ public class PasswordRequest {
 
     public boolean isBypass() {
         return bypass;
+    }
+
+    PasswordRequest withPasswordShown(boolean passwordShown) {
+        this.passwordShown = passwordShown;
+        return this;
+    }
+
+    /**
+     * Whether the holder of a connection, not an Account, may see its
+     * password.
+     */
+    public boolean isPasswordShown() {
+        return passwordShown;
     }
 
     PasswordRequest withNoRequest(boolean noRequest) {

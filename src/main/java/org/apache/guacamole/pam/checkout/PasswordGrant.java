@@ -3,9 +3,10 @@ package org.apache.guacamole.pam.checkout;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
- * A checkout handed to its holder: with the password for an Account, which
- * is only ever returned in a response marked as not cacheable and never
- * logged; without any secret for access to another connection.
+ * A checkout handed to its holder: with the password for an Account, or for
+ * a connection showing its password when asked to, which is only ever
+ * returned in a response marked as not cacheable and never logged; without
+ * any secret for access to another connection.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class PasswordGrant {

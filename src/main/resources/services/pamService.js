@@ -110,6 +110,14 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
     };
 
     /**
+     * Shows the password of a connection the user holds, where the
+     * connection allows it. Each call is recorded.
+     */
+    service.revealPassword = function revealPassword(identifier) {
+        return request('POST', 'requests/' + encodeURIComponent(identifier) + '/password');
+    };
+
+    /**
      * Cancels the user's own request awaiting approval.
      */
     service.cancelRequest = function cancelRequest(identifier) {
