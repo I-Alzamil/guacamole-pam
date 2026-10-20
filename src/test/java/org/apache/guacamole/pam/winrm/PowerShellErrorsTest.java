@@ -23,7 +23,7 @@ public class PowerShellErrorsTest {
     public void readsErrorStreamsAsText() {
         assertEquals("Exception calling \"ChangePassword\" with \"2\" argument(s): \"Access is denied.\""
                 + " At line:1 char:96 + CategoryInfo : NotSpecified: (:) [], ParentContainsErrorRecordException",
-                WinRmSession.powerShellErrors(RECORDED));
+                WsMan.powerShellErrors(RECORDED));
     }
 
     /**
@@ -33,7 +33,7 @@ public class PowerShellErrorsTest {
     @Test
     public void decodesEscapesAndEntities() {
         assertEquals("a < b & \"c\" done",
-                WinRmSession.powerShellErrors("#< CLIXML <Objs><S S=\"Error\">a &lt; b &amp; \"c\"_x0009_done</S></Objs>"));
+                WsMan.powerShellErrors("#< CLIXML <Objs><S S=\"Error\">a &lt; b &amp; \"c\"_x0009_done</S></Objs>"));
     }
 
     /**
@@ -41,13 +41,13 @@ public class PowerShellErrorsTest {
      */
     @Test
     public void ignoresProgressOnlyOutput() {
-        assertEquals("", WinRmSession.powerShellErrors("#< CLIXML\r\n<Objs Version=\"1.1.0.1\"><Obj S=\"progress\""
+        assertEquals("", WsMan.powerShellErrors("#< CLIXML\r\n<Objs Version=\"1.1.0.1\"><Obj S=\"progress\""
                 + " RefId=\"0\"><TN RefId=\"0\"><T>System.Management.Automation.PSCustomObject</T></TN></Obj></Objs>"));
     }
 
     @Test
     public void keepsPlainTextAsIs() {
-        assertEquals("plain failure", WinRmSession.powerShellErrors("  plain failure \n"));
+        assertEquals("plain failure", WsMan.powerShellErrors("  plain failure \n"));
     }
 
 }
