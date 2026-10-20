@@ -100,8 +100,9 @@
     margin: 0 0 0.5em;
 }
 
+/* Inline, so a help icon follows the label's last word */
 .pam-platform-editor .form .fields .field-header label {
-    display: block;
+    display: inline;
 }
 
 .pam-platform-editor input[type="text"],
@@ -821,4 +822,67 @@ a.button.disabled {
 /* The import page's options, as Guacamole's own */
 .pam-platform-import .import-config label {
     margin-left: 0.25em;
+}
+
+/* Help of a form field or section, shown on hover or focus of an "i" next
+   to its header (pamFieldHelp) */
+.pam-field-help {
+    position: relative;
+    display: inline-block;
+    box-sizing: border-box;
+    width: 1.15em;
+    height: 1.15em;
+    margin-left: 0.4em;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: normal;
+    line-height: 1;
+    text-align: center;
+    text-transform: none;
+    letter-spacing: 0;
+    vertical-align: middle;
+    opacity: 0.55;
+    cursor: help;
+}
+
+.pam-field-help:before {
+    content: "i";
+    position: relative;
+    top: 0.07em;
+    font: italic bold 1em/1 Georgia, "Times New Roman", serif;
+}
+
+.pam-field-help:hover,
+.pam-field-help:focus {
+    opacity: 1;
+    outline: none;
+}
+
+.pam-field-help-text {
+    position: absolute;
+    z-index: 20;
+    left: -0.5em;
+    bottom: calc(100% + 0.5em);
+    width: max-content;
+    max-width: 22rem;
+    padding: 0.5em 0.7em;
+    border-radius: 0.3em;
+    background: #3C3C3C;
+    color: white;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    font-size: 0.8rem;
+    line-height: 1.4;
+    text-align: left;
+    white-space: normal;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.1s;
+    pointer-events: none;
+}
+
+.pam-field-help:hover .pam-field-help-text,
+.pam-field-help:focus .pam-field-help-text {
+    visibility: visible;
+    opacity: 1;
 }

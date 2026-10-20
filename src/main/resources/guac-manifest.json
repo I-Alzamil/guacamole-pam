@@ -21,7 +21,9 @@
         "templates/pamBadgePageList.html",
         "templates/pamConnectionStatus.html",
         "templates/pamBadgePreferencesPatch.html",
-        "templates/pamSessionPasswordPatch.html"
+        "templates/pamSessionPasswordPatch.html",
+        "templates/pamFieldHelpPatch.html",
+        "templates/pamSectionHelpPatch.html"
     ],
     "translations": [
         "translations/en.json"
