@@ -24,4 +24,5 @@
 ##
 
 # Link the PAM extension
-ln -s "/opt/guacamole/extensions/guacamole-pam-1.6.0.jar" "$GUACAMOLE_HOME/extensions/guacamole-pam-1.6.0.jar"
+# (mounted under a name without its version by build.sh and startguac2.sh)
+ln -s "/opt/guacamole/extensions/guacamole-pam.jar" "$GUACAMOLE_HOME/extensions/guacamole-pam.jar"

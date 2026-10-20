@@ -32,10 +32,15 @@ Without PostgreSQL authentication (for example with only LDAP, MySQL or
 `user-mapping.xml`), the extension stays inactive. It logs one warning saying
 why, and Guacamole works exactly as without it.
 
+The extension has its own version (`1.0.0`, following semantic versioning),
+and each build is made for one Guacamole release, 1.6.0 for now: Guacamole
+skips extensions built for another release. To build for another release, set
+`guacamole.version` in `pom.xml`.
+
 ## Installation
 
 1. Build the extension with `mvn package`, or use a released jar, then copy
-   `guacamole-pam-1.6.0.jar` into `GUACAMOLE_HOME/extensions/`.
+   `guacamole-pam-<version>.jar` into `GUACAMOLE_HOME/extensions/`.
 2. Restart Guacamole.
 
 The first time the extension uses the database, it creates its tables (all
@@ -54,7 +59,7 @@ To fix it, create the tables once as the database owner and grant them to
 Guacamole's user, as for Guacamole's own tables. No restart is needed.
 
 ```sh
-unzip -p guacamole-pam-1.6.0.jar schema/postgresql.sql | psql -U <owner> -d <guacamole database>
+unzip -p guacamole-pam-<version>.jar schema/postgresql.sql | psql -U <owner> -d <guacamole database>
 ```
 
 ```sql
@@ -160,7 +165,7 @@ environment and the value on input, so neither appears in the process list:
 
 ```sh
 psql -tAc "SELECT pending_password FROM pam_rotation_state WHERE connection_id = 42" \
-  | PAM_ENCRYPTION_KEY=<the key> java -cp guacamole-pam-1.6.0.jar \
+  | PAM_ENCRYPTION_KEY=<the key> java -cp guacamole-pam-<version>.jar \
       org.apache.guacamole.pam.crypto.SecretCipher pending-password
 ```
 

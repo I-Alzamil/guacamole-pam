@@ -24,7 +24,7 @@ import javax.crypto.spec.SecretKeySpec;
  *
  * Uses the JDK only, so stored values can be decrypted by hand:
  * <pre>
- * PAM_ENCRYPTION_KEY=... java -cp guacamole-pam-1.6.0.jar org.apache.guacamole.pam.crypto.SecretCipher PURPOSE
+ * PAM_ENCRYPTION_KEY=... java -cp guacamole-pam-<version>.jar org.apache.guacamole.pam.crypto.SecretCipher PURPOSE
  * </pre>
  * reads a value on standard input and prints it decrypted.
  */
@@ -157,7 +157,7 @@ public final class SecretCipher {
     public static void main(String[] args) throws Exception {
 
         if (args.length != 1 || System.getenv("PAM_ENCRYPTION_KEY") == null) {
-            System.err.println("Usage: PAM_ENCRYPTION_KEY=<key> java -cp guacamole-pam-1.6.0.jar "
+            System.err.println("Usage: PAM_ENCRYPTION_KEY=<key> java -cp guacamole-pam-<version>.jar "
                     + SecretCipher.class.getName() + " <purpose> < value");
             System.err.println("Purposes: " + Secrets.PLATFORM_SECRETS + ", " + Secrets.PENDING_PASSWORD + ", "
                     + Secrets.CONNECTION_PASSWORD + ", " + Secrets.CONNECTION_SECRET + ":<connection id>:<parameter>");

@@ -37,6 +37,6 @@ podman run --rm -d \
 -e WEBAPP_CONTEXT=ROOT \
 -e PAM_ENCRYPTION_KEY="${PAM_ENCRYPTION_KEY-um/hqZa6cc89CtHmc9vYOuoDd8S1jY8IaASlz5S00iY=}" \
 -p 8080:8080 \
--v ./target/guacamole-pam-1.6.0.jar:/opt/guacamole/extensions/guacamole-pam-1.6.0.jar:Z \
+-v "$(./podman/extension-jar.sh)":/opt/guacamole/extensions/guacamole-pam.jar:Z \
 -v ./podman/entrypoint.d/855-add-pam.sh:/opt/guacamole/entrypoint.d/855-add-pam.sh:Z \
 docker.io/guacamole/guacamole:1.6.0

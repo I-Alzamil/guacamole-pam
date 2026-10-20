@@ -1,5 +1,5 @@
 {
-    "guacamoleVersion": "1.6.0",
+    "guacamoleVersion": "${guacamole.version}",
     "name": "Privileged Access Management",
     "namespace": "pam",
     "authProviders": [

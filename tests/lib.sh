@@ -15,7 +15,7 @@ GUAC_ADMIN_PASSWORD="${GUAC_ADMIN_PASSWORD:-guacadmin}"
 
 # The key build.sh encrypts stored secrets with, and the jar that decrypts them
 PAM_TEST_KEY="${PAM_ENCRYPTION_KEY-um/hqZa6cc89CtHmc9vYOuoDd8S1jY8IaASlz5S00iY=}"
-T2_JAR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/target/guacamole-pam-1.6.0.jar"
+T2_JAR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && ./podman/extension-jar.sh)"
 
 T2_PASSED=${T2_PASSED:-0}
 T2_FAILED=${T2_FAILED:-0}

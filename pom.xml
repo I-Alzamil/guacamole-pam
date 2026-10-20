@@ -26,16 +26,39 @@
     <groupId>org.apache.guacamole</groupId>
     <artifactId>guacamole-pam</artifactId>
     <packaging>jar</packaging>
-    <version>1.6.0</version>
+    <version>1.0.0-SNAPSHOT</version>
     <name>guacamole-pam</name>
     <url>http://guacamole.apache.org/</url>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>11</maven.compiler.release>
+
+        <!-- The Guacamole release this extension is built for: its API, and
+             the version Guacamole requires in guac-manifest.json -->
+        <guacamole.version>1.6.0</guacamole.version>
     </properties>
 
     <build>
+
+        <!-- guac-manifest.json names the Guacamole version above -->
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>guac-manifest.json</exclude>
+                </excludes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>guac-manifest.json</include>
+                </includes>
+            </resource>
+        </resources>
+
         <plugins>
 
             <!-- JS/CSS Minification Plugin -->
@@ -192,7 +215,7 @@
         <dependency>
             <groupId>org.apache.guacamole</groupId>
             <artifactId>guacamole-ext</artifactId>
-            <version>1.6.0</version>
+            <version>${guacamole.version}</version>
             <scope>provided</scope>
         </dependency>
 
