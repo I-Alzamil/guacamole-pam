@@ -76,6 +76,20 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
     };
 
     /**
+     * Tests a platform as edited, saved or not, resolving with its steps.
+     * Secrets left empty are those of the saved platform, as when saving.
+     */
+    service.testPlatform = function testPlatform(platform) {
+        return request('POST', 'platforms/test', {
+            id       : platform.id,
+            name     : platform.name,
+            type     : platform.type,
+            settings : platform.settings,
+            policy   : platform.policy
+        });
+    };
+
+    /**
      * Imports platforms, all or none, resolving with the report of each:
      * those named as existing ones update them if "update" is true, and
      * otherwise refuse the import.

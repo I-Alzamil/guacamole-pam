@@ -70,6 +70,7 @@ defaults (`http://localhost:8080`, `guacadmin` / `guacadmin`).
 | `60-reveal` | Showing a connection's password to the holder of its checkout: refused by default and without a checkout; shown with its username when allowed, uncached, each display recorded in the history and logged, never to another user; a managed password rotated once released although its rotation mode is never, the SSH server refusing the one shown; no rotation after a checkout that showed nothing; nothing shown for a password that is Guacamole's `${GUAC_PASSWORD}` |
 | `70-revocation` | Revoked access: a session closing once its user may no longer read the connection, another of theirs staying open; a session closing when its connection is deleted; an administrator losing the permission losing its powers within the same login |
 | `80-platforms` | Importing platforms: created with their settings, policy and secrets (never shown); refused when one exists unless updating; updates keeping a stored secret left out, but refused when the port changes without it, or the type changes; one invalid platform, or a name given twice, importing nothing; restoring the default platforms, adding only a missing one and changing none; administrators only |
+| `85-testing` | Testing platforms before saving: OpenLDAP over LDAPS and StartTLS and Samba AD, MIT and Samba AD Kerberos, with and without a rotation account; a wrong password, another pinned certificate, an untrusted CA (naming the certificate to pin), an unknown server, an unknown admin principal, a realm the KDC does not confirm, an unreachable password change server; a saved platform's stored password tested, but refused once where it is sent changes, and a typed password tested instead without being saved; nothing saved; invalid settings, SSH platforms and users who are not administrators refused |
 | `90-macos` | The macOS default against a real Mac (skipped unless `T2_MACOS_HOST`, `T2_MACOS_USER` and `T2_MACOS_PASSWORD` name a throwaway standard account with Remote Login allowed, whose login keychain uses the same password): the account's password and its login keychain's both changed by the account itself, each checked on the Mac; a keychain on another password reported while the new password is kept; an account without a login keychain changed without a problem. Prints the account's last password and deletes its login keychain |
 
 ### Test data
@@ -91,5 +92,6 @@ sessions of checkouts ended elsewhere), and encryption at rest (editor saves,
 rotated Account passwords, pending passwords, supplying tokens to
 connections and balancing groups, refusing them elsewhere, leaving
 Guacamole's tokens alone, binding kept values to their connection, refusing
-encrypted values pasted into connections). Do the same when adding a test for
+encrypted values pasted into connections), and platform tests sending stored
+passwords only where they were entered for. Do the same when adding a test for
 a fix: a test that cannot fail proves nothing.

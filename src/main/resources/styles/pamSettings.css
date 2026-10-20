@@ -255,6 +255,60 @@
     color: #2a7a2a;
 }
 
+/* Steps of a platform test, marked by how each went */
+.pam-test-result {
+    margin: 0.75em 0 0;
+    padding: 0.6em 0.9em;
+    border-left: 4px solid #2a7a2a;
+    background: #f2f8f2;
+}
+
+.pam-test-result.failed {
+    border-left-color: #a33;
+    background: #fbf1f1;
+}
+
+.pam-test-result h3 {
+    margin: 0 0 0.35em;
+    font-size: 1em;
+}
+
+.pam-test-result ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.pam-test-result li {
+    position: relative;
+    padding-left: 1.4em;
+    margin: 0.2em 0;
+    overflow-wrap: anywhere;
+}
+
+.pam-test-result li:before {
+    position: absolute;
+    left: 0;
+    width: 1em;
+    text-align: center;
+    font-weight: bold;
+}
+
+.pam-test-result li.passed:before {
+    content: "\2713";
+    color: #2a7a2a;
+}
+
+.pam-test-result li.failed:before {
+    content: "\2717";
+    color: #a33;
+}
+
+.pam-test-result li.info:before {
+    content: "\2013";
+    opacity: 0.6;
+}
+
 /* Syntax reference */
 .pam-syntax-help {
     flex: 0 1 22em;

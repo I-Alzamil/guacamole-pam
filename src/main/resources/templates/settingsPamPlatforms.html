@@ -118,8 +118,21 @@
                 <div class="action-buttons">
                     <button class="save" ng-click="savePlatform()" ng-disabled="!isDirty()">{{ 'PAM.ACTION_SAVE' | translate }}</button>
                     <button class="cancel" ng-click="cancelEdit()">{{ 'PAM.ACTION_CLOSE' | translate }}</button>
+                    <button class="pam-test" ng-show="getType(editing.type).testable" ng-click="testPlatform()"
+                            ng-disabled="testing" title="{{ 'PAM.HELP_TEST_PLATFORM' | translate }}">
+                        {{ (testing ? 'PAM.INFO_TESTING' : 'PAM.ACTION_TEST') | translate }}
+                    </button>
                     <button class="delete danger" ng-show="editing.id" ng-click="deletePlatform()">{{ 'PAM.ACTION_DELETE' | translate }}</button>
                     <span class="pam-saved" ng-show="saved">{{ 'PAM.INFO_SAVED' | translate }}</span>
+                </div>
+
+                <!-- What the last test found, step by step -->
+                <div class="pam-test-result" ng-show="testResult"
+                     ng-class="{passed: testResult.success, failed: !testResult.success}">
+                    <h3>{{ (testResult.success ? 'PAM.TEXT_TEST_PASSED' : 'PAM.TEXT_TEST_FAILED') | translate }}</h3>
+                    <ul>
+                        <li ng-repeat="step in testResult.steps" class="{{ step.status | lowercase }}">{{ step.text }}</li>
+                    </ul>
                 </div>
             </div>
 

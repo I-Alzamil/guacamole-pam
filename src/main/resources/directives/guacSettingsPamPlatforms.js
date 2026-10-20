@@ -198,6 +198,7 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
                 $scope.editing = platform;
                 original = angular.copy(platform);
                 $scope.saved = false;
+                $scope.testResult = null;
             };
 
             $scope.selectPlatform = function selectPlatform(platform) {
@@ -235,6 +236,32 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
                         delete sent.settings[name];
                 });
                 return sent;
+            };
+
+            /**
+             * Steps of the last test of the editing platform, or null.
+             */
+            $scope.testResult = null;
+
+            /**
+             * Whether a test of the editing platform is running.
+             */
+            $scope.testing = false;
+
+            /**
+             * Tests the platform as edited, without saving it.
+             */
+            $scope.testPlatform = function testPlatform() {
+                var tested = $scope.editing;
+                $scope.testing = true;
+                $scope.testResult = null;
+                pamService.testPlatform(toSend(tested)).then(function platformTested(result) {
+                    if ($scope.editing === tested)
+                        $scope.testResult = result;
+                }, guacNotification.SHOW_REQUEST_ERROR)
+                ['finally'](function testEnded() {
+                    $scope.testing = false;
+                });
             };
 
             $scope.savePlatform = function savePlatform() {
@@ -380,6 +407,12 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
 
             $scope.$watch('editing', function editingChanged() {
                 $scope.saved = $scope.saved && !$scope.isDirty();
+            }, true);
+
+            // A test tells about the settings it was run with only
+            $scope.$watch('editing.settings', function settingsChanged(settings, previous) {
+                if (settings !== previous)
+                    $scope.testResult = null;
             }, true);
 
             pamService.getPlatformTypes().then(function typesRetrieved(types) {

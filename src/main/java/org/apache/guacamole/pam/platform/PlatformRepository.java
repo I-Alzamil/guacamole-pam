@@ -347,6 +347,31 @@ public class PlatformRepository {
     }
 
     /**
+     * A platform sent by a client as it would be saved, with its secrets,
+     * those left empty taken from the stored platform it names, if any, on
+     * the same conditions as when saving. For testing it before saving.
+     *
+     * @throws GuacamoleException
+     *     If the platform is invalid, would change type, or a stored
+     *     secret would be sent to another server than it was entered for.
+     */
+    public Platform prepare(Platform platform) throws GuacamoleException {
+
+        Platform stored = null;
+        if (platform != null && platform.getId() != null) {
+            stored = getWithSecrets(platform.getId());
+            if (stored == null)
+                throw new GuacamoleResourceNotFoundException("No such platform.");
+            if (platform.getType() != null && !platform.getType().equals(stored.getType()))
+                throw new GuacamoleClientException("The type of a platform cannot be changed.");
+            platform.setType(stored.getType());
+        }
+
+        return sanitize(platform, stored);
+
+    }
+
+    /**
      * Validates a platform sent by a client, keeping only the fields of its
      * type and moving secrets apart. Empty secrets keep those of the stored
      * platform, unless a field deciding where they are sent changed.

@@ -240,6 +240,15 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   settings in the file, such as `"winrm-admin-password"`. **Restore
   defaults** adds back "Unix", "macOS" and "Windows" if missing;
   a platform with one of their names is left as it is, even if changed.
+- **LDAP and Kerberos platforms can be tested before saving**, with **Test**
+  in the platform editor. It checks the settings as they are, changing no
+  password: the server is reached and trusted (LDAP: its certificate; a
+  Kerberos KDC: its realm, then the password change server), and the
+  rotation account or admin principal, if any, signs in. Each step's outcome
+  is listed, and the test is logged. Stored passwords, shown masked, are the
+  ones tested, unless where they are sent changed: enter them again then.
+  Without an admin principal, Active Directory and some KDCs don't say
+  whether they serve the realm: the first rotation checks it.
 - Approvers see a yellow badge counting requests awaiting their decision.
   Administrators also see a red badge counting failed rotations. Each user can
   turn either off under **Preferences → Notification badges**.

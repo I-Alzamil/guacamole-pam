@@ -34,12 +34,15 @@ import org.apache.guacamole.pam.checkout.PasswordGrant;
 import org.apache.guacamole.pam.checkout.PasswordRequest;
 import org.apache.guacamole.pam.management.ManagementType;
 import org.apache.guacamole.pam.management.ManagementTypes;
+import org.apache.guacamole.pam.management.PlatformTestResult;
 import org.apache.guacamole.pam.platform.Platform;
 import org.apache.guacamole.pam.platform.PlatformImport;
 import org.apache.guacamole.pam.ssh.SequenceScript;
 import org.apache.guacamole.pam.ssh.ValidationResult;
 import org.apache.guacamole.pam.rotation.ManagedConnection;
 import org.apache.guacamole.pam.rotation.RotationResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * REST API at "api/session/ext/pam". Requests (for an Account's password,
@@ -52,6 +55,8 @@ import org.apache.guacamole.pam.rotation.RotationResult;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class PamREST {
+
+    private static final Logger logger = LoggerFactory.getLogger(PamREST.class);
 
     /**
      * Most checkouts returned by one history search, as for Guacamole's own
@@ -169,6 +174,7 @@ public class PamREST {
             description.put("name", type.getName());
             description.put("forms", type.getPlatformForms());
             description.put("secretFields", type.getSecretFields());
+            description.put("testable", type.isTestable());
             types.add(description);
         }
 
@@ -210,6 +216,27 @@ public class PamREST {
     public PlatformImport.Report restoreDefaultPlatforms() throws GuacamoleException {
         requireAdministrator();
         return provider.getPlatformImport().restoreDefaults();
+    }
+
+    /**
+     * Tests a platform as edited, saved or not, changing nothing. Its
+     * secrets left empty are those stored, as when saving.
+     */
+    @POST
+    @Path("platforms/test")
+    public PlatformTestResult testPlatform(Platform platform) throws GuacamoleException {
+
+        requireAdministrator();
+        Platform prepared = provider.getPlatforms().prepare(platform);
+        ManagementType type = ManagementTypes.get(prepared.getType());
+        if (type == null || !type.isTestable())
+            throw new GuacamoleClientException("Platforms of this type cannot be tested.");
+
+        PlatformTestResult result = type.test(prepared);
+        logger.info("User \"{}\" tested platform \"{}\": {}.", user.getIdentifier(), prepared.getName(),
+                result.isSuccess() ? "passed" : "failed");
+        return result;
+
     }
 
     @GET

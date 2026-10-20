@@ -17,6 +17,7 @@ import com.unboundid.ldap.sdk.extensions.StartTLSExtendedRequest;
 import com.unboundid.util.ssl.HostNameSSLSocketVerifier;
 import com.unboundid.util.ssl.SSLUtil;
 
+import org.apache.guacamole.pam.management.PlatformTestResult;
 import org.apache.guacamole.pam.rotation.ChangeOutcome;
 
 /**
@@ -106,6 +107,41 @@ public class LdapClient {
     }
 
     /**
+     * Checks that the directory can be reached and trusted, and that the
+     * rotation account, if any, can sign in, changing nothing.
+     */
+    public PlatformTestResult test(LdapTarget target) {
+
+        PlatformTestResult result = new PlatformTestResult();
+        CertificateTrustManager trust = new CertificateTrustManager(target.getPinnedCertificate());
+        String server = target.getHostname() + ":" + target.getPort();
+
+        try (LDAPConnection connection = open(target, trust)) {
+
+            if (target.getEncryption() == LdapTarget.Encryption.NONE)
+                result.passed("Connected to " + server + ", without encryption.");
+            else
+                result.passed("Connected to " + server + " over "
+                        + (target.getEncryption() == LdapTarget.Encryption.STARTTLS ? "StartTLS" : "LDAPS")
+                        + ". Its certificate " + trust.getPresentedFingerprint()
+                        + (trust.isPinned() ? " is the pinned one." : " is issued by a trusted CA for this host."));
+
+            if (target.getAdminDn() == null) {
+                result.info("No rotation account: each account changes its own password.");
+                return result;
+            }
+
+            connection.bind(target.getAdminDn(), target.getAdminPassword());
+            return result.passed("The rotation account signed in.");
+
+        }
+        catch (LDAPException e) {
+            return result.failed(describe(e, trust, true));
+        }
+
+    }
+
+    /**
      * Connects to the directory, establishing TLS before any credentials are
      * sent unless encryption is disabled.
      */
@@ -174,7 +210,7 @@ public class LdapClient {
         if (handshake != null && trust.getPresentedFingerprint() != null)
             return "The LDAP server certificate " + trust.getPresentedFingerprint() + " is not trusted ("
                     + rootMessage(handshake) + "). No credentials were sent. If this is the expected"
-                    + " certificate, pin its fingerprint in the connection.";
+                    + " certificate, pin its fingerprint in the platform.";
         if (e.getResultCode() == ResultCode.INVALID_CREDENTIALS)
             return useAdmin ? "The directory rejected the rotation account credentials."
                             : "The directory rejected the account's current password.";

@@ -71,6 +71,25 @@ public interface ManagementType {
     PasswordChanger createChanger(Platform platform, Target target);
 
     /**
+     * Whether {@link #test(Platform)} can check platforms of this type.
+     */
+    default boolean isTestable() {
+        return false;
+    }
+
+    /**
+     * Checks that the server of a platform of this type can be reached and
+     * trusted, and that its credentials, if any, are accepted, without
+     * changing any password. Never throws: every failure is a failed step.
+     *
+     * @param platform
+     *     The platform, valid, with its secrets.
+     */
+    default PlatformTestResult test(Platform platform) {
+        return new PlatformTestResult().failed("Platforms of this type cannot be tested.");
+    }
+
+    /**
      * Extra identification of the account shown to users requesting its
      * password, such as an LDAP DN, or null.
      */

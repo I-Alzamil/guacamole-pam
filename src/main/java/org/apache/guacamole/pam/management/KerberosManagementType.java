@@ -106,6 +106,21 @@ public class KerberosManagementType implements ManagementType {
     }
 
     @Override
+    public boolean isTestable() {
+        return true;
+    }
+
+    @Override
+    public PlatformTestResult test(Platform platform) {
+        try {
+            return kerberos.test(KerberosTarget.fromParameters(merge(platform, "test", null)));
+        }
+        catch (IllegalArgumentException e) {
+            return new PlatformTestResult().failed(e.getMessage());
+        }
+    }
+
+    @Override
     public String getAccountDetail(Target target) {
         return target.getAttribute(PRINCIPAL);
     }

@@ -113,6 +113,21 @@ public class LdapManagementType implements ManagementType {
     }
 
     @Override
+    public boolean isTestable() {
+        return true;
+    }
+
+    @Override
+    public PlatformTestResult test(Platform platform) {
+        try {
+            return ldap.test(LdapTarget.fromParameters(merge(platform, "cn=test", null, null)));
+        }
+        catch (IllegalArgumentException e) {
+            return new PlatformTestResult().failed(e.getMessage());
+        }
+    }
+
+    @Override
     public String getAccountDetail(Target target) {
         return target.getAttribute(LDAP_DN);
     }

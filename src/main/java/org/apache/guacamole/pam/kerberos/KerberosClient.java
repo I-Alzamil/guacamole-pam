@@ -9,6 +9,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 
+import org.apache.guacamole.pam.management.PlatformTestResult;
 import org.apache.guacamole.pam.rotation.ChangeOutcome;
 import org.apache.kerby.KOptions;
 import org.apache.kerby.kerberos.kerb.KrbCodec;
@@ -209,6 +210,75 @@ public class KerberosClient {
                 return false;
             throw e;
         }
+
+    }
+
+    /**
+     * Checks that the KDC serves the realm, that the admin principal, if
+     * any, gets a password change ticket, and that the password change
+     * server accepts connections, changing nothing.
+     */
+    public PlatformTestResult test(KerberosTarget target) {
+
+        PlatformTestResult result = new PlatformTestResult();
+        String kdc = target.getKdc() + ":" + target.getKdcPort();
+
+        if (target.getAdminPrincipal() != null) {
+            try {
+                KOptions options = new KOptions();
+                options.add(KrbOption.USE_PASSWD, true);
+                options.add(KrbOption.CLIENT_PRINCIPAL, target.getAdminPrincipal());
+                options.add(KrbOption.USER_PASSWD, target.getAdminPassword());
+                options.add(KrbOption.SERVER_PRINCIPAL, "kadmin/changepw@" + target.getRealm());
+                newClient(target).requestTgt(options);
+                result.passed("The KDC " + kdc + " gave the admin principal a password change ticket, so it"
+                        + " knows its password.");
+            }
+            catch (KrbException e) {
+                return result.failed(describe(e, true));
+            }
+        }
+        else {
+
+            // The realm's own ticket granting principal, which every realm
+            // has: a KDC of the realm refuses the password, or (as Active
+            // Directory does, and others for realms they do not serve) says
+            // it does not know it
+            try {
+                KOptions options = new KOptions();
+                options.add(KrbOption.USE_PASSWD, true);
+                options.add(KrbOption.CLIENT_PRINCIPAL, "krbtgt/" + target.getRealm() + "@" + target.getRealm());
+                options.add(KrbOption.USER_PASSWD, "-");
+                newClient(target).requestTgt(options);
+                result.passed("The KDC " + kdc + " serves the realm " + target.getRealm() + ".");
+            }
+            catch (KrbException e) {
+                KrbErrorCode code = e.getKrbErrorCode();
+                if (code == null)
+                    return result.failed("Unable to reach the KDC " + kdc + ": " + message(e));
+                if (code == KrbErrorCode.WRONG_REALM)
+                    return result.failed("The KDC " + kdc + " does not serve the realm " + target.getRealm() + ".");
+                if (code == KrbErrorCode.KDC_ERR_C_PRINCIPAL_UNKNOWN)
+                    result.passed("The KDC " + kdc + " answers, without saying whether it serves the realm "
+                            + target.getRealm() + ". The first rotation of a connection checks it.");
+                else
+                    result.passed("The KDC " + kdc + " serves the realm " + target.getRealm() + ".");
+            }
+
+            result.info("No admin principal: each principal changes its own password.");
+
+        }
+
+        String kpasswd = target.getKpasswdServer() + ":" + target.getKpasswdPort();
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress(target.getKpasswdServer(), target.getKpasswdPort()), TIMEOUT_MS);
+            result.passed("The password change server " + kpasswd + " accepts connections.");
+        }
+        catch (IOException | RuntimeException e) {
+            result.failed("Unable to reach the password change server " + kpasswd + ": " + message(e));
+        }
+
+        return result;
 
     }
 
