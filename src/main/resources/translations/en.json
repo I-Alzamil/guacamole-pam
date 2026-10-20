@@ -310,7 +310,7 @@
         "ACTION_RESTORE_DEFAULTS": "Restore defaults",
         "DIALOG_HEADER_RESTORE_DEFAULTS": "Restore default platforms",
         "HELP_EXPORT": "Download the platforms listed, without their passwords, to import them here or on another server.",
-        "HELP_RESTORE_DEFAULTS": "Add back the default platforms, Unix and Windows, that are missing.",
+        "HELP_RESTORE_DEFAULTS": "Add back the default platforms, Unix, macOS and Windows, that are missing.",
         "TEXT_CONFIRM_RESTORE": "Add back the default platforms that are missing? Platforms with their names are left as they are, even if changed.",
         "TEXT_NOTHING_RESTORED": "Every default platform already exists: {NAMES}. Nothing was changed.",
         "TEXT_RESTORED": "Added back: {NAMES}."

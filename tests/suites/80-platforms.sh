@@ -90,14 +90,14 @@ import sys,json; p=json.load(sys.stdin); print(json.dumps({'name':sys.argv[1],'d
 
 LINUX_MODIFIED=$(platform_field "Unix" "d['lastModified']")
 R=$(api POST "$PAM/platforms/defaults" "$ADMIN")
-check "with both there, nothing is added" "imported: Unix=SKIPPED Windows=SKIPPED" "$(outcomes "$R")"
+check "with all there, nothing is added" "imported: Unix=SKIPPED macOS=SKIPPED Windows=SKIPPED" "$(outcomes "$R")"
 check "...nor changed" "$LINUX_MODIFIED" "$(platform_field "Unix" "d['lastModified']")"
 
 WINDOWS=$(platform_id "Windows")
 rename_platform "Windows" "t2 renamed default"
 on_cleanup "cleanup_platform 'Windows'; rename_platform 't2 renamed default' 'Windows'"
 R=$(api POST "$PAM/platforms/defaults" "$ADMIN")
-check "the missing one is added back" "imported: Unix=SKIPPED Windows=CREATED" "$(outcomes "$R")"
+check "the missing one is added back" "imported: Unix=SKIPPED macOS=SKIPPED Windows=CREATED" "$(outcomes "$R")"
 check "...as a new platform" yes "$([ -n "$(platform_id "Windows")" ] && [ "$(platform_id "Windows")" != "$WINDOWS" ] && echo yes)"
 check_contains "...with its script" "net user <USER> *" "$(platform_field "Windows" "d['settings']['script']")"
 check "a user who is not an administrator cannot restore them" 403 \

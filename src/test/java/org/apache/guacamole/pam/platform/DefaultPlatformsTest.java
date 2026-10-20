@@ -16,9 +16,10 @@ public class DefaultPlatformsTest {
     @Test
     public void readsTheDefaults() {
         List<Platform> defaults = DefaultPlatforms.read();
-        assertEquals(2, defaults.size());
+        assertEquals(3, defaults.size());
         assertEquals("Unix", defaults.get(0).getName());
-        assertEquals("Windows", defaults.get(1).getName());
+        assertEquals("macOS", defaults.get(1).getName());
+        assertEquals("Windows", defaults.get(2).getName());
     }
 
     @Test

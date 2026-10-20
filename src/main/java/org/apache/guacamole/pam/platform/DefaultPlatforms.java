@@ -10,7 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * The platforms a fresh install starts with, and which can be restored:
- * "Unix" and "Windows". They are kept in the format
+ * "Unix", "macOS" and "Windows". They are kept in the format
  * of exported platforms ({@value #RESOURCE}), which also shows that format.
  */
 final class DefaultPlatforms {
