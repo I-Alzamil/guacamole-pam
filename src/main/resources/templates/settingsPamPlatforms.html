@@ -4,12 +4,18 @@
     <div class="settings section pam-platforms">
         <p>{{ 'PAM.HELP_PLATFORMS' | translate }}</p>
 
+        <!-- Outside the views below, whose own scopes would hide the result -->
+        <guac-filter filtered-items="filteredPlatforms" items="platforms"
+                     placeholder="'PAM.FIELD_PLACEHOLDER_FILTER' | translate"
+                     properties="filteredPlatformProperties"
+                     ng-show="platforms.length"></guac-filter>
+
         <div class="pam-platform-layout">
 
             <!-- Platform list, to switch between platforms while one is open -->
             <div class="pam-platform-list" ng-if="editing">
                 <ul ng-class="{loading: !platforms}">
-                    <li ng-repeat="platform in platforms"
+                    <li ng-repeat="platform in filteredPlatforms"
                         ng-class="{selected: editing.id === platform.id}"
                         ng-attr-title="{{ platform.description || undefined }}"
                         ng-click="selectPlatform(platform)">
@@ -20,14 +26,16 @@
                         <span class="pam-platform-description">{{ platform.description }}</span>
                     </li>
                     <li class="pam-empty" ng-show="platforms && !platforms.length">{{ 'PAM.INFO_NO_PLATFORMS' | translate }}</li>
+                    <li class="pam-empty" ng-show="platforms.length && !filteredPlatforms.length">{{ 'PAM.INFO_NO_MATCH' | translate }}</li>
                 </ul>
             </div>
 
             <!-- Overview, while no platform is open -->
             <div class="pam-platform-overview" ng-if="!editing">
 
-                <div class="pam-platform-cards" ng-show="platforms.length">
-                    <div class="pam-platform-card" ng-repeat="platform in platforms"
+                <p class="pam-empty" ng-show="platforms.length && !filteredPlatforms.length">{{ 'PAM.INFO_NO_MATCH' | translate }}</p>
+                <div class="pam-platform-cards" ng-show="filteredPlatforms.length">
+                    <div class="pam-platform-card" ng-repeat="platform in filteredPlatforms"
                          role="button" tabindex="0" ng-click="selectPlatform(platform)"
                          ng-attr-title="{{ platform.description || undefined }}"
                          ng-keydown="($event.key === 'Enter' || $event.key === ' ') && selectPlatform(platform)">

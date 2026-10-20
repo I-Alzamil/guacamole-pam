@@ -3,6 +3,10 @@
     <div class="settings section pam-connections">
         <p>{{ 'PAM.HELP_CONNECTIONS' | translate }}</p>
 
+        <guac-filter filtered-items="filteredConnections" items="connections"
+                     placeholder="'PAM.FIELD_PLACEHOLDER_FILTER' | translate"
+                     properties="filteredConnectionProperties"></guac-filter>
+
         <table class="pam-connection-table" ng-class="{loading: !connections}">
             <thead>
                 <tr>
@@ -15,7 +19,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr ng-repeat="connection in connections">
+                <tr ng-repeat="connection in filteredConnections">
                     <td>
                         {{ connection.name }}
                         <span class="pam-protocol">{{ connection.protocol }}</span>
@@ -55,6 +59,9 @@
                 </tr>
                 <tr ng-show="connections && !connections.length">
                     <td colspan="6" class="pam-empty">{{ 'PAM.INFO_NO_CONNECTIONS' | translate }}</td>
+                </tr>
+                <tr ng-show="connections.length && !filteredConnections.length">
+                    <td colspan="6" class="pam-empty">{{ 'PAM.INFO_NO_MATCH' | translate }}</td>
                 </tr>
             </tbody>
         </table>

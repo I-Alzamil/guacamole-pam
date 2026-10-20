@@ -15,6 +15,7 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
             var $translate       = $injector.get('$translate');
             var $window          = $injector.get('$window');
             var guacNotification = $injector.get('guacNotification');
+            var pamFilterText    = $injector.get('pamFilterText');
             var pamService       = $injector.get('pamService');
 
             /**
@@ -113,8 +114,28 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
                 return 'PAM.INFO_POLICY_' + mode.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
             };
 
+            /**
+             * The platforms matching the filter.
+             */
+            $scope.filteredPlatforms = [];
+
+            /**
+             * What the filter matches: the platform's name, description,
+             * type and policy, as shown.
+             */
+            $scope.filteredPlatformProperties = ['pamFilterText'];
+
             var loadPlatforms = function loadPlatforms() {
                 return pamService.getPlatforms().then(function platformsRetrieved(platforms) {
+                    angular.forEach(platforms, function addFilterText(platform) {
+                        pamFilterText(platform, [
+                            platform.name,
+                            platform.description,
+                            $translate.instant('PAM.TYPE_' + String(platform.type).toUpperCase()),
+                            $translate.instant($scope.policyKey(platform),
+                                { HOURS : (platform.policy && platform.policy['rotation-interval']) || '?' })
+                        ]);
+                    });
                     $scope.platforms = platforms;
                 }, guacNotification.SHOW_REQUEST_ERROR);
             };

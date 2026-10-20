@@ -13,7 +13,9 @@ angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSet
 
             // Required services
             var $interval        = $injector.get('$interval');
+            var $translate       = $injector.get('$translate');
             var guacNotification = $injector.get('guacNotification');
+            var pamFilterText    = $injector.get('pamFilterText');
             var pamService       = $injector.get('pamService');
             var pamRotationBadge = $injector.get('pamRotationBadge');
 
@@ -27,9 +29,34 @@ angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSet
              */
             $scope.connections = null;
 
+            /**
+             * The connections matching the filter.
+             */
+            $scope.filteredConnections = [];
+
+            /**
+             * What the filter matches: the connection, its protocol, mode,
+             * platform and status, as shown.
+             */
+            $scope.filteredConnectionProperties = ['pamFilterText'];
+
+            var setConnections = function setConnections(connections) {
+                angular.forEach(connections, function addFilterText(connection) {
+                    pamFilterText(connection, [
+                        connection.name,
+                        connection.protocol,
+                        $translate.instant($scope.modeKey(connection.mode)),
+                        connection.platformName,
+                        connection.platformType && $translate.instant('PAM.TYPE_' + connection.platformType.toUpperCase()),
+                        connection.status && $translate.instant('PAM.STATUS_' + connection.status)
+                    ]);
+                });
+                $scope.connections = connections;
+            };
+
             var loadConnections = function loadConnections() {
                 return pamService.getConnections().then(function connectionsRetrieved(connections) {
-                    $scope.connections = connections;
+                    setConnections(connections);
                     pamRotationBadge.refresh();
                 }, guacNotification.SHOW_REQUEST_ERROR);
             };
@@ -53,9 +80,7 @@ angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSet
 
             // Pick up rotations triggered after use or by the schedule
             var refresh = $interval(function refreshConnections() {
-                pamService.getConnections().then(function connectionsRetrieved(connections) {
-                    $scope.connections = connections;
-                });
+                pamService.getConnections().then(setConnections);
             }, REFRESH_INTERVAL);
 
             $scope.$on('$destroy', function settingsPamRotationDestroyed() {

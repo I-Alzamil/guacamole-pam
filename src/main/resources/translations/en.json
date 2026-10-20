@@ -85,6 +85,7 @@
         "INFO_NEVER": "Never",
         "INFO_NO_ACTIVE_CHECKOUTS": "No password is checked out.",
         "INFO_NO_CONNECTIONS": "No connection is assigned to a platform yet.",
+        "INFO_NO_MATCH": "Nothing matches the filter.",
         "INFO_NO_PLATFORMS": "No platforms yet.",
         "INFO_OVERRIDDEN": "overridden",
         "INFO_PLATFORM_CONNECTIONS": "{COUNT, plural, =0{No connections} one{1 connection} other{# connections}}",
