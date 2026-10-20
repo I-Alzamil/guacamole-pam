@@ -42,8 +42,9 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
 
             /**
              * What a secret field holds while its stored value is kept, as
-             * the connection editor shows a stored password: masked, it
-             * looks set, and is sent as empty, which keeps the stored value.
+             * the connection editor shows a stored password (MASK of
+             * ConnectionSecrets.java): masked, it looks set, and is left
+             * out when sending, which keeps the stored value.
              */
             var STORED_SECRET = '********';
 

@@ -55,7 +55,9 @@ public class ConnectionSecrets {
     /**
      * What editors see in place of a value kept here, masked as any
      * password: it looks set, and tells nothing of where the value is. It
-     * only ever stands for the value of its own field and connection.
+     * only ever stands for the value of its own field and connection. The
+     * platform editor shows stored platform passwords the same way
+     * (STORED_SECRET of guacSettingsPamPlatforms.js).
      */
     public static final String MASK = "********";
 
@@ -84,30 +86,95 @@ public class ConnectionSecrets {
 
     /**
      * The configuration of a connection as its editors see it: its tokens
-     * are {@link #MASK}. The same configuration if it has none.
+     * are {@link #MASK}. Parameters are only read, and masked, when asked
+     * for: the database's configurations query them only then, so listing
+     * connections, which reads their protocol, stays one query.
      */
     public static GuacamoleConfiguration masked(GuacamoleConfiguration configuration, int connectionId) {
+        return new MaskedConfiguration(configuration, connectionId);
+    }
 
-        // Read as Guacamole's API reads them: the database's configurations
-        // only load their parameters for getParameters()
-        Map<String, String> parameters = new HashMap<>(configuration.getParameters());
+    /**
+     * See {@link #masked}. Changes go to the configuration it masks.
+     */
+    private static final class MaskedConfiguration extends GuacamoleConfiguration {
 
-        boolean changed = false;
-        for (String parameter : SENSITIVE) {
-            if (token(parameter, connectionId).equals(parameters.get(parameter))) {
-                parameters.put(parameter, MASK);
-                changed = true;
-            }
+        private static final long serialVersionUID = 1L;
+
+        private final GuacamoleConfiguration configuration;
+
+        private final int connectionId;
+
+        /**
+         * The parameters, masked, once read.
+         */
+        private Map<String, String> parameters;
+
+        MaskedConfiguration(GuacamoleConfiguration configuration, int connectionId) {
+            this.configuration = configuration;
+            this.connectionId = connectionId;
         }
 
-        if (!changed)
-            return configuration;
+        @Override
+        public String getConnectionID() {
+            return configuration.getConnectionID();
+        }
 
-        GuacamoleConfiguration masked = new GuacamoleConfiguration();
-        masked.setConnectionID(configuration.getConnectionID());
-        masked.setProtocol(configuration.getProtocol());
-        masked.setParameters(parameters);
-        return masked;
+        @Override
+        public void setConnectionID(String connectionID) {
+            configuration.setConnectionID(connectionID);
+        }
+
+        @Override
+        public String getProtocol() {
+            return configuration.getProtocol();
+        }
+
+        @Override
+        public void setProtocol(String protocol) {
+            configuration.setProtocol(protocol);
+        }
+
+        @Override
+        public Map<String, String> getParameters() {
+            if (parameters == null) {
+                Map<String, String> read = new HashMap<>(configuration.getParameters());
+                for (String parameter : SENSITIVE) {
+                    if (token(parameter, connectionId).equals(read.get(parameter)))
+                        read.put(parameter, MASK);
+                }
+                parameters = Collections.unmodifiableMap(read);
+            }
+            return parameters;
+        }
+
+        @Override
+        public String getParameter(String name) {
+            return getParameters().get(name);
+        }
+
+        @Override
+        public Set<String> getParameterNames() {
+            return getParameters().keySet();
+        }
+
+        @Override
+        public void setParameter(String name, String value) {
+            configuration.setParameter(name, value);
+            parameters = null;
+        }
+
+        @Override
+        public void unsetParameter(String name) {
+            configuration.unsetParameter(name);
+            parameters = null;
+        }
+
+        @Override
+        public void setParameters(Map<String, String> parameters) {
+            configuration.setParameters(parameters);
+            this.parameters = null;
+        }
 
     }
 
@@ -214,8 +281,9 @@ public class ConnectionSecrets {
             // The mask an editor saw keeps the value, as the token would
             if (sensitive && MASK.equals(value)) {
                 if (connectionId == null || !holdsToken(connectionId, name))
-                    throw new GuacamoleClientException(MASK + " only stands for a value already stored in the same"
-                            + " field of the same connection, so it cannot be copied. Type the value instead.");
+                    throw new GuacamoleClientException("The " + name + " is " + MASK + ", which only stands for a"
+                            + " value already stored in the same field of the same connection, so it cannot be"
+                            + " copied. Type the " + name + " instead.");
                 value = token(name, connectionId);
             }
 

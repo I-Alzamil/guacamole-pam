@@ -184,7 +184,7 @@ R=$(api POST "$DATA/connections" "$ADMIN" "$(curl -s "$DATA/connections/$MANAGED
 import sys, json; c = json.load(sys.stdin); c.pop('identifier', None); c['name'] = 't2 enc clone'
 c['parameters'] = json.loads(sys.argv[1]); print(json.dumps(c))" "$(curl -s "$DATA/connections/$MANAGED/parameters?token=$ADMIN")")")
 check "a clone, given ******** for the password, is refused" 400 "$(status_of "$R")"
-check_contains "...as it only stands for the stored value of its own connection" "cannot be copied" "$(message_of "$R")"
+check_contains "...naming the field, as it only stands for the stored value of its own connection" "The password is ********, which only stands for a value already stored" "$(message_of "$R")"
 check "...and not created" "" "$(connection_id "t2 enc clone")"
 R=$(edit_connection "$ADMIN" "$SSH" '{"passphrase":"********"}')
 check "******** where no value is stored is refused" 400 "$(status_of "$R")"
