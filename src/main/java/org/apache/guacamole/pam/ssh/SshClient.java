@@ -37,6 +37,13 @@ public class SshClient {
 
     private static final long POLL_INTERVAL_MS = 50;
 
+    /**
+     * Most output since the last send that expectations are matched
+     * against: its end, where prompts are. Bounds memory and matching on a
+     * target sending endless output.
+     */
+    private static final int MAX_STEP_OUTPUT = 64 * 1024;
+
     private static final Pattern ANSI_ESCAPE = Pattern.compile(
             "\u001B\\[[0-?]*[ -/]*[@-~]"           // CSI sequences (colors, cursor moves)
           + "|\u001B\\][^\u0007\u001B]*(\u0007|\u001B\\\\)" // OSC sequences (window title)
@@ -235,14 +242,14 @@ public class SshClient {
     }
 
     /**
-     * Output received from the shell: the text seen since the last send,
-     * which expectations are matched against, plus a bounded transcript.
+     * Output received from the shell: the text seen since the last send (at
+     * most its last {@link #MAX_STEP_OUTPUT} characters), which expectations
+     * are matched against, plus a bounded transcript.
      */
     private static final class Output {
 
-        private final StringBuilder raw = new StringBuilder();
+        private final StringBuilder step = new StringBuilder();
         private final Transcript transcript;
-        private int stepStart = 0;
         private final byte[] buffer = new byte[4096];
 
         Output(Map<String, String> values) {
@@ -261,7 +268,9 @@ public class SshClient {
                 if (length <= 0)
                     break;
                 String text = new String(buffer, 0, length, StandardCharsets.UTF_8);
-                raw.append(text);
+                step.append(text);
+                if (step.length() > MAX_STEP_OUTPUT)
+                    step.delete(0, step.length() - MAX_STEP_OUTPUT);
                 transcript.append(text);
                 received = true;
             }
@@ -269,7 +278,7 @@ public class SshClient {
         }
 
         void startStep() {
-            stepStart = raw.length();
+            step.setLength(0);
         }
 
         boolean await(InputStream in, ChannelShell channel, Pattern pattern, long timeoutMs)
@@ -287,20 +296,26 @@ public class SshClient {
                 throws IOException, InterruptedException {
 
             long deadline = System.currentTimeMillis() + timeoutMs;
+            boolean first = true;
             while (true) {
-                pump(in);
-                String seen = clean(raw.substring(stepStart));
-                int best = -1;
-                int bestStart = Integer.MAX_VALUE;
-                for (int i = 0; i < patterns.size(); i++) {
-                    Matcher matcher = patterns.get(i).matcher(seen);
-                    if (matcher.find() && matcher.start() < bestStart) {
-                        best = i;
-                        bestStart = matcher.start();
+
+                // Matched again only when more output arrived
+                if (pump(in) || first) {
+                    first = false;
+                    String seen = clean(step.toString());
+                    int best = -1;
+                    int bestStart = Integer.MAX_VALUE;
+                    for (int i = 0; i < patterns.size(); i++) {
+                        Matcher matcher = patterns.get(i).matcher(seen);
+                        if (matcher.find() && matcher.start() < bestStart) {
+                            best = i;
+                            bestStart = matcher.start();
+                        }
                     }
+                    if (best >= 0)
+                        return best;
                 }
-                if (best >= 0)
-                    return best;
+
                 if (channel.isClosed() && in.available() == 0)
                     return -1;
                 if (System.currentTimeMillis() >= deadline)
