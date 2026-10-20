@@ -247,8 +247,9 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   already exists makes the import fail, unless **Update existing platforms**
   is ticked.
   Updated platforms keep their stored passwords, unless where they are sent
-  changes. A new platform that needs a password can be given it among its
-  settings in the file, such as `"winrm-admin-password"`. **Restore
+  changes; one given empty is removed. A new platform that needs a password
+  can be given it among its settings in the file, such as
+  `"winrm-admin-password"`. **Restore
   defaults** adds back "Unix", "macOS" and "Windows" if missing;
   a platform with one of their names is left as it is, even if changed.
 - **LDAP and Kerberos platforms can be tested before saving**, with **Test**

@@ -373,8 +373,9 @@ public class PlatformRepository {
 
     /**
      * Validates a platform sent by a client, keeping only the fields of its
-     * type and moving secrets apart. Empty secrets keep those of the stored
-     * platform, unless a field deciding where they are sent changed.
+     * type and moving secrets apart. Secrets left out keep those of the
+     * stored platform, unless a field deciding where they are sent changed;
+     * empty ones are removed.
      *
      * @param stored
      *     The platform as stored, with its secrets, or null for a new one.
@@ -412,8 +413,10 @@ public class PlatformRepository {
         for (String field : fieldNames(type)) {
             String value = platform.getSettings().get(field);
             if (secretFields.contains(field)) {
-                if (value != null && !value.isEmpty())
-                    secrets.put(field, value);
+                if (value != null) {
+                    if (!value.isEmpty())
+                        secrets.put(field, value);
+                }
                 else if (storedSecrets.get(field) != null) {
                     secrets.put(field, storedSecrets.get(field));
                     kept.add(field);

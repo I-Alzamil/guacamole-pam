@@ -44,11 +44,18 @@ R=$(import_platforms "[$SSH_PLATFORM]")
 check "without updating, the import is refused" "refused: t2 import ssh=INVALID" "$(outcomes "$R")"
 check_contains "...saying it exists" "exists" "$(message_for "$R" "t2 import ssh")"
 
-UPDATED=$(printf '%s' "[$SSH_PLATFORM,$WINRM_PLATFORM]" | sed 's/"first"/"second"/; s/"Imported-Pw1!"/""/')
+# As exported: the secret left out
+UPDATED=$(python3 -I -c 'import json,sys; p=json.loads(sys.argv[1]); p[0]["description"]="second"
+p[1]["settings"].pop("winrm-admin-password"); print(json.dumps(p))' "[$SSH_PLATFORM,$WINRM_PLATFORM]")
 R=$(import_platforms "$UPDATED" true)
 check "with updating, both are updated" "imported: t2 import ssh=UPDATED t2 import winrm=UPDATED" "$(outcomes "$R")"
 check "...the description changed" second "$(platform_field "t2 import ssh" "d['description']")"
 check "...the secret left out kept" "['winrm-admin-password']" "$(platform_field "t2 import winrm" "str(d.get('storedSecrets'))")"
+R=$(import_platforms '[{"name":"t2 import winrm","type":"winrm","settings":{"winrm-admin-password":""},"policy":{}}]' true)
+check "an update giving the secret empty" "imported: t2 import winrm=UPDATED" "$(outcomes "$R")"
+check "...removes it" "[]" "$(platform_field "t2 import winrm" "str(d.get('storedSecrets'))")"
+R=$(import_platforms "[$WINRM_PLATFORM]" true)
+check "...and it can be given again" "['winrm-admin-password']" "$(platform_field "t2 import winrm" "str(d.get('storedSecrets'))")"
 
 MOVED='[{"name":"t2 import winrm","type":"winrm","settings":{"winrm-port":"15986","winrm-admin-username":"Administrator"},"policy":{}}]'
 R=$(import_platforms "$MOVED" true)

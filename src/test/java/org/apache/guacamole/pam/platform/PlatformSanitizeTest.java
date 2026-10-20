@@ -15,10 +15,15 @@ import org.junit.Test;
 
 /**
  * A stored platform secret is only sent where it was entered for: changing
- * a field deciding where it goes needs it entered again.
+ * a field deciding where it goes needs it entered again. Left out, a secret
+ * keeps its stored value; given empty, it is removed.
  */
 public class PlatformSanitizeTest {
 
+    /**
+     * An LDAP platform with a rotation account, whose password is left out
+     * if null.
+     */
     private static Platform ldap(String hostname, String password, String... settings) {
         Platform platform = new Platform();
         platform.setName("Directory");
@@ -26,7 +31,8 @@ public class PlatformSanitizeTest {
         Map<String, String> values = new HashMap<>();
         values.put(LdapTarget.HOSTNAME, hostname);
         values.put(LdapTarget.ADMIN_DN, "cn=admin,dc=example,dc=org");
-        values.put(LdapTarget.ADMIN_PASSWORD, password);
+        if (password != null)
+            values.put(LdapTarget.ADMIN_PASSWORD, password);
         for (int i = 0; i + 1 < settings.length; i += 2)
             values.put(settings[i], settings[i + 1]);
         platform.setSettings(values);
@@ -40,7 +46,7 @@ public class PlatformSanitizeTest {
     @Test
     public void keepsTheStoredPasswordWhenTheServerIsUnchanged() throws GuacamoleClientException {
         Platform stored = stored(ldap("dc.example.org", "Admin-Pw1!"));
-        Platform saved = PlatformRepository.sanitize(ldap("dc.example.org", "",
+        Platform saved = PlatformRepository.sanitize(ldap("dc.example.org", null,
                 LdapTarget.ADMIN_DN, "cn=other,dc=example,dc=org"), stored);
         assertEquals("Admin-Pw1!", saved.getSecrets().get(LdapTarget.ADMIN_PASSWORD));
     }
@@ -49,7 +55,7 @@ public class PlatformSanitizeTest {
     public void refusesAnotherServerWithTheStoredPassword() throws GuacamoleClientException {
         Platform stored = stored(ldap("dc.example.org", "Admin-Pw1!"));
         try {
-            PlatformRepository.sanitize(ldap("attacker.example.net", ""), stored);
+            PlatformRepository.sanitize(ldap("attacker.example.net", null), stored);
             fail("The stored password would be sent to another server.");
         }
         catch (GuacamoleClientException e) {
@@ -67,7 +73,7 @@ public class PlatformSanitizeTest {
                 { LdapTarget.CERTIFICATE, "AA:BB" },
                 { LdapTarget.PORT, "1636" } }) {
             try {
-                PlatformRepository.sanitize(ldap("dc.example.org", "", change), stored);
+                PlatformRepository.sanitize(ldap("dc.example.org", null, change), stored);
                 fail("Changing " + change[0] + " kept the stored password.");
             }
             catch (GuacamoleClientException e) {
@@ -99,7 +105,7 @@ public class PlatformSanitizeTest {
 
         Map<String, String> moved = new HashMap<>(values);
         moved.put(KerberosTarget.KDC, "kdc.attacker.example.net");
-        moved.put(KerberosTarget.ADMIN_PASSWORD, "");
+        moved.remove(KerberosTarget.ADMIN_PASSWORD);
         kerberos.setSettings(moved);
         try {
             PlatformRepository.sanitize(kerberos, stored);
@@ -124,7 +130,7 @@ public class PlatformSanitizeTest {
         // Trusting a CA of the editor's choice would trust their hosts
         Map<String, String> trusting = new HashMap<>(values);
         trusting.put(WinRmTarget.CA_CERTIFICATES, "-----BEGIN CERTIFICATE-----");
-        trusting.put(WinRmTarget.ADMIN_PASSWORD, "");
+        trusting.remove(WinRmTarget.ADMIN_PASSWORD);
         winrm.setSettings(trusting);
         try {
             PlatformRepository.sanitize(winrm, stored);
@@ -133,6 +139,14 @@ public class PlatformSanitizeTest {
         catch (GuacamoleClientException e) {
             assertTrue(e.getMessage(), e.getMessage().contains(WinRmTarget.CA_CERTIFICATES));
         }
+    }
+
+    @Test
+    public void removesAStoredPasswordGivenEmpty() throws GuacamoleClientException {
+        Platform stored = stored(ldap("dc.example.org", "Admin-Pw1!"));
+        Platform cleared = ldap("dc.example.org", "");
+        cleared.getSettings().remove(LdapTarget.ADMIN_DN);
+        assertTrue(PlatformRepository.sanitize(cleared, stored).getSecrets().isEmpty());
     }
 
 }

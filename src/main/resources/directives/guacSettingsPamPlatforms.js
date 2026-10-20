@@ -228,7 +228,8 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
 
             /**
              * The editing platform as the server takes it: the secrets still
-             * showing as stored are sent empty, keeping their stored value.
+             * showing as stored are left out, keeping their stored value;
+             * those cleared are sent empty, removing it.
              */
             var toSend = function toSend(platform) {
                 var sent = angular.copy(platform);

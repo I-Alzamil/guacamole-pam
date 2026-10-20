@@ -123,6 +123,13 @@ check "...and not saved" "PASSED" \
     "$(json_get "$(test_platform "{\"id\":$STORED,\"name\":\"t2 test stored\",\"type\":\"ldap\",\"settings\":{$OPENLDAP,
         \"ldap-admin-dn\":\"$LDAP_ADMIN_DN\"},\"policy\":{}}" | cut -d' ' -f2-)" "d['steps'][-1]['status']")"
 
+R=$(api PUT "$PAM/platforms/$STORED" "$ADMIN" "{\"name\":\"t2 test stored\",\"type\":\"ldap\",\"settings\":{$OPENLDAP,
+    \"ldap-admin-dn\":\"$LDAP_ADMIN_DN\"},\"policy\":{}}")
+check "saved with the password left out, it is kept" "['ldap-admin-password']" "$(json_get "${R#* }" "d.get('storedSecrets')")"
+R=$(api PUT "$PAM/platforms/$STORED" "$ADMIN" "{\"name\":\"t2 test stored\",\"type\":\"ldap\",\"settings\":{$OPENLDAP,
+    \"ldap-admin-password\":\"\"},\"policy\":{}}")
+check "saved with the password empty, it is removed" "[]" "$(json_get "${R#* }" "d.get('storedSecrets')")"
+
 check "a saved platform cannot be tested as another type" 400 \
     "$(status_of "$(test_platform "{\"id\":$STORED,\"name\":\"t2 test stored\",\"type\":\"kerberos\",\"settings\":{$MIT},\"policy\":{}}")")"
 
