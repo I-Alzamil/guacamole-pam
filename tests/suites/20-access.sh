@@ -108,6 +108,24 @@ check "the administrator sees the active checkout" yes "$([ -n "$ACTIVE" ] && ec
 check "the administrator revokes it" 204 "$(status_of "$(api POST "$PAM/checkouts/$ACTIVE/revoke" "$ADMIN")")"
 check_contains "...and the connection refuses a new session" "403 You must request access" "$(tunnel "$REQUESTER" "$GATED" c)"
 
+# The periodic check ends expired checkouts every 15 seconds; until then,
+# they must not count
+section "A checkout past its time limit, not ended yet"
+check "the requester checks out the gated connection again" 200 \
+    "$(status_of "$(api POST "$PAM/requests/$GATED" "$REQUESTER" '{"reason":"T2 expiry"}')")"
+podman exec myguacdbtest psql -U postgres -qc "UPDATE pam_checkout SET expires = CURRENT_TIMESTAMP - interval '1 second'
+    WHERE connection_id = $GATED AND released IS NULL" >/dev/null
+check_contains "once past its time limit, it opens no session" "403 You must request access" "$(tunnel "$REQUESTER" "$GATED" c)"
+check "...and a new request is granted at once" 200 \
+    "$(status_of "$(api POST "$PAM/requests/$GATED" "$REQUESTER" '{"reason":"T2 expiry again"}')")"
+# Of this run's connection only: earlier runs' stay in the history
+EXPIRED_REASON=$(curl -s -G --data-urlencode "contains=T2 expiry" "$PAM/checkouts/history?token=$ADMIN" | python3 -I -c "
+import sys,json
+print(' '.join(c.get('releaseReason') or 'ACTIVE' for c in json.load(sys.stdin)
+    if c.get('connectionIdentifier') == sys.argv[1] and c['reason'] in ('T2 expiry', 'T2 expiry again')))" "$GATED")
+check "...the expired one ended as expired" "ACTIVE EXPIRED" "$EXPIRED_REASON"
+api POST "$PAM/requests/$GATED/release" "$REQUESTER" >/dev/null
+
 # ---------------------------------------------------------------- administrators
 section "Administrators (default: give a reason, skip approvals)"
 check_contains "an administrator must give a reason too" "reason" "$(message_of "$(api POST "$PAM/requests/$ACCOUNT" "$ADMIN" '{}')")"

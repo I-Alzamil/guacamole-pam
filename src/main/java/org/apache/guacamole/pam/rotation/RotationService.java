@@ -238,7 +238,12 @@ public class RotationService {
         closeSessionsOfEndedCheckouts();
     }
 
-    private void expireCheckouts() {
+    /**
+     * Ends the checkouts past their time limit now, as the periodic check
+     * does: before starting one, so an expired checkout not yet ended does
+     * not stand in the way.
+     */
+    public void expireCheckouts() {
         try {
             for (Checkout checkout : checkouts.expireDue()) {
                 logger.info("Checkout {} of connection \"{}\" by user \"{}\" expired.", checkout.getId(),

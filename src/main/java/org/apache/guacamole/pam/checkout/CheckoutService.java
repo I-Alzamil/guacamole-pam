@@ -162,6 +162,9 @@ public class CheckoutService {
         int id = target.getId();
         boolean account = isAccount(target);
 
+        // Expired checkouts not ended yet would refuse the request
+        rotationService.expireCheckouts();
+
         if (account) {
             String password = target.getPassword();
             if (password == null || password.isEmpty())
@@ -316,6 +319,7 @@ public class CheckoutService {
         Target target = id == null ? null : connections.load(id);
         if (target == null)
             throw new GuacamoleResourceNotFoundException("The connection no longer exists.");
+        rotationService.expireCheckouts();
         return startCheckout(target, request.getUsername(), request.getReason(), 0);
     }
 

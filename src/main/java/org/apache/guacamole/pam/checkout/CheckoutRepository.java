@@ -147,13 +147,26 @@ public class CheckoutRepository {
 
     /**
      * Returns the given user's active checkout of a connection, or null.
+     * A checkout past its time limit is not active, even before it is
+     * released.
      */
     public Checkout getActive(int connectionId, String username) throws GuacamoleException {
-        for (Checkout checkout : listActive(connectionId)) {
-            if (checkout.getUsername().equals(username))
-                return checkout;
+
+        try (Connection connection = database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(SELECT
+                 + " WHERE k.connection_id = ? AND k.username = ? AND k.released IS NULL"
+                 + " AND k.expires > CURRENT_TIMESTAMP")) {
+
+            statement.setInt(1, connectionId);
+            statement.setString(2, username);
+            List<Checkout> checkouts = read(statement);
+            return checkouts.isEmpty() ? null : checkouts.get(0);
+
         }
-        return null;
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to read checkouts.", e);
+        }
+
     }
 
     /**
@@ -234,14 +247,14 @@ public class CheckoutRepository {
 
     /**
      * Counts one more display of the password of an active checkout.
-     * Returns false if the checkout has ended: the password must then not
-     * be shown.
+     * Returns false if the checkout has ended, or passed its time limit: the
+     * password must then not be shown.
      */
     public boolean recordReveal(int checkoutId) throws GuacamoleException {
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                  "UPDATE pam_checkout SET reveal_count = reveal_count + 1"
-               + " WHERE checkout_id = ? AND released IS NULL")) {
+               + " WHERE checkout_id = ? AND released IS NULL AND expires > CURRENT_TIMESTAMP")) {
             statement.setInt(1, checkoutId);
             return statement.executeUpdate() > 0;
         }
