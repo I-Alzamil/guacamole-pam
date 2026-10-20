@@ -1,6 +1,6 @@
 /**
  * The "Password Rotation" settings tab: the managed connections, their
- * rotation policy and status, and rotating one now.
+ * rotation policy and status, and rotating one, or all those listed, now.
  */
 angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSettingsPamRotation() {
 
@@ -25,6 +25,18 @@ angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSet
             var REFRESH_INTERVAL = 10000;
 
             /**
+             * How many rotations Rotate all runs at once. Each request waits
+             * for its rotation to end.
+             */
+            var ROTATE_ALL_CONCURRENCY = 4;
+
+            /**
+             * Identifiers of the connections this page is rotating, kept
+             * across refreshes of the list.
+             */
+            var rotating = {};
+
+            /**
              * Managed connections, or null while loading.
              */
             $scope.connections = null;
@@ -42,6 +54,10 @@ angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSet
 
             var setConnections = function setConnections(connections) {
                 angular.forEach(connections, function addFilterText(connection) {
+                    if (rotating[connection.identifier]) {
+                        connection.rotating = true;
+                        connection.status = 'RUNNING';
+                    }
                     pamFilterText(connection, [
                         connection.name,
                         connection.protocol,
@@ -61,12 +77,110 @@ angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSet
                 }, guacNotification.SHOW_REQUEST_ERROR);
             };
 
-            $scope.rotate = function rotate(connection) {
+            var startRotation = function startRotation(connection) {
+                rotating[connection.identifier] = true;
                 connection.rotating = true;
                 connection.status = 'RUNNING';
-                pamService.rotate(connection.identifier)
+                return pamService.rotate(connection.identifier)
+                ['finally'](function rotationEnded() {
+                    delete rotating[connection.identifier];
+                });
+            };
+
+            $scope.rotate = function rotate(connection) {
+                startRotation(connection)
                 ['catch'](guacNotification.SHOW_REQUEST_ERROR)
                 ['finally'](loadConnections);
+            };
+
+            /**
+             * The connections listed, as filtered, not being rotated already.
+             */
+            $scope.rotatableConnections = function rotatableConnections() {
+                return $scope.filteredConnections.filter(function notRotating(connection) {
+                    return !connection.rotating;
+                });
+            };
+
+            /**
+             * Rotates the given connections, a few at a time. Their results
+             * show in the list; only the number of failed requests is
+             * reported, once all have ended.
+             */
+            var rotateAll = function rotateAll(connections) {
+
+                var queue = connections.slice();
+                var failed = 0;
+                var running = 0;
+
+                var next = function next() {
+
+                    if (!queue.length) {
+                        if (!running) {
+                            loadConnections();
+                            if (failed)
+                                guacNotification.showStatus({
+                                    title   : 'PAM.DIALOG_HEADER_ROTATE_ALL',
+                                    text    : { key : 'PAM.TEXT_ROTATE_ALL_REQUEST_FAILED', variables : { COUNT : failed } },
+                                    actions : [{
+                                        name     : 'PAM.ACTION_CLOSE',
+                                        callback : function closeFailed() {
+                                            guacNotification.showStatus(false);
+                                        }
+                                    }]
+                                });
+                        }
+                        return;
+                    }
+
+                    running++;
+                    startRotation(queue.shift())
+                    ['catch'](function rotationRequestFailed() {
+                        failed++;
+                    })
+                    ['finally'](function rotationRequestEnded() {
+                        running--;
+                        loadConnections();
+                        next();
+                    });
+
+                };
+
+                for (var i = 0; i < ROTATE_ALL_CONCURRENCY && queue.length; i++)
+                    next();
+
+            };
+
+            /**
+             * Rotates every connection listed, as filtered, once confirmed.
+             */
+            $scope.confirmRotateAll = function confirmRotateAll() {
+
+                var connections = $scope.rotatableConnections();
+                if (!connections.length)
+                    return;
+
+                var filtered = $scope.filteredConnections.length < $scope.connections.length;
+                guacNotification.showStatus({
+                    title   : 'PAM.DIALOG_HEADER_ROTATE_ALL',
+                    text    : {
+                        key       : filtered ? 'PAM.TEXT_CONFIRM_ROTATE_FILTERED' : 'PAM.TEXT_CONFIRM_ROTATE_ALL',
+                        variables : { COUNT : connections.length }
+                    },
+                    actions : [{
+                        name     : 'PAM.ACTION_ROTATE_ALL',
+                        callback : function confirmRotate() {
+                            guacNotification.showStatus(false);
+                            rotateAll(connections);
+                        }
+                    }, {
+                        name     : 'PAM.ACTION_CANCEL',
+                        callback : function cancelRotate() {
+                            guacNotification.showStatus(false);
+                        }
+                    }]
+                });
+
             };
 
             /**

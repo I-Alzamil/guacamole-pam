@@ -3,9 +3,20 @@
     <div class="settings section pam-connections">
         <p>{{ 'PAM.HELP_CONNECTIONS' | translate }}</p>
 
-        <guac-filter filtered-items="filteredConnections" items="connections"
-                     placeholder="'PAM.FIELD_PLACEHOLDER_FILTER' | translate"
-                     properties="filteredConnectionProperties"></guac-filter>
+        <!-- As Guacamole's own toolbars: action buttons, then the filter -->
+        <div class="toolbar">
+
+            <div class="action-buttons">
+                <a class="button pam-rotate-all" href="" ng-click="confirmRotateAll()"
+                   ng-class="{disabled: !rotatableConnections().length}"
+                   title="{{ 'PAM.HELP_ROTATE_ALL' | translate }}">{{ 'PAM.ACTION_ROTATE_ALL' | translate }}</a>
+            </div>
+
+            <guac-filter filtered-items="filteredConnections" items="connections"
+                         placeholder="'PAM.FIELD_PLACEHOLDER_FILTER' | translate"
+                         properties="filteredConnectionProperties"></guac-filter>
+
+        </div>
 
         <table class="pam-connection-table" ng-class="{loading: !connections}">
             <thead>

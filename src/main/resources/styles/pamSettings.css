@@ -773,11 +773,13 @@ td.pam-truncate {
     height: 60px;
 }
 
-/* Import, export and restoring platforms: buttons with icons, as those of
-   Guacamole's own toolbars (images are Guacamole's, or drawn alike) */
+/* Import, export and restoring platforms, and rotating all connections:
+   buttons with icons, as those of Guacamole's own toolbars (images are
+   Guacamole's, or drawn alike) */
 a.button.pam-import-platforms,
 a.button.pam-export-platforms,
-a.button.pam-restore-platforms {
+a.button.pam-restore-platforms,
+a.button.pam-rotate-all {
     font-size: 0.8em;
     padding-left: 1.8em;
     position: relative;
@@ -785,7 +787,8 @@ a.button.pam-restore-platforms {
 
 a.button.pam-import-platforms:before,
 a.button.pam-export-platforms:before,
-a.button.pam-restore-platforms:before {
+a.button.pam-restore-platforms:before,
+a.button.pam-rotate-all:before {
     content: " ";
     position: absolute;
     width: 1.8em;
@@ -807,6 +810,10 @@ a.button.pam-export-platforms:before {
 
 a.button.pam-restore-platforms:before {
     background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='64'%20height='64'%3E%3Cpath%20fill='none'%20stroke='%23fff'%20stroke-width='7'%20stroke-linecap='round'%20d='M14%2022A22%2022%200%201%201%2010%2036'/%3E%3Cpath%20fill='%23fff'%20d='M4%206%2026%2010%208%2026z'/%3E%3C/svg%3E");
+}
+
+a.button.pam-rotate-all:before {
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='64'%20height='64'%3E%3Cg%20fill='none'%20stroke='%23fff'%20stroke-width='7'%20stroke-linecap='round'%3E%3Cpath%20d='M10%2028A22%2022%200%200%201%2048%2015'/%3E%3Cpath%20d='M54%2036A22%2022%200%200%201%2016%2049'/%3E%3C/g%3E%3Cpath%20fill='%23fff'%20d='M58%204%2056%2026%2036%2016z'/%3E%3Cpath%20fill='%23fff'%20d='M6%2060%208%2038%2028%2048z'/%3E%3C/svg%3E");
 }
 
 a.button.disabled {
