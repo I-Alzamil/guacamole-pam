@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
@@ -162,10 +163,15 @@ public class PamUserContextDecorator extends DelegatingUserContext {
                         CONNECTION_CHANGE_REFUSED);
 
                 // The account and host of a managed connection decide whose
-                // password its platform rotates, and where
+                // password its platform rotates, and where; its protocol and
+                // guacd, who sees it
                 if (stored != null && ProtectedFields.isManaged(stored.getAttributes())
-                        && ProtectedFields.parametersChanged(ProtectedFields.MANAGED_PARAMETERS,
+                        && (ProtectedFields.parametersChanged(ProtectedFields.MANAGED_PARAMETERS,
                                 stored.getConfiguration().getParameters(), object.getConfiguration().getParameters())
+                            || ProtectedFields.attributesChanged(ProtectedFields.MANAGED_ATTRIBUTES,
+                                stored.getAttributes(), object.getAttributes())
+                            || !Objects.equals(stored.getConfiguration().getProtocol(),
+                                object.getConfiguration().getProtocol()))
                         && !isAdministrator())
                     throw new GuacamoleSecurityException(MANAGED_PARAMETERS_REFUSED);
 
@@ -257,8 +263,8 @@ public class PamUserContextDecorator extends DelegatingUserContext {
             "Only administrators can change password management or access requests.";
 
     private static final String MANAGED_PARAMETERS_REFUSED =
-            "Only administrators can change the username, hostname or port of a connection whose password is"
-            + " managed.";
+            "Only administrators can change the protocol, username, hostname, port or guacd of a connection whose"
+            + " password is managed.";
 
     /**
      * Whether the user of this context is an administrator, determined once.

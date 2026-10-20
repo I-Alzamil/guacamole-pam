@@ -399,6 +399,30 @@ public class PamUserContextDecoratorTest {
     }
 
     @Test
+    public void refusesChangingTheProtocolOrGuacdOfAManagedConnection() throws GuacamoleException {
+
+        for (String attribute : new String[] { "guacd-hostname", "guacd-port", "guacd-encryption" }) {
+            TestConnection connection = fromEditor("2");
+            connection.getAttributes().put(attribute, "changed");
+            assertRefused("Changing " + attribute, () -> decorated.getConnectionDirectory().update(connection));
+            assertEquals(null, stored("2").getAttributes().get(attribute));
+        }
+
+        TestConnection connection = fromEditor("2");
+        connection.getConfiguration().setProtocol("telnet");
+        assertRefused("Changing the protocol", () -> decorated.getConnectionDirectory().update(connection));
+        assertEquals("ssh", stored("2").getConfiguration().getProtocol());
+
+        // Of a connection that is not managed, as before
+        TestConnection unmanaged = fromEditor("1");
+        unmanaged.getAttributes().put("guacd-hostname", "other.example");
+        unmanaged.getConfiguration().setProtocol("telnet");
+        decorated.getConnectionDirectory().update(unmanaged);
+        assertEquals("telnet", stored("1").getConfiguration().getProtocol());
+
+    }
+
+    @Test
     public void acceptsOtherChanges() throws GuacamoleException {
 
         // Any parameter of a connection that is not managed

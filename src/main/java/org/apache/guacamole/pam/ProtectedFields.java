@@ -16,6 +16,11 @@ import java.util.Objects;
  * another account and read that account's new password after the next
  * rotation, or send the platform's administrator login to a host of their
  * choosing.
+ *
+ * So are its protocol and the guacd it is opened through: guacd receives
+ * every parameter with the password in place of its token, so another guacd
+ * would see the password even where its holders may not, and so would a
+ * protocol sending it in the clear.
  */
 public final class ProtectedFields {
 
@@ -24,6 +29,13 @@ public final class ProtectedFields {
      */
     public static final List<String> MANAGED_PARAMETERS =
             Collections.unmodifiableList(Arrays.asList("username", "hostname", "port"));
+
+    /**
+     * Guacamole's attributes of managed connections only administrators may
+     * change: the guacd they are opened through.
+     */
+    public static final List<String> MANAGED_ATTRIBUTES =
+            Collections.unmodifiableList(Arrays.asList("guacd-hostname", "guacd-port", "guacd-encryption"));
 
     private ProtectedFields() {
     }

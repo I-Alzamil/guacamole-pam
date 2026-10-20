@@ -191,8 +191,9 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
 - Only administrators can change a connection's *Password management* and
   *Access requests* sections, platforms, or who may approve, nor the
   username, hostname or port of a connection whose password is managed (they
-  decide whose password its platform rotates, and where). Other users who may
-  create or edit connections can still change everything else.
+  decide whose password its platform rotates, and where), its protocol, or
+  the guacd it is opened through (guacd receives the password). Other users
+  who may create or edit connections can still change everything else.
 - **Holders don't see a connection's password**, only a Connect button, so
   they can't use it outside Guacamole. To let them see it, tick **Let users
   holding access see the password** in the connection's *Access requests*

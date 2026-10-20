@@ -181,12 +181,12 @@ reveal() {
     esac
 }
 
-# edit_connection TOKEN ID PARAMS-PATCH-JSON ATTRS-PATCH-JSON [NEW-NAME] -> "STATUS BODY"
+# edit_connection TOKEN ID PARAMS-PATCH-JSON ATTRS-PATCH-JSON [NEW-NAME] [NEW-PROTOCOL] -> "STATUS BODY"
 # A parameter set to null is removed.
 edit_connection() {
     local edited params=${3:-'{}'} attributes=${4:-'{}'}
     edited=$(python3 -I - "$(curl -s "$DATA/connections/$2?token=$ADMIN")" \
-            "$(curl -s "$DATA/connections/$2/parameters?token=$ADMIN")" "$params" "$attributes" "$5" <<'PY'
+            "$(curl -s "$DATA/connections/$2/parameters?token=$ADMIN")" "$params" "$attributes" "$5" "$6" <<'PY'
 import sys, json
 c = json.loads(sys.argv[1]); p = json.loads(sys.argv[2])
 for k, v in json.loads(sys.argv[3]).items():
@@ -195,6 +195,7 @@ for k, v in json.loads(sys.argv[3]).items():
 c['parameters'] = p
 c['attributes'].update(json.loads(sys.argv[4]))
 if sys.argv[5]: c['name'] = sys.argv[5]
+if sys.argv[6]: c['protocol'] = sys.argv[6]
 print(json.dumps(c))
 PY
 )

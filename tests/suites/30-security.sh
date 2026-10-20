@@ -36,7 +36,7 @@ check "setup: editor and connections exist" yes "$([ -n "$EDITOR" ] && [ -n "$MA
 
 # ---------------------------------------------------------------- managed connections
 section "An editor cannot change whose password is managed, or where"
-REFUSED_PARAMS="403 Only administrators can change the username, hostname or port of a connection whose password is managed."
+REFUSED_PARAMS="403 Only administrators can change the protocol, username, hostname, port or guacd of a connection whose password is managed."
 REFUSED_ATTRS="403 Only administrators can change password management or access requests."
 outcome() { printf '%s %s' "$(status_of "$1")" "$(message_of "$1")" | sed 's/ $//'; }
 
@@ -47,6 +47,10 @@ check "Account: port added" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$ED
 check "SSH: hostname to another host" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_SSH" '{"hostname":"evil.example"}')")"
 check "SSH: port" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_SSH" '{"port":"2222"}')")"
 check "SSH: username" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_SSH" '{"username":"root"}')")"
+check "SSH: guacd, which receives the password" "$REFUSED_PARAMS" \
+    "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_SSH" '' '{"guacd-hostname":"evil.example"}')")"
+check "SSH: guacd port" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_SSH" '' '{"guacd-port":"4823"}')")"
+check "SSH: protocol" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_SSH" '' '' '' telnet)")"
 check "managed: platform removed" "$REFUSED_ATTRS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED" '' '{"pam-platform":null}')")"
 check "stored: platform added" "$REFUSED_ATTRS" "$(outcome "$(edit_connection "$EDITOR" "$UNMANAGED" '' "{\"pam-platform\":\"$KERBEROS\"}")")"
 check "stored: allowed without a request" "$REFUSED_ATTRS" "$(outcome "$(edit_connection "$EDITOR" "$UNMANAGED" '' '{"pam-request-exempt":"true"}')")"
