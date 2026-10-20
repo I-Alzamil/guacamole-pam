@@ -306,7 +306,7 @@ public final class SequenceScript {
                 errors.add(new ParseError(fail.line, "@fail outside a choice, before <NEWPASS> is sent,"
                         + " stops every rotation."));
             else
-                errors.add(new ParseError(0, steps.stream().anyMatch(Step::sendsNewPassword)
+                errors.add(new ParseError(0, steps.stream().anyMatch(step -> step.sendsNewPassword())
                         ? "One of the cases never sends <NEWPASS>, nor do the lines outside the choices,"
                                 + " so the password would not change that way."
                         : "The sequence never sends <NEWPASS>, so it cannot change the password."));
