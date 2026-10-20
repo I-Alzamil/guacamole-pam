@@ -198,8 +198,8 @@
         "SECTION_HEADER_ACCOUNT": "Account",
         "FIELD_HEADER_USERNAME": "Account name:",
         "FIELD_HEADER_PASSWORD": "Password:",
-        "FIELD_HEADER_ACCOUNT_URL": "URL or host (shown when requesting):",
-        "FIELD_HEADER_ACCOUNT_NOTES": "Notes (shown when requesting):"
+        "FIELD_HEADER_ACCOUNT_URL": "URL or host:",
+        "FIELD_HEADER_ACCOUNT_NOTES": "Notes:"
     },
     "PAM_TYPE_SSH": {
         "SECTION_HEADER_SSH": "SSH",
