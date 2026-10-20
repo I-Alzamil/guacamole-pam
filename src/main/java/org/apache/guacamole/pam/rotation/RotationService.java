@@ -187,13 +187,13 @@ public class RotationService {
 
             try {
                 logger.info("Closing the session of \"{}\" on \"{}\": its checkout ended{}.",
-                        checkout.getUsername(), checkout.getConnectionName(),
+                        checkout.getUsername(), Values.forLog(checkout.getConnectionName()),
                         endedElsewhere ? " on another server" : "");
                 session.getTunnel().close();
             }
             catch (Exception e) {
                 logger.warn("Unable to close a session of \"{}\" on \"{}\": {}", checkout.getUsername(),
-                        checkout.getConnectionName(), e.getMessage());
+                        Values.forLog(checkout.getConnectionName()), e.getMessage());
             }
 
         }
@@ -288,7 +288,7 @@ public class RotationService {
         try {
             for (Checkout checkout : checkouts.expireDue()) {
                 logger.info("Checkout {} of connection \"{}\" by user \"{}\" expired.", checkout.getId(),
-                        checkout.getConnectionName(), checkout.getUsername());
+                        Values.forLog(checkout.getConnectionName()), checkout.getUsername());
                 checkoutEnded(checkout);
             }
         }
@@ -534,8 +534,9 @@ public class RotationService {
                 return null;
 
             RotationResult result = performRotation(current);
-            logger.info("Rotation ({}) of connection \"{}\" ({}): {} {}", reason, current.getName(),
-                    current.getId(), result.getStatus(), result.getMessage() == null ? "" : result.getMessage());
+            logger.info("Rotation ({}) of connection \"{}\" ({}): {} {}", reason, Values.forLog(current.getName()),
+                    current.getId(), result.getStatus(),
+                    result.getMessage() == null ? "" : Values.forLog(result.getMessage()));
             return result;
 
         }

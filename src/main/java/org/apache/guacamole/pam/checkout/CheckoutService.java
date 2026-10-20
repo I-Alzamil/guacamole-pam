@@ -176,14 +176,15 @@ public class CheckoutService {
                 if (!checkouts.recordReveal(checkout.getId()))
                     throw new GuacamoleClientException("This checkout has ended.");
                 logger.info("User \"{}\" viewed the password of \"{}\" (checkout {}).",
-                        username, target.getName(), checkout.getId());
+                        username, Values.forLog(target.getName()), checkout.getId());
             }
             return RequestOutcome.granted(toGrant(checkout, target));
         }
 
         int approvalsRequired = administrator ? 0 : getApprovalsRequired(target);
         if (administrator && getApprovalsRequired(target) > 0)
-            logger.info("Administrator \"{}\" bypasses the approval of \"{}\".", username, target.getName());
+            logger.info("Administrator \"{}\" bypasses the approval of \"{}\".", username,
+                    Values.forLog(target.getName()));
 
         if (approvalsRequired > 0 && approvals.getPending(id, username) == null) {
 
@@ -192,8 +193,8 @@ public class CheckoutService {
 
             ApprovalRequest pending = approvals.create(id, username, trimmed, approvalsRequired);
             logger.info("User \"{}\" requested \"{}\" (request {}, {} approvals needed). Reason: {}",
-                    username, target.getName(), pending.getId(), approvalsRequired,
-                    trimmed.replaceAll("[\\r\\n]+", " "));
+                    username, Values.forLog(target.getName()), pending.getId(), approvalsRequired,
+                    Values.forLog(trimmed));
 
         }
 
@@ -205,7 +206,8 @@ public class CheckoutService {
             checkoutReason = NO_REQUEST_REASON;
         else if (bypassesRequests(administrator)) {
             checkoutReason = ADMIN_BYPASS_REASON;
-            logger.info("Administrator \"{}\" checks out \"{}\" without a request.", username, target.getName());
+            logger.info("Administrator \"{}\" checks out \"{}\" without a request.", username,
+                    Values.forLog(target.getName()));
         }
         else
             checkoutReason = validateReason(reason);
@@ -245,7 +247,7 @@ public class CheckoutService {
         if (!checkouts.recordReveal(checkout.getId()))
             throw new GuacamoleClientException("Your access has ended.");
         logger.info("User \"{}\" viewed the password of \"{}\" (checkout {}).",
-                username, target.getName(), checkout.getId());
+                username, Values.forLog(target.getName()), checkout.getId());
 
         String user = Values.trimToNull(target.getParameters().get(USERNAME_PARAMETER));
         return new PasswordGrant(checkout, user == null || user.contains("${") ? null : user, null, password);
@@ -277,7 +279,8 @@ public class CheckoutService {
             return;
 
         if (bypassesRequests(administrator)) {
-            logger.info("Administrator \"{}\" connects to \"{}\" without a request.", username, target.getName());
+            logger.info("Administrator \"{}\" connects to \"{}\" without a request.", username,
+                    Values.forLog(target.getName()));
             return;
         }
 
@@ -333,7 +336,8 @@ public class CheckoutService {
             throw new GuacamoleClientException("You have no request for this connection awaiting approval.");
 
         approvals.decide(pending.getId(), ApprovalRequest.CANCELLED, username);
-        logger.info("User \"{}\" cancelled request {} for \"{}\".", username, pending.getId(), target.getName());
+        logger.info("User \"{}\" cancelled request {} for \"{}\".", username, pending.getId(),
+                Values.forLog(target.getName()));
 
     }
 
@@ -407,8 +411,9 @@ public class CheckoutService {
         }
 
         logger.info("User \"{}\" checked out \"{}\" (checkout {}{}). Reason: {}",
-                username, target.getName(), checkout.getId(), checkout.isExclusive() ? ", exclusive" : "",
-                reason.replaceAll("[\\r\\n]+", " "));
+                username, Values.forLog(target.getName()), checkout.getId(),
+                checkout.isExclusive() ? ", exclusive" : "",
+                Values.forLog(reason));
 
         return checkout;
 
@@ -529,7 +534,7 @@ public class CheckoutService {
         holderCounts = null;
         if (checkouts.release(checkout.getId(), releaseReason, releasedBy)) {
             logger.info("Checkout {} of \"{}\" by user \"{}\" ended: {} by \"{}\".", checkout.getId(),
-                    checkout.getConnectionName(), checkout.getUsername(), releaseReason, releasedBy);
+                    Values.forLog(checkout.getConnectionName()), checkout.getUsername(), releaseReason, releasedBy);
             rotationService.checkoutEnded(checkout);
         }
     }

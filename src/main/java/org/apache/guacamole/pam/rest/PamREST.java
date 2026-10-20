@@ -233,7 +233,7 @@ public class PamREST {
             throw new GuacamoleClientException("Platforms of this type cannot be tested.");
 
         PlatformTestResult result = type.test(prepared);
-        logger.info("User \"{}\" tested platform \"{}\": {}.", user.getIdentifier(), prepared.getName(),
+        logger.info("User \"{}\" tested platform \"{}\": {}.", user.getIdentifier(), Values.forLog(prepared.getName()),
                 result.isSuccess() ? "passed" : "failed");
         return result;
 

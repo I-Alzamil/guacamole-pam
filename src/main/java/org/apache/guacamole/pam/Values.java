@@ -18,6 +18,15 @@ public final class Values {
     }
 
     /**
+     * A value for a log line, its control characters and line breaks as
+     * spaces: names and reasons come from users, messages from servers, and
+     * would otherwise start lines of their own.
+     */
+    public static String forLog(String value) {
+        return value == null ? null : value.replaceAll("[\\p{Cntrl}\\u2028\\u2029]+", " ");
+    }
+
+    /**
      * The value, or null if it is missing or empty. For passwords and other
      * values whose spaces may be part of them.
      */

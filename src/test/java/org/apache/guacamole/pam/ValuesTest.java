@@ -19,6 +19,13 @@ public class ValuesTest {
     }
 
     @Test
+    public void keepsLogValuesOnOneLine() {
+        assertEquals("evil User \"x\" approved", Values.forLog("evil\r\nUser \"x\" approved"));
+        assertEquals("a b c", Values.forLog("a\u2028b\u0000c"));
+        assertNull(Values.forLog(null));
+    }
+
+    @Test
     public void readsIdentifiers() {
         assertEquals(Integer.valueOf(17), Values.parseId(" 17 "));
         assertNull(Values.parseId("17a"));

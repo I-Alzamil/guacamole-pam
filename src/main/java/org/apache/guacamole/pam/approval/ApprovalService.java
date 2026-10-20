@@ -6,6 +6,7 @@ import java.util.List;
 import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleResourceNotFoundException;
+import org.apache.guacamole.pam.Values;
 import org.apache.guacamole.pam.checkout.Checkout;
 import org.apache.guacamole.pam.checkout.CheckoutService;
 import org.slf4j.Logger;
@@ -77,8 +78,8 @@ public class ApprovalService {
 
         ApprovalRequest request = approvals.approve(requestId, approver.getUsername());
         logger.info("User \"{}\" approved request {} of \"{}\" for \"{}\" ({}/{}).", approver.getUsername(),
-                requestId, request.getUsername(), request.getConnectionName(), request.getApprovers().size(),
-                request.getApprovalsRequired());
+                requestId, request.getUsername(), Values.forLog(request.getConnectionName()),
+                request.getApprovers().size(), request.getApprovalsRequired());
 
         if (request.getApprovers().size() < request.getApprovalsRequired())
             return request;
@@ -130,7 +131,7 @@ public class ApprovalService {
 
         approvals.decide(requestId, ApprovalRequest.DENIED, approver.getUsername(), trimmed);
         logger.info("User \"{}\" denied request {} of \"{}\" for \"{}\".", approver.getUsername(), requestId,
-                request.getUsername(), request.getConnectionName());
+                request.getUsername(), Values.forLog(request.getConnectionName()));
 
     }
 
