@@ -102,6 +102,7 @@
         "INFO_MISSING_PLATFORM": "(missing platform)",
         "INFO_NEVER": "Never",
         "INFO_NO_ACTIVE_CHECKOUTS": "No password is checked out.",
+        "INFO_LOADING": "Loading…",
         "INFO_NO_CONNECTIONS": "No connection is assigned to a platform yet.",
         "INFO_NO_MATCH": "Nothing matches the filter.",
         "INFO_NO_PLATFORMS": "No platforms yet.",

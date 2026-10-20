@@ -5,8 +5,8 @@
  * the platform identifier as a string; null means the password is stored
  * only.
  */
-angular.module('guacPam').directive('pamPlatformPicker', ['$document', '$timeout', '$translate', 'pamService',
-        function pamPlatformPicker($document, $timeout, $translate, pamService) {
+angular.module('guacPam').directive('pamPlatformPicker', ['$document', '$timeout', '$translate', 'guacNotification',
+        'pamService', function pamPlatformPicker($document, $timeout, $translate, guacNotification, pamService) {
 
     return {
         restrict    : 'E',
@@ -28,6 +28,17 @@ angular.module('guacPam').directive('pamPlatformPicker', ['$document', '$timeout
              * The choice of storing the password only.
              */
             var STORED_ONLY = { id : '', label : $translate.instant('PAM.FIELD_OPTION_STORED_ONLY'), type : '' };
+
+            /**
+             * Shown until the platforms are loaded, rather than a platform
+             * or "stored only", which could be wrong.
+             */
+            var LOADING = { id : null, label : $translate.instant('PAM.INFO_LOADING'), type : '' };
+
+            /**
+             * Whether the platforms are loaded.
+             */
+            $scope.loaded = false;
 
             $scope.open = false;
             $scope.search = { text : '' };
@@ -53,6 +64,8 @@ angular.module('guacPam').directive('pamPlatformPicker', ['$document', '$timeout
             };
 
             $scope.selected = function selected() {
+                if (!$scope.loaded)
+                    return LOADING;
                 for (var i = 0; i < platforms.length; i++) {
                     if (platforms[i].id === current())
                         return platforms[i];
@@ -118,7 +131,7 @@ angular.module('guacPam').directive('pamPlatformPicker', ['$document', '$timeout
                     $scope.close();
                     return;
                 }
-                if ($scope.disabled)
+                if ($scope.disabled || !$scope.loaded)
                     return;
                 $scope.open = true;
                 $scope.search.text = '';
@@ -206,9 +219,10 @@ angular.module('guacPam').directive('pamPlatformPicker', ['$document', '$timeout
                 });
 
                 platforms = loaded;
+                $scope.loaded = true;
                 update();
 
-            });
+            }, guacNotification.SHOW_REQUEST_ERROR);
 
         }
     };
