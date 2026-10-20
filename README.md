@@ -259,7 +259,9 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   is listed, and the test is logged. Stored passwords, shown masked, are the
   ones tested, unless where they are sent changed: enter them again then.
   Without an admin principal, Active Directory and some KDCs don't say
-  whether they serve the realm: the first rotation checks it.
+  whether they serve the realm: the first rotation checks it. To find out,
+  the test asks for the realm's `krbtgt` principal with a wrong password,
+  which the KDC logs as a failed login: expect one per test.
 - Approvers see a yellow badge counting requests awaiting their decision.
   Administrators also see a red badge counting failed rotations. Each user can
   turn either off under **Preferences → Notification badges**.
