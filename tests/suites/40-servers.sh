@@ -63,7 +63,7 @@ SSH_PASSWORD=$( [ -n "$SEEDED" ] && parameter "$SEEDED" password )
 [ "$(ssh_accepts mysshtest "$SSH_PASSWORD")" = yes ] || SSH_PASSWORD='P@ssw0rd'
 check "precondition: mysshtest's current password is known" yes "$(ssh_accepts mysshtest "$SSH_PASSWORD")"
 
-LINUX=$(platform_id "Linux (passwd)")
+LINUX=$(platform_id "Unix")
 # Slow enough to overlap: the account sleeps before changing its password
 create_platform SLOW '{"name":"t2 slow passwd","type":"ssh","settings":{"script":"@timeout 20\nsleep 6; passwd\n@expect assword:\n<OLDPASS>\n@expect assword:\n<NEWPASS>\n@expect assword:\n<NEWPASS>\n@regex (?i)(success|updated|changed)\n"},"policy":{}}'
 create_connection SSH_C "{\"name\":\"t2 servers ssh\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",

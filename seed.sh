@@ -14,7 +14,7 @@
 #     from the running containers
 #     MYTEST_KERBEROS (MIT KDC mykdctest, realm EXAMPLE.ORG)
 #   Connections:
-#     PAM test (Linux)  ssh to mysshtest, rotated by "Linux (passwd)", no request needed
+#     PAM test (Linux)  ssh to mysshtest, rotated by "Unix", no request needed
 #     LDAP: ldaptest    account on MYTEST_LDAP
 #     AD: adtest        account on MYTEST_AD
 #     Kerberos: kdctest account on MYTEST_KERBEROS
@@ -94,7 +94,7 @@ connections = {}
 for c in [
     {"name": "PAM test (Linux)", "protocol": "ssh",
      "parameters": {"hostname": "mysshtest", "port": "22", "username": "mysshtest", "password": "P@ssw0rd"},
-     "attributes": {"pam-platform": str(platforms["Linux (passwd)"]),
+     "attributes": {"pam-platform": str(platforms["Unix"]),
                     "pam-request-exempt": "true", "pam-approvals-required": "0"}},
     {"name": "LDAP: ldaptest", "protocol": "pam-account",
      "parameters": {"username": "ldaptest", "password": "P@ssw0rd"},

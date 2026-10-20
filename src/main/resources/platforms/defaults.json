@@ -3,16 +3,16 @@
   "version": 1,
   "platforms": [
     {
-      "name": "Linux (passwd)",
-      "description": "The connection account changes its own password with passwd.",
+      "name": "Unix",
+      "description": "Linux, BSD and other Unix systems: the connection account changes its own password with passwd, root included.",
       "type": "ssh",
       "settings": {
-        "script": "# Changes the password of the connection account itself.\npasswd\n@expect assword:\n<OLDPASS>\n@expect assword:\n<NEWPASS>\n@expect assword:\n<NEWPASS>\n@regex (?i)(success|updated|changed)\n"
+        "script": "# Changes the password of the connection account itself. passwd asks\n# for the current password first, unless the account is root.\npasswd\n@case (?i)\\b(current|old|existing)\\b[^:\\n]*password:\n<OLDPASS>\n@expect assword:\n@case (?i)\\bnew\\b[^:\\n]*password:\n@end\n<NEWPASS>\n@expect assword:\n<NEWPASS>\n@regex (?i)(success|(?<!not |un)(updated|changed)\\b|\\bdone\\b)\n"
       },
       "policy": {}
     },
     {
-      "name": "Windows (net user)",
+      "name": "Windows",
       "description": "Windows OpenSSH with cmd.exe as the default shell. The account must be a local administrator.",
       "type": "ssh",
       "settings": {

@@ -11,7 +11,7 @@ LDAP_FP=$(podman exec myldaptest cat /container/service/slapd/assets/certs/ldap.
 AD_FP=$(podman exec myadtest cat /var/lib/samba/private/tls/cert.pem | cert_fingerprint)
 
 # ---------------------------------------------------------------- SSH
-section "SSH: Linux (passwd), the account changes its own password"
+section "SSH: Unix, the account changes its own password"
 
 # The image only lets its own user in, so the seeded connection's account is
 # used, and its new password is written back to that connection afterwards
@@ -20,7 +20,7 @@ SSH_PASSWORD=$( [ -n "$SEEDED" ] && parameter "$SEEDED" password )
 [ "$(ssh_accepts mysshtest "$SSH_PASSWORD")" = yes ] || SSH_PASSWORD='P@ssw0rd'
 check "precondition: mysshtest's current password is known" yes "$(ssh_accepts mysshtest "$SSH_PASSWORD")"
 
-LINUX=$(platform_id "Linux (passwd)")
+LINUX=$(platform_id "Unix")
 create_connection SSH_C "{\"name\":\"t2 ssh\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",
     \"parameters\":{\"hostname\":\"mysshtest\",\"port\":\"22\",\"username\":\"mysshtest\",\"password\":\"$SSH_PASSWORD\"},
     \"attributes\":{\"pam-platform\":\"$LINUX\",\"pam-request-exempt\":\"true\"}}"
@@ -42,15 +42,18 @@ check "SSH: with the pin removed, rotation works again" "SUCCESS" "$(rotate "$SS
 
 section "SSH: a script choosing by the prompt, as the account and as root"
 
-# choice_platform VARIABLE NAME COMMAND: passwd asks root for no current password
+# choice_platform VARIABLE NAME COMMAND: the Unix default, with COMMAND in place
+# of passwd (passwd asks root for no current password)
+UNIX_SCRIPT=$(json_get "$(api GET "$PAM/platforms/$LINUX" "$ADMIN" | cut -d' ' -f2-)" "d['settings']['script']")
 choice_platform() {
     create_platform "$1" "$(python3 -I -c 'import json,sys; print(json.dumps({"name": sys.argv[1], "type": "ssh",
-        "settings": {"script": sys.argv[2] + "\n@case (?i)\\b(current|old|existing)\\b[^:\\n]*password:\n<OLDPASS>\n"
-            "@expect assword:\n@case (?i)\\bnew\\b[^:\\n]*password:\n@end\n<NEWPASS>\n@expect assword:\n<NEWPASS>\n"
-            "@regex (?i)(success|(?<!not |un)(updated|changed)\\b|\\bdone\\b)\n"}, "policy": {}}))' "$2" "$3")"
+        "settings": {"script": sys.argv[3].replace("\npasswd\n", "\n" + sys.argv[2] + "\n", 1)}, "policy": {}}))' \
+        "$2" "$3" "$UNIX_SCRIPT")"
 }
 choice_platform OWN_CHOICE "t2 ssh choice own" "passwd"
 choice_platform ROOT_CHOICE "t2 ssh choice root" "sudo passwd <USER>"
+check_contains "precondition: the root script runs passwd as root" "sudo passwd" \
+    "$(json_get "$(api GET "$PAM/platforms/$ROOT_CHOICE" "$ADMIN" | cut -d' ' -f2-)" "d['settings']['script']")"
 
 # Only for this test, the account may run passwd as root
 podman exec mysshtest sh -c 'echo "mysshtest ALL=(root) NOPASSWD: /usr/bin/passwd mysshtest" > /etc/sudoers.d/t2-passwd'

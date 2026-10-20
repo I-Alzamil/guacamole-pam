@@ -15,7 +15,7 @@ on_cleanup "podman exec mykdctest kadmin.local -q 'delprinc -force t2victim'"
 create_platform KERBEROS "{\"name\":\"t2 security kerberos\",\"type\":\"kerberos\",\"settings\":{\"kerberos-realm\":\"EXAMPLE.ORG\",
     \"kerberos-kdc\":\"mykdctest\",\"kerberos-admin-principal\":\"admin/admin\",\"kerberos-admin-password\":\"$MIT_ADMIN_PASSWORD\"},
     \"policy\":{\"rotation-mode\":\"never\"}}"
-LINUX=$(platform_id "Linux (passwd)")
+LINUX=$(platform_id "Unix")
 create_connection MANAGED "{\"name\":\"t2 managed account\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"pam-account\",
     \"parameters\":{\"username\":\"t2sec\",\"password\":\"T2-Sec-Start1!\"},\"attributes\":{\"pam-platform\":\"$KERBEROS\"}}"
 create_connection MANAGED_SSH "{\"name\":\"t2 managed ssh\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",

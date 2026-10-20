@@ -25,11 +25,15 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
             var NEW_PLATFORM_SETTINGS = {
                 ssh : {
                     script : '# Each line is sent to the target, followed by Enter.\n'
-                           + '# @expect waits until the output contains the given text.\n'
+                           + '# @expect waits until the output contains the given text;\n'
+                           + '# @case waits for any of its cases, and runs the lines of\n'
+                           + '# the one seen (passwd asks root for no current password).\n'
                            + 'passwd\n'
-                           + '@expect assword:\n'
+                           + '@case (?i)\\b(current|old|existing)\\b[^:\\n]*password:\n'
                            + '<OLDPASS>\n'
                            + '@expect assword:\n'
+                           + '@case (?i)\\bnew\\b[^:\\n]*password:\n'
+                           + '@end\n'
                            + '<NEWPASS>\n'
                            + '@expect assword:\n'
                            + '<NEWPASS>\n'

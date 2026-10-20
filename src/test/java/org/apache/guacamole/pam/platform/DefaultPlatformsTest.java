@@ -17,8 +17,8 @@ public class DefaultPlatformsTest {
     public void readsTheDefaults() {
         List<Platform> defaults = DefaultPlatforms.read();
         assertEquals(2, defaults.size());
-        assertEquals("Linux (passwd)", defaults.get(0).getName());
-        assertEquals("Windows (net user)", defaults.get(1).getName());
+        assertEquals("Unix", defaults.get(0).getName());
+        assertEquals("Windows", defaults.get(1).getName());
     }
 
     @Test
@@ -33,7 +33,7 @@ public class DefaultPlatformsTest {
     @Test
     public void eachReadIsNew() {
         DefaultPlatforms.read().get(0).setName("changed");
-        assertEquals("Linux (passwd)", DefaultPlatforms.read().get(0).getName());
+        assertEquals("Unix", DefaultPlatforms.read().get(0).getName());
     }
 
 }

@@ -29,7 +29,7 @@ SEEDED=$(connection_id "PAM test (Linux)")
 SSH_PASSWORD=$( [ -n "$SEEDED" ] && parameter "$SEEDED" password )
 [ "$(ssh_accepts mysshtest "$SSH_PASSWORD")" = yes ] || SSH_PASSWORD='P@ssw0rd'
 check "precondition: the SSH server's password is known" yes "$(ssh_accepts mysshtest "$SSH_PASSWORD")"
-LINUX=$(platform_id "Linux (passwd)")
+LINUX=$(platform_id "Unix")
 create_connection SHOWN "{\"name\":\"t2 reveal managed\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",
     \"parameters\":{\"hostname\":\"mysshtest\",\"port\":\"22\",\"username\":\"mysshtest\",\"password\":\"$SSH_PASSWORD\"},
     \"attributes\":{\"pam-platform\":\"$LINUX\",\"pam-rotation-mode\":\"never\"}}"

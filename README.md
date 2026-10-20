@@ -45,8 +45,8 @@ skips extensions built for another release. To build for another release, set
 2. Restart Guacamole.
 
 The first time the extension uses the database, it creates its tables (all
-named `pam_*`) and adds two default SSH platforms, "Linux (passwd)" and
-"Windows (net user)". Later starts find the tables and leave them alone.
+named `pam_*`) and adds two default SSH platforms, "Unix" and
+"Windows". Later starts find the tables and leave them alone.
 
 ### If Guacamole's database user may not create tables
 
@@ -238,7 +238,7 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   Updated platforms keep their stored passwords, unless where they are sent
   changes. A new platform that needs a password can be given it among its
   settings in the file, such as `"winrm-admin-password"`. **Restore
-  defaults** adds back "Linux (passwd)" and "Windows (net user)" if missing;
+  defaults** adds back "Unix" and "Windows" if missing;
   a platform with one of their names is left as it is, even if changed.
 - Approvers see a yellow badge counting requests awaiting their decision.
   Administrators also see a red badge counting failed rotations. Each user can

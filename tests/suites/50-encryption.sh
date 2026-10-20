@@ -152,7 +152,7 @@ print(json.dumps({"name": sys.argv[1], "parentIdentifier": sys.argv[4], "protoco
 ssh_connection WRONG "t2 enc wrong" '{"password": "T2-Wrong-1!"}'
 check "control: with a wrong password, guacd logs no SSH login" no "$(session_of "$WRONG")"
 
-LINUX=$(platform_id "Linux (passwd)")
+LINUX=$(platform_id "Unix")
 CURRENT=$(parameter "$SLOW_C" password)
 ssh_connection MANAGED "t2 enc managed" "{\"password\": \"$CURRENT\"}" "{\"pam-platform\": \"$LINUX\"}"
 LAST_SSH=$MANAGED
