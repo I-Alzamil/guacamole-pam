@@ -115,3 +115,19 @@ check "not an administrator: platforms are listed by name and type only" "kerber
 DETAIL=$(api GET "$PAM/platforms/$KERBEROS" "$ADMIN" | cut -d' ' -f2-)
 case "$DETAIL" in *"$MIT_ADMIN_PASSWORD"*) fail "platform secrets are never returned" "found in: $DETAIL";; *) pass "platform secrets are never returned, even to administrators";; esac
 check "...only which ones are stored" "['kerberos-admin-password']" "$(json_get "$DETAIL" "d.get('storedSecrets')")"
+
+# A stored platform password only goes where it was entered for
+platform_update() { # SETTINGS-JSON -> "STATUS BODY"
+    api PUT "$PAM/platforms/$KERBEROS" "$ADMIN" "{\"name\":\"t2 security kerberos\",\"type\":\"kerberos\",
+        \"settings\":$1,\"policy\":{\"rotation-mode\":\"never\"}}"
+}
+kdc_setting() { json_get "$(api GET "$PAM/platforms/$KERBEROS" "$ADMIN" | cut -d' ' -f2-)" "d['settings'].get('$1')"; }
+R=$(platform_update '{"kerberos-realm":"EXAMPLE.ORG","kerberos-kdc":"kdc.attacker.example","kerberos-admin-principal":"admin/admin"}')
+check "another KDC, keeping the stored password, is refused" 400 "$(status_of "$R")"
+check_contains "...asking for the password again" "enter it again" "$(message_of "$R")"
+check "...and the platform is unchanged" mykdctest "$(kdc_setting kerberos-kdc)"
+R=$(platform_update '{"kerberos-realm":"EXAMPLE.ORG","kerberos-kdc":"mykdctest","kerberos-admin-principal":"admin/admin"}')
+check "the same KDC keeps the stored password" "200 ['kerberos-admin-password']" "$(status_of "$R") $(json_get "${R#* }" "d.get('storedSecrets')")"
+R=$(platform_update "{\"kerberos-realm\":\"EXAMPLE.ORG\",\"kerberos-kdc\":\"mykdctest\",\"kerberos-kdc-port\":\"88\",
+    \"kerberos-admin-principal\":\"admin/admin\",\"kerberos-admin-password\":\"$MIT_ADMIN_PASSWORD\"}")
+check "another port, with the password entered again, is saved" "200 88" "$(status_of "$R") $(kdc_setting kerberos-kdc-port)"

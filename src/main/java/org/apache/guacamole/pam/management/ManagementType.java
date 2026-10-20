@@ -1,6 +1,7 @@
 package org.apache.guacamole.pam.management;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Set;
 
 import org.apache.guacamole.GuacamoleClientException;
@@ -34,6 +35,16 @@ public interface ManagementType {
      * separately and never sent to clients.
      */
     Set<String> getSecretFields();
+
+    /**
+     * Names of the platform fields deciding where its secrets are sent, and
+     * how safely: server, port, encryption, trusted certificate. Changing
+     * one needs the secrets entered again, so a stored secret is never sent
+     * to a server it was not entered for.
+     */
+    default Set<String> getDestinationFields() {
+        return Collections.emptySet();
+    }
 
     /**
      * Connection attributes needed by this type on each managed connection.

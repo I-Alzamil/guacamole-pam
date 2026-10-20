@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -39,6 +40,12 @@ public class LdapManagementType implements ManagementType {
     public static final String ADMIN_PASSWORD = LdapTarget.ADMIN_PASSWORD;
 
     /**
+     * Where the administrator password is sent, and how safely.
+     */
+    private static final Set<String> DESTINATION_FIELDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+            HOSTNAME, PORT, ENCRYPTION, CERTIFICATE)));
+
+    /**
      * Connection attribute: DN of the account.
      */
     public static final String LDAP_DN = "pam-ldap-dn";
@@ -70,6 +77,11 @@ public class LdapManagementType implements ManagementType {
     @Override
     public Set<String> getSecretFields() {
         return Collections.singleton(ADMIN_PASSWORD);
+    }
+
+    @Override
+    public Set<String> getDestinationFields() {
+        return DESTINATION_FIELDS;
     }
 
     @Override

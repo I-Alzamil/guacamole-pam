@@ -232,13 +232,19 @@ connection needs in its *Access requests* section.
   [Encrypting stored secrets](#encrypting-stored-secrets)), like
   connections' passwords and keys, so set one, or protect database access
   accordingly.
+- **A stored platform password only goes where it was entered for.** Saving
+  a platform with another server, port, encryption or trusted certificate
+  (LDAP), realm or KDC (Kerberos), or port (WinRM) needs its administrator
+  password entered again, so whoever may edit platforms can't have it sent
+  to a server of their choosing. WinRM hosts are set on each connection,
+  which only administrators can change.
 - **Editors can read passwords, unless a key is set.** Users with *edit*
   permission on a connection can read its parameters, including its password.
-  With a key set, they see passwords and keys only as tokens. They can still change a connection's other
-  parameters, and some protocols have parameters that could send the
-  password elsewhere (such as its hostname, or a VNC repeater, unless the
-  connection is managed), so give edit permission on sensitive connections
-  and Accounts to administrators only.
+  With a key set, they see passwords and keys only as tokens. They can still
+  change a connection's other parameters, and some protocols have parameters
+  that could send the password elsewhere (such as its hostname, or a VNC
+  repeater, unless the connection is managed), so give edit permission on
+  sensitive connections and Accounts to administrators only.
 - **A Guacamole 1.6 issue can end sessions.** Guacamole remembers the first
   request whose error it handles, and ends that request's session whenever a
   later request is refused as unauthorized, from anyone. The extension's own

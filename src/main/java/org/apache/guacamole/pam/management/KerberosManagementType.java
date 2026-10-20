@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -38,6 +39,12 @@ public class KerberosManagementType implements ManagementType {
     public static final String ADMIN_PASSWORD = KerberosTarget.ADMIN_PASSWORD;
 
     /**
+     * Where the administrator password is sent, and how safely.
+     */
+    private static final Set<String> DESTINATION_FIELDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+            REALM, KDC, KDC_PORT, KPASSWD_SERVER, KPASSWD_PORT)));
+
+    /**
      * Connection attribute: principal of the account, the connection's
      * username if empty.
      */
@@ -70,6 +77,11 @@ public class KerberosManagementType implements ManagementType {
     @Override
     public Set<String> getSecretFields() {
         return Collections.singleton(ADMIN_PASSWORD);
+    }
+
+    @Override
+    public Set<String> getDestinationFields() {
+        return DESTINATION_FIELDS;
     }
 
     @Override

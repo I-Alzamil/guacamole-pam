@@ -6,11 +6,14 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.TreeSet;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -181,7 +184,7 @@ public class PlatformRepository {
 
     public Platform create(Platform platform) throws GuacamoleException {
 
-        Platform clean = sanitize(platform, new HashMap<String, String>());
+        Platform clean = sanitize(platform, null);
 
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
@@ -223,7 +226,7 @@ public class PlatformRepository {
         if (platform != null)
             platform.setType(existing.getType());
 
-        Platform clean = sanitize(platform, existing.getSecrets());
+        Platform clean = sanitize(platform, existing);
 
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
@@ -292,10 +295,17 @@ public class PlatformRepository {
 
     /**
      * Validates a platform sent by a client, keeping only the fields of its
-     * type and moving secrets apart. Empty secrets keep the given stored ones.
+     * type and moving secrets apart. Empty secrets keep those of the stored
+     * platform, unless a field deciding where they are sent changed.
+     *
+     * @param stored
+     *     The platform as stored, with its secrets, or null for a new one.
+     *
+     * @throws GuacamoleClientException
+     *     If the platform is invalid, or a stored secret would be sent to
+     *     another server than it was entered for.
      */
-    private static Platform sanitize(Platform platform, Map<String, String> storedSecrets)
-            throws GuacamoleClientException {
+    static Platform sanitize(Platform platform, Platform stored) throws GuacamoleClientException {
 
         if (platform == null || platform.getName() == null || platform.getName().trim().isEmpty())
             throw new GuacamoleClientException("The platform needs a name.");
@@ -315,19 +325,37 @@ public class PlatformRepository {
         clean.setType(type.getName());
 
         Set<String> secretFields = type.getSecretFields();
+        Map<String, String> storedSecrets = stored == null ? Collections.<String, String>emptyMap()
+                : stored.getSecrets();
         Map<String, String> settings = new HashMap<>();
         Map<String, String> secrets = new HashMap<>();
+        Set<String> kept = new TreeSet<>();
 
         for (String field : fieldNames(type)) {
             String value = platform.getSettings().get(field);
             if (secretFields.contains(field)) {
                 if (value != null && !value.isEmpty())
                     secrets.put(field, value);
-                else if (storedSecrets.get(field) != null)
+                else if (storedSecrets.get(field) != null) {
                     secrets.put(field, storedSecrets.get(field));
+                    kept.add(field);
+                }
             }
             else if (value != null && !value.trim().isEmpty())
                 settings.put(field, value);
+        }
+
+        // Otherwise, whoever may edit the platform could have the stored
+        // password sent to a server of their choosing, or less safely
+        if (stored != null && !kept.isEmpty()) {
+            Set<String> changed = new TreeSet<>();
+            for (String field : type.getDestinationFields()) {
+                if (!Objects.equals(settings.get(field), stored.getSettings().get(field)))
+                    changed.add(field);
+            }
+            if (!changed.isEmpty())
+                throw new GuacamoleClientException("Changing " + String.join(", ", changed) + " changes where the"
+                        + " stored " + String.join(", ", kept) + " is sent: enter it again to save.");
         }
 
         clean.setSettings(settings);

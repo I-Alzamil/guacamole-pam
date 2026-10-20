@@ -34,6 +34,11 @@ public class WinRmManagementType implements ManagementType {
     public static final String ADMIN_PASSWORD = WinRmTarget.ADMIN_PASSWORD;
 
     /**
+     * Where the administrator password is sent, and how safely.
+     */
+    private static final Set<String> DESTINATION_FIELDS = Collections.singleton(PORT);
+
+    /**
      * Connection attribute: host to reach over WinRM, the connection's
      * hostname if empty.
      */
@@ -66,6 +71,14 @@ public class WinRmManagementType implements ManagementType {
     @Override
     public Set<String> getSecretFields() {
         return Collections.singleton(ADMIN_PASSWORD);
+    }
+
+    /**
+     * The host is each connection's, which only administrators may change.
+     */
+    @Override
+    public Set<String> getDestinationFields() {
+        return DESTINATION_FIELDS;
     }
 
     @Override
