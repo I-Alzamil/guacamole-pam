@@ -23,7 +23,7 @@
         "FIELD_HEADER_PAM_KERBEROS_PRINCIPAL": "Principal (default: connection username, in the platform's realm):",
         "SECTION_HEADER_PAM_TYPE_WINRM": "WinRM host",
         "FIELD_HEADER_PAM_WINRM_HOSTNAME": "WinRM hostname (default: connection hostname):",
-        "FIELD_HEADER_PAM_WINRM_CERTIFICATE": "Trusted certificate (SHA-256 fingerprint, empty: trust the first one seen):",
+        "FIELD_HEADER_PAM_WINRM_CERTIFICATE": "Trusted certificate (SHA-256 fingerprint, empty: the platform's CA, or else the first one seen):",
         "SECTION_HEADER_PAM_CHECKOUT": "Access requests",
         "FIELD_HEADER_PAM_CHECKOUT_DURATION": "Access time limit (minutes, default 60):",
         "FIELD_HEADER_PAM_CHECKOUT_EXCLUSIVE": "Only one holder at a time:",
@@ -64,7 +64,7 @@
         "HELP_PLATFORMS": "Platforms describe how passwords of a group of systems are changed, and when. A connection is managed once it is assigned a platform in its \"Password management\" settings.",
         "HELP_READ_FULL": "Read the request in full",
         "HELP_REVEAL_PASSWORD": "Users who see the password can log in outside Guacamole, without approvals, time limits or session recording, until it changes. If the password is managed, it is changed once the connection is no longer in use; if not, it keeps working. Only applies when users must request access.",
-        "HELP_STORED_SECRETS": "Passwords of this platform are stored. Leave their fields empty to keep them, unless you change where they are sent (server, port, encryption or trusted certificate): enter them again then.",
+        "HELP_STORED_SECRETS": "Passwords of this platform are stored. Leave their fields empty to keep them, unless you change where they are sent (server, port, encryption, trusted certificate or CA certificates): enter them again then.",
         "HELP_SYNTAX_COMMENT": "Comment, ignored, as are empty lines",
         "HELP_SYNTAX_ESCAPE": "Send a line starting with @ or # as-is",
         "HELP_SYNTAX_EXPECT": "Wait until the output since the last send contains this text",
@@ -73,7 +73,7 @@
         "HELP_SYNTAX_SEND_EMPTY": "Press Enter (or \"@send text\" to send text)",
         "HELP_SYNTAX_TIMEOUT": "Seconds each following expect may wait (default 10)",
         "HELP_TYPE_KERBEROS": "Change Kerberos principal passwords with kpasswd (RFC 3244), as an admin principal or as the principal itself. Works with MIT Kerberos, Heimdal and Active Directory.",
-        "HELP_TYPE_WINRM": "Set local Windows account passwords over WinRM (HTTPS), as an administrator or as the account itself (which must then be an administrator). Works whatever the host's channel binding setting (CbtHardeningLevel).",
+        "HELP_TYPE_WINRM": "Set local Windows account passwords over WinRM (HTTPS), as an administrator or as the account itself (which must then be an administrator). Works whatever the host's channel binding setting (CbtHardeningLevel). Host certificates are trusted on first contact, or checked against your CA's certificates when given.",
         "HELP_TYPE_LDAP": "Change directory account passwords over LDAPS or StartTLS, as an administrator or as the account itself. Works with OpenLDAP and Active Directory.",
         "HELP_TYPE_SSH": "Log in over SSH and change the password with a send/expect script, such as passwd on Linux or net user on Windows.",
         "INFO_ACTIVE": "Active",
@@ -238,7 +238,9 @@
         "SECTION_HEADER_WINRM_ROTATION": "Administrator (optional)",
         "FIELD_HEADER_WINRM_PORT": "HTTPS port (default 5986):",
         "FIELD_HEADER_WINRM_ADMIN_USERNAME": "Local administrator (empty: each account sets its own password):",
-        "FIELD_HEADER_WINRM_ADMIN_PASSWORD": "Administrator password:"
+        "FIELD_HEADER_WINRM_ADMIN_PASSWORD": "Administrator password:",
+        "SECTION_HEADER_WINRM_TRUST": "Certificate trust",
+        "FIELD_HEADER_WINRM_CA_CERTIFICATES": "CA certificates, PEM (empty: trust each host's first certificate; set: hosts' certificates must be issued by one of these and name the host):"
     },
     "PAM_POLICY": {
         "SECTION_HEADER_POLICY": "Rotation policy",

@@ -11,6 +11,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -24,19 +25,23 @@ import java.util.Locale;
 import java.util.Map;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509ExtendedTrustManager;
 
 /**
  * One HTTPS connection to a WinRM host, kept open for every request: NTLM
  * authenticates the connection itself. Only what WinRM needs of HTTP/1.1 is
  * spoken: POST to /wsman, with a length or chunked responses.
  *
- * The host's certificate must match the pinned fingerprint; without one,
- * any certificate is accepted and its fingerprint is recorded, as SSH does
- * on first contact. Either way, the certificate is kept for the login's
- * channel binding.
+ * The host's certificate must match the pinned fingerprint. Without one, it
+ * must be issued by one of the given certificate authorities and name the
+ * host; without those either, any certificate is accepted and its
+ * fingerprint is recorded, as SSH does on first contact. Either way, the
+ * certificate is kept for the login's channel binding.
  */
 class WinRmHttp implements AutoCloseable {
 
@@ -77,10 +82,13 @@ class WinRmHttp implements AutoCloseable {
     private InputStream in;
     private OutputStream out;
 
-    WinRmHttp(String hostname, int port, String pinnedCertificate) {
+    private final List<X509Certificate> authorities;
+
+    WinRmHttp(String hostname, int port, String pinnedCertificate, List<X509Certificate> authorities) {
         this.hostname = hostname;
         this.port = port;
-        this.certificateCheck = new CertificateCheck(pinnedCertificate);
+        this.authorities = authorities;
+        this.certificateCheck = new CertificateCheck(hostname, pinnedCertificate);
     }
 
     /**
@@ -99,12 +107,16 @@ class WinRmHttp implements AutoCloseable {
     }
 
     /**
-     * Opens the TLS connection, refusing a certificate other than the pinned
-     * one before anything is sent.
+     * Opens the TLS connection, refusing a certificate not trusted before
+     * anything is sent.
      */
     void connect() throws IOException {
 
         try {
+            boolean byAuthority = certificateCheck.pinned == null && !authorities.isEmpty();
+            if (byAuthority)
+                certificateCheck.authority = authorityCheck(authorities);
+
             SSLContext context = SSLContext.getInstance("TLS");
             context.init(null, new TrustManager[] { certificateCheck }, new SecureRandom());
 
@@ -117,6 +129,14 @@ class WinRmHttp implements AutoCloseable {
             plain.connect(new InetSocketAddress(hostname, port), TIMEOUT_MS);
             socket = (SSLSocket) context.getSocketFactory().createSocket(plain, hostname, port, true);
             socket.setSoTimeout(TIMEOUT_MS);
+
+            // The certificate must then also name the host, as for HTTPS
+            if (byAuthority) {
+                SSLParameters parameters = socket.getSSLParameters();
+                parameters.setEndpointIdentificationAlgorithm("HTTPS");
+                socket.setSSLParameters(parameters);
+            }
+
             socket.startHandshake();
         }
         catch (GeneralSecurityException e) {
@@ -224,33 +244,111 @@ class WinRmHttp implements AutoCloseable {
     }
 
     /**
-     * Requires the pinned certificate, or records the one presented when
-     * none is pinned, and keeps it for the channel binding.
+     * The JDK's validation of certificate chains, trusting only the given
+     * authorities. It also checks that the certificate names the host, when
+     * the socket asks for it.
      */
-    private static final class CertificateCheck implements X509TrustManager {
+    private static X509ExtendedTrustManager authorityCheck(List<X509Certificate> authorities)
+            throws GeneralSecurityException, IOException {
 
+        KeyStore store = KeyStore.getInstance(KeyStore.getDefaultType());
+        store.load(null, null);
+        for (int i = 0; i < authorities.size(); i++)
+            store.setCertificateEntry("ca-" + i, authorities.get(i));
+
+        TrustManagerFactory factory = TrustManagerFactory.getInstance("PKIX");
+        factory.init(store);
+        for (TrustManager manager : factory.getTrustManagers()) {
+            if (manager instanceof X509ExtendedTrustManager)
+                return (X509ExtendedTrustManager) manager;
+        }
+        throw new GeneralSecurityException("No PKIX trust manager.");
+
+    }
+
+    /**
+     * Requires the pinned certificate, or one issued by the authorities, or
+     * records the one presented when neither applies, and keeps it for the
+     * channel binding.
+     */
+    private static final class CertificateCheck extends X509ExtendedTrustManager {
+
+        private final String hostname;
         private final String pinned;
+        private volatile X509ExtendedTrustManager authority;
         private volatile String presented;
         private volatile X509Certificate certificate;
 
-        CertificateCheck(String pinned) {
+        CertificateCheck(String hostname, String pinned) {
+            this.hostname = hostname;
             this.pinned = pinned;
         }
 
         @Override
-        public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+        public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
+                throws CertificateException {
+
             if (chain == null || chain.length == 0)
                 throw new CertificateException("The host presented no certificate.");
             presented = fingerprint(chain[0]);
-            if (pinned != null && !pinned.equals(presented))
-                throw new CertificateException("The host's certificate " + presented
-                        + " does not match the trusted fingerprint " + pinned + ". No credentials were sent.");
+
+            if (pinned != null) {
+                if (!pinned.equals(presented))
+                    throw new CertificateException("The host's certificate " + presented
+                            + " does not match the trusted fingerprint " + pinned + ". No credentials were sent.");
+            }
+            else if (authority != null) {
+                try {
+                    authority.checkServerTrusted(chain, authType, socket);
+                }
+                catch (CertificateException e) {
+                    throw new CertificateException("The host's certificate " + presented + " is not trusted: it"
+                            + " must be issued by one of the platform's CA certificates and name \"" + hostname
+                            + "\" (" + rootMessage(e) + "). No credentials were sent.");
+                }
+            }
+
             certificate = chain[0];
+
+        }
+
+        /**
+         * Only sockets are used, whose variant above checks the host's name.
+         */
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+            throw new CertificateException("Unexpected certificate check without a socket.");
+        }
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine engine)
+                throws CertificateException {
+            throw new CertificateException("Unexpected certificate check without a socket.");
         }
 
         @Override
         public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
             throw new CertificateException("Not a server.");
+        }
+
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket)
+                throws CertificateException {
+            throw new CertificateException("Not a server.");
+        }
+
+        @Override
+        public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine)
+                throws CertificateException {
+            throw new CertificateException("Not a server.");
+        }
+
+        private static String rootMessage(Throwable error) {
+            Throwable cause = error;
+            while (cause.getCause() != null && cause.getCause() != cause)
+                cause = cause.getCause();
+            String message = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+            return message.replaceAll("\\.+$", "");
         }
 
         @Override

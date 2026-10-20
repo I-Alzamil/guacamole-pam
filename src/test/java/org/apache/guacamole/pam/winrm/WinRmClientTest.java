@@ -42,7 +42,13 @@ public class WinRmClientTest {
     }
 
     private WinRmTarget target(boolean admin, String certificate) {
+        return target(admin, certificate, null);
+    }
+
+    private WinRmTarget target(boolean admin, String certificate, String authorities) {
         Map<String, String> values = new HashMap<>();
+        if (authorities != null)
+            values.put(WinRmTarget.CA_CERTIFICATES, authorities);
         values.put(WinRmTarget.HOSTNAME, "localhost");
         values.put(WinRmTarget.PORT, Integer.toString(windows.getPort()));
         values.put(WinRmTarget.USERNAME, "pamtest");
@@ -149,6 +155,83 @@ public class WinRmClientTest {
         assertTrue(client.acceptsPassword(target(false, FINGERPRINT), "Some-Pw1!").isAccepted());
         windows.refuseLogin = true;
         assertFalse(client.acceptsPassword(target(false, FINGERPRINT), "Wrong-Pw1!").isAccepted());
+    }
+
+    // ---- Certificate authorities ----
+
+    /**
+     * SHA-256 fingerprint of the certificate test-ca.pem issued for
+     * "localhost".
+     */
+    private static final String CA_ISSUED_FINGERPRINT =
+            "18:2F:6A:F1:AD:A4:E5:E3:C5:A5:C8:B0:34:B4:FB:1A:CB:E1:9C:5B:37:8C:B7:96:83:A4:EA:27:C9:91:3F:CE";
+
+    private static String pem(String resource) throws Exception {
+        try (java.io.InputStream in = WinRmClientTest.class.getResourceAsStream(resource)) {
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.US_ASCII);
+        }
+    }
+
+    /**
+     * Restarts the fake endpoint with the certificate of the given key store.
+     */
+    private void presenting(String keyStore) throws Exception {
+        windows.close();
+        windows = new FakeWinRmServer(keyStore);
+    }
+
+    @Test
+    public void trustsACertificateIssuedByTheCa() throws Exception {
+        presenting("test-ca-server.p12");
+        ChangeOutcome outcome = client.changePassword(target(true, null, pem("test-ca.pem")), "New-Pw1!");
+        assertTrue(outcome.getError(), outcome.isCompleted());
+        assertEquals(CA_ISSUED_FINGERPRINT, outcome.getHostKey());
+    }
+
+    @Test
+    public void trustsAnyOfSeveralCas() throws Exception {
+        presenting("test-ca-server.p12");
+        ChangeOutcome outcome = client.changePassword(
+                target(true, null, pem("test-other-ca.pem") + pem("test-ca.pem")), "New-Pw1!");
+        assertTrue(outcome.getError(), outcome.isCompleted());
+    }
+
+    @Test
+    public void refusesACertificateOfAnotherCa() throws Exception {
+        presenting("test-ca-server.p12");
+        assertRefusedBeforeAnyRequest(client.changePassword(target(true, null, pem("test-other-ca.pem")), "New-Pw1!"));
+    }
+
+    @Test
+    public void refusesASelfSignedCertificateOnceCasAreTrusted() throws Exception {
+        // The certificate a first contact would have accepted
+        assertRefusedBeforeAnyRequest(client.changePassword(target(true, null, pem("test-ca.pem")), "New-Pw1!"));
+    }
+
+    @Test
+    public void refusesACertificateOfTheCaForAnotherName() throws Exception {
+        presenting("test-ca-wrong-name.p12");
+        ChangeOutcome outcome = client.changePassword(target(true, null, pem("test-ca.pem")), "New-Pw1!");
+        assertRefusedBeforeAnyRequest(outcome);
+        assertTrue(outcome.getError(), outcome.getError().contains("localhost"));
+    }
+
+    @Test
+    public void aPinnedFingerprintWinsOverTheCas() throws Exception {
+        presenting("test-ca-server.p12");
+        ChangeOutcome outcome = client.changePassword(
+                target(true, CA_ISSUED_FINGERPRINT, pem("test-other-ca.pem")), "New-Pw1!");
+        assertTrue(outcome.getError(), outcome.isCompleted());
+        windows.requests = 0;
+        assertRefusedBeforeAnyRequest(client.changePassword(
+                target(true, OTHER_FINGERPRINT, pem("test-ca.pem")), "New-Pw1!"));
+    }
+
+    private void assertRefusedBeforeAnyRequest(ChangeOutcome outcome) {
+        assertFalse(outcome.isCompleted());
+        assertFalse(outcome.isNewPasswordSent());
+        assertTrue(outcome.getError(), outcome.getError().contains("No credentials were sent"));
+        assertEquals(0, windows.requests);
     }
 
 }

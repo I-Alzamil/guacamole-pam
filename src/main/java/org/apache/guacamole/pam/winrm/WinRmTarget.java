@@ -1,5 +1,14 @@
 package org.apache.guacamole.pam.winrm;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -8,7 +17,7 @@ import org.apache.guacamole.pam.Values;
 /**
  * A local Windows account and the host holding it, reached over WinRM
  * (HTTPS), read from the settings of a WinRM platform combined with the
- * account of a connection. On a domain controller, whose local accounts are
+ * account of a connection, and how the host's certificate is trusted. On a domain controller, whose local accounts are
  * the domain's, these are domain accounts.
  */
 public final class WinRmTarget {
@@ -17,10 +26,19 @@ public final class WinRmTarget {
     public static final String PORT = "winrm-port";
 
     /**
-     * SHA-256 fingerprint the host's certificate must match, or empty to
-     * trust the first certificate seen.
+     * SHA-256 fingerprint the host's certificate must match. If empty, the
+     * certificate must be issued by one of {@link #CA_CERTIFICATES}, or
+     * without any, the first certificate seen is trusted.
      */
     public static final String CERTIFICATE = "winrm-certificate";
+
+    /**
+     * Certificates, in PEM, of the certificate authorities that issue the
+     * hosts' certificates. A host's certificate must then chain to one of
+     * them and name the host it is reached at, so a renewed certificate is
+     * trusted as well.
+     */
+    public static final String CA_CERTIFICATES = "winrm-ca-certificates";
 
     /**
      * Optional local administrator setting other accounts' passwords.
@@ -43,6 +61,7 @@ public final class WinRmTarget {
     private final String hostname;
     private final int port;
     private final String certificate;
+    private final List<X509Certificate> authorities;
     private final Credentials account;
     private final String password;
     private final Credentials admin;
@@ -94,11 +113,12 @@ public final class WinRmTarget {
 
     }
 
-    private WinRmTarget(String hostname, int port, String certificate, Credentials account, String password,
-            Credentials admin, String adminPassword) {
+    private WinRmTarget(String hostname, int port, String certificate, List<X509Certificate> authorities,
+            Credentials account, String password, Credentials admin, String adminPassword) {
         this.hostname = hostname;
         this.port = port;
         this.certificate = certificate;
+        this.authorities = authorities;
         this.account = account;
         this.password = password;
         this.admin = admin;
@@ -139,17 +159,48 @@ public final class WinRmTarget {
             throw new IllegalArgumentException("Invalid administrator name: " + adminUsername
                     + " (expected \"name\", \"DOMAIN\\name\" or \"name@domain\").");
 
-        return new WinRmTarget(hostname, Values.parsePort(parameters.get(PORT), DEFAULT_PORT), normalize(parameters.get(CERTIFICATE)),
+        return new WinRmTarget(hostname, Values.parsePort(parameters.get(PORT), DEFAULT_PORT),
+                normalize(parameters.get(CERTIFICATE)), parseAuthorities(parameters.get(CA_CERTIFICATES)),
                 account, Values.emptyToNull(parameters.get(PASSWORD)), admin, adminPassword);
 
     }
 
     public WinRmTarget withPassword(String newPassword) {
-        return new WinRmTarget(hostname, port, certificate, account, newPassword, admin, adminPassword);
+        return new WinRmTarget(hostname, port, certificate, authorities, account, newPassword, admin, adminPassword);
     }
 
     public WinRmTarget withCertificate(String fingerprint) {
-        return new WinRmTarget(hostname, port, normalize(fingerprint), account, password, admin, adminPassword);
+        return new WinRmTarget(hostname, port, normalize(fingerprint), authorities, account, password, admin,
+                adminPassword);
+    }
+
+    /**
+     * Reads the certificates of a PEM text, or none if it is empty.
+     *
+     * @throws IllegalArgumentException
+     *     If the text holds anything but certificates, or none.
+     */
+    static List<X509Certificate> parseAuthorities(String pem) {
+
+        String text = Values.trimToNull(pem);
+        if (text == null)
+            return Collections.emptyList();
+
+        List<X509Certificate> certificates = new ArrayList<>();
+        try {
+            for (Certificate certificate : CertificateFactory.getInstance("X.509").generateCertificates(
+                    new ByteArrayInputStream(text.getBytes(StandardCharsets.US_ASCII))))
+                certificates.add((X509Certificate) certificate);
+        }
+        catch (CertificateException e) {
+            throw new IllegalArgumentException("The CA certificates are not valid PEM certificates (\"-----BEGIN"
+                    + " CERTIFICATE-----\" ...): " + e.getMessage());
+        }
+
+        if (certificates.isEmpty())
+            throw new IllegalArgumentException("The CA certificates field holds no certificate.");
+        return Collections.unmodifiableList(certificates);
+
     }
 
     /**
@@ -185,11 +236,20 @@ public final class WinRmTarget {
     }
 
     /**
-     * Fingerprint the certificate must match, or null to trust any (on
-     * first contact).
+     * Fingerprint the certificate must match, or null to trust one issued by
+     * {@link #getAuthorities} (or, without any, any certificate, on first
+     * contact).
      */
     public String getCertificate() {
         return certificate;
+    }
+
+    /**
+     * Certificate authorities the host's certificate must chain to, unless
+     * a fingerprint is pinned. Empty to trust the first certificate seen.
+     */
+    public List<X509Certificate> getAuthorities() {
+        return authorities;
     }
 
     public Credentials getAccount() {

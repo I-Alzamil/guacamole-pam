@@ -132,4 +132,19 @@ public class WinRmTargetTest {
         }
     }
 
+    @Test
+    public void readsCaCertificates() throws Exception {
+        String pem;
+        try (java.io.InputStream in = getClass().getResourceAsStream("test-ca.pem")) {
+            pem = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.US_ASCII);
+        }
+        assertTrue(WinRmTarget.fromParameters(settings()).getAuthorities().isEmpty());
+        assertEquals(1, WinRmTarget.fromParameters(settings(WinRmTarget.CA_CERTIFICATES, pem)).getAuthorities().size());
+        assertEquals(2, WinRmTarget.fromParameters(settings(WinRmTarget.CA_CERTIFICATES, pem + "\n" + pem))
+                .getAuthorities().size());
+        assertRefused(settings(WinRmTarget.CA_CERTIFICATES, "not a certificate"), "not valid PEM certificates");
+        assertRefused(settings(WinRmTarget.CA_CERTIFICATES,
+                "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----"), "not valid PEM certificates");
+    }
+
 }

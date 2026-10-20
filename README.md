@@ -215,8 +215,9 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   requests awaiting approval.
 - **Revoking access ends open sessions.** Within 15 seconds of a user losing
   the permission to read a connection, or of its deletion, their sessions of
-  it close (Guacamole alone lets them run until they end). Removing a user's administrator permission takes effect at once, without
-  them logging in again.
+  it close (Guacamole alone lets them run until they end). Removing a user's
+  administrator permission takes effect at once, without them logging in
+  again.
 - Administrators get four new settings tabs: **Platforms**, **Password
   Rotation**, **Checkouts** and **Approvals**. Approvers who aren't
   administrators only get **Approvals**, for the connections their permission
@@ -243,10 +244,10 @@ connection needs in its *Access requests* section.
   accordingly.
 - **A stored platform password only goes where it was entered for.** Saving
   a platform with another server, port, encryption or trusted certificate
-  (LDAP), realm or KDC (Kerberos), or port (WinRM) needs its administrator
-  password entered again, so whoever may edit platforms can't have it sent
-  to a server of their choosing. WinRM hosts are set on each connection,
-  which only administrators can change.
+  (LDAP), realm or KDC (Kerberos), or port or CA certificates (WinRM) needs
+  its administrator password entered again, so whoever may edit platforms
+  can't have it sent to a server of their choosing. WinRM hosts are set on
+  each connection, which only administrators can change.
 - **Editors can read passwords, unless a key is set.** Users with *edit*
   permission on a connection can read its parameters, including its password.
   With a key set, they see passwords and keys only as tokens. They can still
@@ -270,12 +271,15 @@ connection needs in its *Access requests* section.
   (port 88, TCP) and kpasswd (port 464, TCP) need to be reachable. Without an
   admin principal, each principal changes its own password, which needs its
   current one.
-- **WinRM needs HTTPS, and pins each host's certificate.** WinRM platforms
-  connect to port 5986 only, and log in with NTLM bound to the TLS channel, so
-  they work whatever the host's `CbtHardeningLevel` (`Strict` recommended).
-  Like SSH host keys, the certificate is trusted on first contact and required
-  from then on; pin it in the connection's **Trusted certificate** field to
-  skip that first contact. Passwords are sent on PowerShell's input, never on a
+- **WinRM needs HTTPS, and checks each host's certificate.** WinRM platforms
+  connect over HTTPS only (port 5986 by default), and log in with NTLM bound
+  to the TLS channel, so they work whatever the host's `CbtHardeningLevel`
+  (`Strict` recommended). With CA certificates on the platform, a host's
+  certificate must be issued by one of them and name the host. Without any,
+  like SSH host keys, the certificate is trusted on first contact and required
+  from then on. Either way, a fingerprint in the connection's **Trusted
+  certificate** field is required instead. Revocation isn't checked.
+  Passwords are sent on PowerShell's input, never on a
   command line. Without an administrator on the platform, each account sets its
   own password, so it must be a local administrator. Only local accounts are
   supported: manage domain accounts with an LDAP or Kerberos platform.

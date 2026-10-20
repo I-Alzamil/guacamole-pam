@@ -10,6 +10,7 @@ import java.util.Map;
 import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.pam.kerberos.KerberosTarget;
 import org.apache.guacamole.pam.ldap.LdapTarget;
+import org.apache.guacamole.pam.winrm.WinRmTarget;
 import org.junit.Test;
 
 /**
@@ -106,6 +107,31 @@ public class PlatformSanitizeTest {
         }
         catch (GuacamoleClientException e) {
             assertTrue(e.getMessage(), e.getMessage().contains(KerberosTarget.KDC));
+        }
+    }
+
+    @Test
+    public void refusesOtherCaCertificatesWithTheStoredPassword() throws GuacamoleClientException {
+        Platform winrm = new Platform();
+        winrm.setName("Windows");
+        winrm.setType("winrm");
+        Map<String, String> values = new HashMap<>();
+        values.put(WinRmTarget.ADMIN_USERNAME, "Administrator");
+        values.put(WinRmTarget.ADMIN_PASSWORD, "Admin-Pw1!");
+        winrm.setSettings(values);
+        Platform stored = stored(winrm);
+
+        // Trusting a CA of the editor's choice would trust their hosts
+        Map<String, String> trusting = new HashMap<>(values);
+        trusting.put(WinRmTarget.CA_CERTIFICATES, "-----BEGIN CERTIFICATE-----");
+        trusting.put(WinRmTarget.ADMIN_PASSWORD, "");
+        winrm.setSettings(trusting);
+        try {
+            PlatformRepository.sanitize(winrm, stored);
+            fail("The stored password would be sent to hosts of another CA.");
+        }
+        catch (GuacamoleClientException e) {
+            assertTrue(e.getMessage(), e.getMessage().contains(WinRmTarget.CA_CERTIFICATES));
         }
     }
 

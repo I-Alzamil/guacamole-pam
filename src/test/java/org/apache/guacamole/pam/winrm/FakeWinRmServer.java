@@ -55,9 +55,17 @@ final class FakeWinRmServer implements AutoCloseable {
     private final Thread thread;
 
     FakeWinRmServer() throws Exception {
+        this("test-server.p12");
+    }
+
+    /**
+     * A server presenting the certificate (and its chain) of the given
+     * PKCS12 resource, whose password is "changeit".
+     */
+    FakeWinRmServer(String keyStore) throws Exception {
 
         KeyStore store = KeyStore.getInstance("PKCS12");
-        try (InputStream in = getClass().getResourceAsStream("test-server.p12")) {
+        try (InputStream in = getClass().getResourceAsStream(keyStore)) {
             store.load(in, "changeit".toCharArray());
         }
         KeyManagerFactory keys = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
