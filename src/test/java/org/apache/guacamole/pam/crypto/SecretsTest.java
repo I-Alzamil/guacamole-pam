@@ -23,7 +23,7 @@ public class SecretsTest {
 
     private static final String OTHER_KEY = SecretCipherTest.OTHER_KEY;
 
-    private static final String PURPOSE = Secrets.CONNECTION_PASSWORD;
+    private static final String PURPOSE = Secrets.PENDING_PASSWORD;
 
     private static Secrets secrets(String key, String... oldKeys) {
         return new Secrets(key, Arrays.asList(oldKeys), false);

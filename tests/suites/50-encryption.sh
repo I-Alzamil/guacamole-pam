@@ -3,9 +3,8 @@
 # passwords encrypted; every connection's passwords, keys and passphrases,
 # Accounts' included, kept apart, encrypted, behind tokens such as
 # ${PAM_PASSWORD_17}; Guacamole's own tokens left alone), what the API
-# returns, saving connections from the editor, Accounts' passwords encrypted
-# in their field by earlier versions, and sessions, also through balancing
-# groups. Skipped when the test setup has no key.
+# returns, saving connections from the editor, and sessions, also through
+# balancing groups. Skipped when the test setup has no key.
 
 if [ -z "$PAM_TEST_KEY" ]; then
     section "Skipped: build.sh was run without an encryption key"
@@ -17,17 +16,6 @@ stored_password() { sql "SELECT parameter_value FROM guacamole_connection_parame
 raw_parameter() { json_get "$(curl -s "$DATA/connections/$1/parameters?token=$ADMIN")" "d.get('password')"; }
 is_encrypted() { case "$1" in pam:v1:*) echo yes;; *) echo no;; esac; }
 kept() { sql "SELECT value FROM pam_connection_secret WHERE connection_id = $1 AND parameter_name = '${2:-password}'"; }
-legacy_encrypt() { # PURPOSE VALUE: encrypted as earlier versions stored it in the field
-    cat >"$T2_TMP/Encrypt.java" <<'EOF'
-public class Encrypt {
-    public static void main(String[] args) throws Exception {
-        System.out.println(new org.apache.guacamole.pam.crypto.SecretCipher(System.getenv("PAM_ENCRYPTION_KEY"))
-                .encrypt(args[0], args[1]));
-    }
-}
-EOF
-    PAM_ENCRYPTION_KEY="$PAM_TEST_KEY" java -cp "$T2_JAR" "$T2_TMP/Encrypt.java" "$1" "$2"
-}
 checkout_password() { # ID -> the password a checkout hands over, then releases it
     json_get "$(api POST "$PAM/requests/$1" "$ADMIN" '{"reason":"T2 encryption"}' | cut -d' ' -f2-)" "d.get('password')"
     api POST "$PAM/requests/$1/release" "$ADMIN" >/dev/null
@@ -84,18 +72,13 @@ check "...kept apart" "\${PAM_PASSWORD_$ACCOUNT} yes" "$(stored_password "$ACCOU
 check "...as typed" "T2-Enc-Typed1!" "$(checkout_password "$ACCOUNT")"
 podman exec mykdctest kadmin.local -q "cpw -pw T2-Enc-Typed1! t2enc" >/dev/null 2>&1
 
-R=$(edit_connection "$ADMIN" "$ACCOUNT" "{\"password\":\"$SECRETS\"}")
-check_contains "the platform's encrypted secrets pasted as an Account password are refused" "400" "$(status_of "$R")"
-check_contains "...as belonging to another field" "belongs to another field" "$(message_of "$R")"
-R=$(edit_connection "$ADMIN" "$ACCOUNT" '{"password":"pam:v1:0badc0de:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}')
-check_contains "a value encrypted with an unknown key is refused" "not configured" "$(message_of "$R")"
-check "...and the stored password is unchanged" "T2-Enc-Typed1!" "$(checkout_password "$ACCOUNT")"
-
 # Stored decrypted, an editor could read it back: a decryption oracle
-R=$(edit_connection "$ADMIN" "$SSH" "{\"password\":\"$(legacy_encrypt connection-password T2-Enc-Typed1!)\"}")
-check "an Account's password as earlier versions encrypted it, pasted into another connection, is refused" 400 "$(status_of "$R")"
-check_contains "...as encrypted passwords are not copied" "cannot be copied" "$(message_of "$R")"
-check "...and that connection's password is unchanged" "T2-Ssh-Plain1!" "$(parameter "$SSH" password)"
+R=$(edit_connection "$ADMIN" "$ACCOUNT" "{\"password\":\"$SECRETS\"}")
+check "the platform's encrypted secrets pasted as an Account password are refused" 400 "$(status_of "$R")"
+check_contains "...as encrypted values are not copied" "cannot be copied" "$(message_of "$R")"
+R=$(edit_connection "$ADMIN" "$ACCOUNT" '{"password":"pam:v1:0badc0de:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}')
+check_contains "a value encrypted with an unknown key is refused too" "cannot be copied" "$(message_of "$R")"
+check "...and the stored password is unchanged" "T2-Enc-Typed1!" "$(checkout_password "$ACCOUNT")"
 
 # ---------------------------------------------------------------- rotation
 section "Rotation"
@@ -107,17 +90,6 @@ check "...the new password is kept apart, encrypted" "\${PAM_PASSWORD_$ACCOUNT} 
 check "...the KDC accepts it" yes "$(mit_accepts t2enc "$AFTER")"
 check "...and refuses the old one" no "$(mit_accepts t2enc "$BEFORE")"
 check "...which a checkout hands over" "$AFTER" "$(checkout_password "$ACCOUNT")"
-
-# Earlier versions encrypted an Account's password in its field
-CURRENT=$AFTER
-sql "DELETE FROM pam_connection_secret WHERE connection_id = $ACCOUNT;
-     UPDATE guacamole_connection_parameter SET parameter_value = '$(legacy_encrypt connection-password "$CURRENT")'
-     WHERE connection_id = $ACCOUNT AND parameter_name = 'password'" >/dev/null
-check "an Account's password encrypted in its field, as earlier versions stored it, is still handed over" \
-    "$CURRENT" "$(checkout_password "$ACCOUNT")"
-edit_connection "$ADMIN" "$ACCOUNT" '' '' "t2 enc account legacy" >/dev/null
-check "...and saved unchanged from the editor, it is moved apart" "\${PAM_PASSWORD_$ACCOUNT}" "$(stored_password "$ACCOUNT")"
-check "...unchanged" "$CURRENT" "$(reveal "connection-secret:$ACCOUNT:password" "$(kept "$ACCOUNT")")"
 
 # The password about to be set is kept from before the target is touched
 # until the rotation is confirmed: seen during a rotation slowed down on the

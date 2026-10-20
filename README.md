@@ -67,9 +67,8 @@ GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO guacamole_us
 GRANT SELECT,USAGE ON ALL SEQUENCES IN SCHEMA public TO guacamole_user;
 ```
 
-Do the same after upgrading from a version without the `pam_session` table.
-Until then the extension keeps working on a single server, and logs a warning
-that servers sharing the database can't see each other's sessions.
+Do the same after upgrading to a version that changes the tables: until then,
+connections stored in the database can't be opened, as above.
 
 ### Several Guacamole servers
 
@@ -119,10 +118,7 @@ to pass the user's own password on, stay in their field for Guacamole to
 replace.
 
 Accounts' passwords never reach Guacamole's connections, but are kept the same
-way, so every connection shows its password as a token. If the database user
-can't create `pam_connection_secret`, Accounts' passwords are encrypted in
-their field instead (`pam:v1:…`), and other connections' secrets stay
-unencrypted.
+way, so every connection shows its password as a token.
 
 Generate a key once with `openssl rand -base64 32` and set it in
 `guacamole.properties` (or `PAM_ENCRYPTION_KEY` in the Docker image), then
@@ -170,7 +166,6 @@ psql -tAc "SELECT pending_password FROM pam_rotation_state WHERE connection_id =
 ```
 
 The last argument is the kind of value: `pending-password`,
-`connection-password` (an Account's password encrypted in its field),
 `connection-secret:<connection id>:<field>` (from `pam_connection_secret`,
 such as `connection-secret:17:private-key`) or `platform-secrets`.
 

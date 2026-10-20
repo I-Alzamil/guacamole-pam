@@ -1,6 +1,11 @@
 --
 -- Tables of the PAM extension. Every statement is idempotent, and all are run
--- automatically the first time the extension touches the database.
+-- automatically the first time the extension touches the database, unless
+-- the database already has the version recorded at the end.
+--
+-- A later version appends what it changes before that last statement, and
+-- records its own number there too (PamDatabase.SCHEMA_VERSION), so this
+-- script both creates the tables and upgrades earlier ones.
 --
 
 -- Schema versions applied, so later versions can tell what to upgrade.
@@ -114,6 +119,10 @@ CREATE TABLE IF NOT EXISTS pam_checkout (
 CREATE INDEX IF NOT EXISTS pam_checkout_checked_out
   ON pam_checkout (checked_out);
 
+-- Servers look for checkouts that just ended, to close their sessions
+CREATE INDEX IF NOT EXISTS pam_checkout_released
+  ON pam_checkout (released);
+
 -- One exclusive holder per connection, and one active checkout per user
 CREATE UNIQUE INDEX IF NOT EXISTS pam_checkout_exclusive
   ON pam_checkout (connection_id) WHERE released IS NULL AND exclusive;
@@ -182,10 +191,8 @@ CREATE TABLE IF NOT EXISTS pam_user_preference (
 
 );
 
--- Version 2: several Guacamole servers sharing the database
-
--- Sessions open on managed connections, on every server, so all servers can
--- tell whether a connection is in use. Each server refreshes the heartbeat of
+-- Sessions open on managed connections, on every Guacamole server sharing
+-- the database, so all servers can tell whether a connection is in use. Each server refreshes the heartbeat of
 -- its own rows, and rows no longer refreshed are removed
 CREATE TABLE IF NOT EXISTS pam_session (
 
@@ -203,11 +210,7 @@ CREATE TABLE IF NOT EXISTS pam_session (
 
 );
 
--- Servers look for checkouts that just ended, to close their sessions
-CREATE INDEX IF NOT EXISTS pam_checkout_released
-  ON pam_checkout (released);
-
--- Version 3: sensitive parameters of connections (passwords, private keys,
+-- Sensitive parameters of connections (passwords, private keys,
 -- passphrases), kept apart and encrypted while an encryption key is set. The
 -- parameter is then a token such as ${PAM_PASSWORD_17}, which the extension
 -- replaces when the connection opens
@@ -226,5 +229,5 @@ CREATE TABLE IF NOT EXISTS pam_connection_secret (
 
 -- Last, so the default platforms above are only added to a fresh install, and
 -- so the extension can tell the schema is complete (PamDatabase.SCHEMA_VERSION)
-INSERT INTO pam_schema_version (version) VALUES (1), (2), (3)
+INSERT INTO pam_schema_version (version) VALUES (1)
 ON CONFLICT (version) DO NOTHING;

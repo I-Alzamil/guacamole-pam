@@ -14,7 +14,6 @@ import java.util.Map;
 
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
-import org.apache.guacamole.pam.AccountProtocol;
 import org.apache.guacamole.pam.PamAttributes;
 import org.apache.guacamole.pam.crypto.MigrationReport;
 import org.apache.guacamole.pam.crypto.Secrets;
@@ -30,9 +29,7 @@ import org.slf4j.LoggerFactory;
  * If a key is set (see {@link Secrets}), passwords kept from unconfirmed
  * rotations are encrypted, and the passwords, keys and passphrases of every
  * connection, Accounts included, are kept apart (see
- * {@link ConnectionSecrets}). Before that is possible (a database without
- * the table for it), an Account's password is encrypted in its parameter.
- * Values returned here are always plaintext.
+ * {@link ConnectionSecrets}). Values returned here are always plaintext.
  */
 public class ConnectionRepository {
 
@@ -50,15 +47,6 @@ public class ConnectionRepository {
         this.database = database;
         this.secrets = secrets;
         this.connectionSecrets = connectionSecrets;
-    }
-
-    /**
-     * The "password" parameter of a connection that is not kept apart, as
-     * stored: encrypted for an Account, plaintext otherwise.
-     */
-    private String storedPassword(String protocol, String password) throws GuacamoleException {
-        return AccountProtocol.NAME.equals(protocol) ? secrets.protect(Secrets.CONNECTION_PASSWORD, password)
-                : secrets.reveal(Secrets.CONNECTION_PASSWORD, password);
     }
 
     /**
@@ -377,24 +365,14 @@ public class ConnectionRepository {
             connection.setAutoCommit(false);
             try {
 
-                String protocol = null;
-                try (PreparedStatement statement = connection.prepareStatement(
-                        "SELECT protocol FROM guacamole_connection WHERE connection_id = ?")) {
-                    statement.setInt(1, connectionId);
-                    try (ResultSet results = statement.executeQuery()) {
-                        if (results.next())
-                            protocol = results.getString(1);
-                    }
-                }
-
                 String parameter;
-                if (connectionSecrets.keepsSecrets(protocol)) {
+                if (connectionSecrets.keepsSecrets()) {
                     connectionSecrets.keep(connection, connectionId, PASSWORD_PARAMETER, newPassword);
                     parameter = ConnectionSecrets.token(PASSWORD_PARAMETER, connectionId);
                 }
                 else {
                     connectionSecrets.forget(connection, connectionId, PASSWORD_PARAMETER);
-                    parameter = storedPassword(protocol, newPassword);
+                    parameter = newPassword;
                 }
 
                 try (PreparedStatement statement = connection.prepareStatement(
@@ -488,50 +466,19 @@ public class ConnectionRepository {
     }
 
     /**
-     * Stores every connection password and pending password in the form
-     * {@link Secrets} requires now. Values changed meanwhile are left as
+     * Stores every pending password in the form {@link Secrets} requires
+     * now; connections' own secrets are migrated by
+     * {@link ConnectionSecrets#migrate}. Values changed meanwhile are left as
      * they are; values that cannot be decrypted here are skipped, and
      * reported.
      */
     public void migrateSecrets(MigrationReport report) throws GuacamoleException {
 
         try (Connection connection = database.getConnection();
-             PreparedStatement passwords = connection.prepareStatement(
-                 "SELECT p.connection_id, c.protocol, p.parameter_value FROM guacamole_connection_parameter p"
-               + " JOIN guacamole_connection c ON c.connection_id = p.connection_id"
-               + " WHERE p.parameter_name = ? AND (c.protocol = ? OR p.parameter_value LIKE 'pam:v1:%')");
-             PreparedStatement updatePassword = connection.prepareStatement(
-                 "UPDATE guacamole_connection_parameter SET parameter_value = ?"
-               + " WHERE connection_id = ? AND parameter_name = ? AND parameter_value = ?");
              PreparedStatement pending = connection.prepareStatement(
                  "SELECT connection_id, pending_password FROM pam_rotation_state WHERE pending_password IS NOT NULL");
              PreparedStatement updatePending = connection.prepareStatement(
                  "UPDATE pam_rotation_state SET pending_password = ? WHERE connection_id = ? AND pending_password = ?")) {
-
-            passwords.setString(1, PASSWORD_PARAMETER);
-            passwords.setString(2, AccountProtocol.NAME);
-            try (ResultSet results = passwords.executeQuery()) {
-                while (results.next()) {
-                    int id = results.getInt(1);
-                    String stored = results.getString(3);
-                    // Kept apart, or moved there, by ConnectionSecrets
-                    if (stored.startsWith("${PAM_") || (AccountProtocol.NAME.equals(results.getString(2))
-                            && connectionSecrets.keepsSecrets(AccountProtocol.NAME)))
-                        continue;
-                    if (!secrets.canReveal(stored)) {
-                        report.unreadable(stored);
-                        continue;
-                    }
-                    String wanted = migrated(id, "password", () -> storedPassword(results.getString(2), stored));
-                    if (wanted != null && !wanted.equals(stored)) {
-                        updatePassword.setString(1, wanted);
-                        updatePassword.setInt(2, id);
-                        updatePassword.setString(3, PASSWORD_PARAMETER);
-                        updatePassword.setString(4, stored);
-                        report.changed(updatePassword.executeUpdate());
-                    }
-                }
-            }
 
             try (ResultSet results = pending.executeQuery()) {
                 while (results.next()) {

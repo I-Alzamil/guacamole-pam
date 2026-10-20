@@ -37,7 +37,6 @@ public final class Secrets {
      */
     public static final String PLATFORM_SECRETS = "platform-secrets";
     public static final String PENDING_PASSWORD = "pending-password";
-    public static final String CONNECTION_PASSWORD = "connection-password";
 
     /**
      * Followed by ":", the connection's identifier, ":" and the parameter's

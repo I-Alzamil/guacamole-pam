@@ -167,8 +167,6 @@ parameter() {
     if [[ "$value" == '${PAM_'*"_$1}" ]]; then
         value=$(reveal "connection-secret:$1:$2" "$(podman exec myguacdbtest psql -U postgres -tAc \
             "SELECT value FROM pam_connection_secret WHERE connection_id = $1 AND parameter_name = '$2'")")
-    elif [ "$2" = password ]; then
-        value=$(reveal connection-password "$value")
     fi
     printf '%s\n' "$value"
 }

@@ -23,14 +23,20 @@ public class SecretCipherTest {
 
     static final String OTHER_KEY = Base64.getEncoder().encodeToString(new byte[32]);
 
-    /** "Account-Pw1! é" as a connection password, nonce bytes 100 to 111. */
+    /**
+     * Purpose the independent value was encrypted for. Any purpose will do:
+     * the value only decrypts for the one it was encrypted for.
+     */
+    private static final String PURPOSE = "connection-password";
+
+    /** "Account-Pw1! é" for {@link #PURPOSE}, nonce bytes 100 to 111. */
     private static final String INDEPENDENT = "pam:v1:630dcd29:ZGVmZ2hpamtsbW5vCXi9CQyHIrNuFW7J+qbDPheHV0hZYfmvMPafRfmsaA==";
 
     @Test
     public void decryptsValueEncryptedIndependently() throws Exception {
         SecretCipher cipher = new SecretCipher(KEY);
         assertEquals("630dcd29", cipher.getKeyId());
-        assertEquals("Account-Pw1! é", cipher.decrypt(Secrets.CONNECTION_PASSWORD, INDEPENDENT));
+        assertEquals("Account-Pw1! é", cipher.decrypt(PURPOSE, INDEPENDENT));
     }
 
     @Test
@@ -53,14 +59,14 @@ public class SecretCipherTest {
         SecretCipher cipher = new SecretCipher(KEY);
         // A byte of the tag (not the base64 padding bits, which decoders
         // ignore), then a byte of the ciphertext
-        refused(cipher, Secrets.CONNECTION_PASSWORD, INDEPENDENT.replace("RfmsaA==", "RfmtaA=="));
-        refused(cipher, Secrets.CONNECTION_PASSWORD, INDEPENDENT.replace("CXi9", "CXi8"));
-        refused(cipher, Secrets.CONNECTION_PASSWORD, "pam:v1:630dcd29:ZGVmZ2hpamtsbW5v");
+        refused(cipher, PURPOSE, INDEPENDENT.replace("RfmsaA==", "RfmtaA=="));
+        refused(cipher, PURPOSE, INDEPENDENT.replace("CXi9", "CXi8"));
+        refused(cipher, PURPOSE, "pam:v1:630dcd29:ZGVmZ2hpamtsbW5v");
     }
 
     @Test
     public void refusesValuesOfAnotherKey() {
-        refused(new SecretCipher(OTHER_KEY), Secrets.CONNECTION_PASSWORD, INDEPENDENT);
+        refused(new SecretCipher(OTHER_KEY), PURPOSE, INDEPENDENT);
     }
 
     @Test

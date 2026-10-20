@@ -17,12 +17,9 @@ import java.util.Set;
 import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
-import org.apache.guacamole.pam.AccountProtocol;
 import org.apache.guacamole.pam.crypto.MigrationReport;
 import org.apache.guacamole.pam.crypto.SecretCipher;
 import org.apache.guacamole.pam.crypto.Secrets;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Sensitive parameters of connections ({@link #SENSITIVE}: passwords, private
@@ -39,13 +36,10 @@ import org.slf4j.LoggerFactory;
  * Values containing a Guacamole token, such as "${GUAC_PASSWORD}", stay in
  * the parameter, as Guacamole must replace them. Accounts keep their password
  * here too, although it never reaches guacd: only this extension reads it.
- * Without a key, while decrypting, or before the table exists, values stay
- * in their parameter, as in Guacamole itself; an Account's password is then
- * encrypted there if a key is set (see {@link ConnectionRepository}).
+ * Without a key, or while decrypting, values stay in their parameter, as in
+ * Guacamole itself.
  */
 public class ConnectionSecrets {
-
-    private static final Logger logger = LoggerFactory.getLogger(ConnectionSecrets.class);
 
     /**
      * Guacamole's password fields, and its private keys.
@@ -84,11 +78,10 @@ public class ConnectionSecrets {
     }
 
     /**
-     * Whether a connection with this protocol keeps its sensitive values
-     * here. Known once the database was first used.
+     * Whether sensitive values are kept here: while a key is set.
      */
-    public boolean keepsSecrets(String protocol) {
-        return secrets.isEncrypting() && database.hasSecretTable();
+    public boolean keepsSecrets() {
+        return secrets.isEncrypting();
     }
 
     /**
@@ -117,7 +110,7 @@ public class ConnectionSecrets {
 
         public void complete(int connectionId) throws GuacamoleException {
 
-            if (!database.hasSecretTable())
+            if (kept.isEmpty() && forgotten.isEmpty())
                 return;
 
             try (Connection connection = database.getConnection()) {
@@ -156,15 +149,13 @@ public class ConnectionSecrets {
      * @throws GuacamoleClientException
      *     If a token of this extension is anywhere but in the parameter of
      *     this connection it stands for, a sensitive value is one this
-     *     extension encrypted (other than an Account's password stored in
-     *     its parameter), or a token stands for a value not kept here.
+     *     extension encrypted, or a token stands for a value not kept here.
      */
     public Saving prepare(Integer connectionId, String protocol, Map<String, String> parameters)
             throws GuacamoleException {
 
         Saving saving = new Saving();
-        boolean keeps = keepsSecrets(protocol);
-        boolean account = AccountProtocol.NAME.equals(protocol);
+        boolean keeps = keepsSecrets();
 
         // Only read where a value is this connection's own token, which an
         // existing connection alone has
@@ -197,21 +188,7 @@ public class ConnectionSecrets {
                 continue;
             }
 
-            boolean accountPassword = account && name.equals(ConnectionRepository.PASSWORD_PARAMETER);
-
-            // Not kept here, an Account's password is encrypted in its parameter
-            if (accountPassword && !keeps) {
-                saving.changes.put(name, secrets.protect(Secrets.CONNECTION_PASSWORD,
-                        own ? require(id, name) : value));
-                saving.forgotten.add(name);
-                continue;
-            }
-
-            // An Account's password still encrypted in its parameter, which
-            // the editor sends back until it is moved here
-            if (accountPassword && !own && SecretCipher.isEncrypted(value))
-                value = secrets.reveal(Secrets.CONNECTION_PASSWORD, value);
-            else if (!own && SecretCipher.isEncrypted(value))
+            if (!own && SecretCipher.isEncrypted(value))
                 throw new GuacamoleClientException("Encrypted values cannot be copied into a connection. Type the"
                         + " value instead.");
 
@@ -273,14 +250,12 @@ public class ConnectionSecrets {
     }
 
     /**
-     * The value of a stored parameter: kept here if it is its token, an
-     * Account's password in its parameter decrypted, or as it is.
+     * The value of a stored parameter: kept here if it is its token, or as
+     * it is.
      */
     String resolve(int connectionId, String parameter, String value) throws GuacamoleException {
         if (SENSITIVE.contains(parameter) && token(parameter, connectionId).equals(value))
             return require(connectionId, parameter);
-        if (ConnectionRepository.PASSWORD_PARAMETER.equals(parameter))
-            return secrets.reveal(Secrets.CONNECTION_PASSWORD, value);
         return value;
     }
 
@@ -288,7 +263,7 @@ public class ConnectionSecrets {
      * The value kept for a parameter of the connection, which must be there.
      */
     private String require(int connectionId, String parameter) throws GuacamoleException {
-        String value = database.hasSecretTable() ? read(connectionId, parameter) : null;
+        String value = read(connectionId, parameter);
         if (value == null)
             throw new GuacamoleServerException("The " + parameter + " of connection " + connectionId + " is "
                     + token(parameter, connectionId) + ", but the extension keeps no value for it. Set it again.");
@@ -332,8 +307,6 @@ public class ConnectionSecrets {
     }
 
     void forget(Connection connection, int connectionId, String parameter) throws SQLException {
-        if (!database.hasSecretTable())
-            return;
         try (PreparedStatement statement = connection.prepareStatement(
                 "DELETE FROM pam_connection_secret WHERE connection_id = ? AND parameter_name = ?")) {
             statement.setInt(1, connectionId);
@@ -364,32 +337,24 @@ public class ConnectionSecrets {
      */
     public void migrate(MigrationReport report) throws GuacamoleException {
 
-        if (!database.hasSecretTable())
-            return;
+        boolean keeps = keepsSecrets();
 
         try (Connection connection = database.getConnection()) {
 
             List<Misplaced> misplaced = new ArrayList<>();
             try (PreparedStatement statement = connection.prepareStatement(
-                    "SELECT p.connection_id, c.protocol, p.parameter_name, p.parameter_value"
-                  + " FROM guacamole_connection_parameter p JOIN guacamole_connection c"
-                  + "   ON c.connection_id = p.connection_id"
-                  + " WHERE p.parameter_name = ANY (?) AND p.parameter_value <> ''")) {
+                    "SELECT connection_id, parameter_name, parameter_value FROM guacamole_connection_parameter"
+                  + " WHERE parameter_name = ANY (?) AND parameter_value <> ''")) {
                 statement.setArray(1, connection.createArrayOf("varchar", SENSITIVE.toArray()));
                 try (ResultSet results = statement.executeQuery()) {
                     while (results.next()) {
                         int id = results.getInt(1);
-                        String name = results.getString(3);
-                        String value = results.getString(4);
+                        String name = results.getString(2);
+                        String value = results.getString(3);
                         boolean own = value.equals(token(name, id));
-                        boolean keeps = keepsSecrets(results.getString(2));
-                        // Encrypted in its parameter, only an Account's password
-                        // is moved: another value was pasted there, and stays put
-                        boolean movable = !SecretCipher.isEncrypted(value)
-                                || (AccountProtocol.NAME.equals(results.getString(2))
-                                    && name.equals(ConnectionRepository.PASSWORD_PARAMETER));
-                        // Guacamole tokens stay put
-                        if (keeps && !own && !value.contains(GUACAMOLE_TOKEN) && movable)
+                        // Guacamole tokens stay put, and so does an encrypted
+                        // value written there by hand: it is no plaintext
+                        if (keeps && !own && !value.contains(GUACAMOLE_TOKEN) && !SecretCipher.isEncrypted(value))
                             misplaced.add(new Misplaced(id, name, value, true));
                         else if (!keeps && own)
                             misplaced.add(new Misplaced(id, name, value, false));
@@ -434,21 +399,6 @@ public class ConnectionSecrets {
 
         int id = misplaced.connectionId;
         String plaintext = misplaced.value;
-
-        // An Account's password, encrypted in its parameter
-        if (misplaced.belongsHere && SecretCipher.isEncrypted(plaintext)) {
-            if (!secrets.canReveal(plaintext)) {
-                report.unreadable(plaintext);
-                return;
-            }
-            try {
-                plaintext = secrets.reveal(Secrets.CONNECTION_PASSWORD, plaintext);
-            }
-            catch (GuacamoleException e) {
-                logger.warn("The password of connection {} was left as it is: {}", id, e.getMessage());
-                return;
-            }
-        }
 
         if (!misplaced.belongsHere) {
             String stored = readRaw(connection, id, misplaced.parameter);

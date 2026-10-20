@@ -30,9 +30,6 @@ import org.slf4j.LoggerFactory;
  * whether a connection is in use. A server refreshes the heartbeat of its
  * rows every minute; rows of a server that stopped without removing them are
  * ignored once stale, then removed.
- *
- * Where "pam_session" is missing (tables created by hand for an earlier
- * version), only this server's sessions are known, as before.
  */
 class SessionRegistry {
 
@@ -114,7 +111,7 @@ class SessionRegistry {
         Session session = new Session(identifier, username, tunnel);
         local.put(tunnel, session);
 
-        if (Values.parseId(identifier) == null || !database.hasSessionTable())
+        if (Values.parseId(identifier) == null)
             return;
 
         try (Connection connection = database.getConnection()) {
@@ -161,7 +158,7 @@ class SessionRegistry {
         if (session == null)
             return false;
 
-        if (Values.parseId(session.identifier) != null && database.hasSessionTable()) {
+        if (Values.parseId(session.identifier) != null) {
             try (Connection connection = database.getConnection();
                  PreparedStatement statement = connection.prepareStatement(
                      "DELETE FROM pam_session WHERE session_id = ?")) {
@@ -211,15 +208,6 @@ class SessionRegistry {
 
         Map<Integer, Integer> counts = new HashMap<>();
 
-        if (!database.hasSessionTable()) {
-            for (Session session : local.values()) {
-                Integer id = Values.parseId(session.identifier);
-                if (id != null)
-                    counts.put(id, counts.getOrDefault(id, 0) + 1);
-            }
-            return counts;
-        }
-
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                  "SELECT connection_id, count(*) FROM pam_session WHERE" + FRESH + " GROUP BY connection_id");
@@ -244,8 +232,6 @@ class SessionRegistry {
     Set<Integer> heartbeat() throws GuacamoleException {
 
         Set<Integer> abandoned = new HashSet<>();
-        if (!database.hasSessionTable())
-            return abandoned;
 
         try (Connection connection = database.getConnection()) {
 

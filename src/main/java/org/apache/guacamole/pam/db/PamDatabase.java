@@ -67,14 +67,10 @@ public class PamDatabase {
 
     /**
      * Version the schema script records once it has run, which must match
-     * the version it inserts into "pam_schema_version".
+     * the latest version it inserts into "pam_schema_version". A database
+     * without it runs the script, creating or upgrading the tables.
      */
-    private static final int SCHEMA_VERSION = 3;
-
-    /**
-     * The first version, whose tables are enough to run on a single server.
-     */
-    private static final int SINGLE_SERVER_VERSION = 1;
+    private static final int SCHEMA_VERSION = 1;
 
     /**
      * SQL state of PostgreSQL's "insufficient_privilege".
@@ -96,10 +92,6 @@ public class PamDatabase {
     private final Properties connectionProperties = new Properties();
 
     private volatile boolean schemaReady = false;
-
-    private volatile boolean sessionTable = false;
-
-    private volatile boolean secretTable = false;
 
     /**
      * Returns why this extension cannot use the Guacamole database here, or
@@ -201,27 +193,8 @@ public class PamDatabase {
                         statement.execute(sql);
                 }
             }
-            catch (SQLException e) {
-
-                // Tables of the first version created by hand still work,
-                // on a single server, until the new ones are created
-                if (!INSUFFICIENT_PRIVILEGE.equals(e.getSQLState())
-                        || !hasVersion(connection, SINGLE_SERVER_VERSION))
-                    throw e;
-
-                logger.warn("The database user \"{}\" may not upgrade the PAM extension's tables ({}). Until"
-                        + " schema/postgresql.sql from the extension's jar is run again as the database owner,"
-                        + " and its new tables granted to Guacamole's user, the extension works as its earlier"
-                        + " versions: without \"pam_session\", servers sharing this database do not see each"
-                        + " other's sessions (run a single server); without \"pam_connection_secret\", the"
-                        + " passwords and keys of connections are not encrypted.",
-                        username, firstLine(e.getMessage()));
-
-            }
         }
 
-        sessionTable = hasTable(connection, "pam_session");
-        secretTable = hasTable(connection, "pam_connection_secret");
         schemaReady = true;
         logger.info("PAM database schema is ready.");
 
@@ -229,7 +202,7 @@ public class PamDatabase {
 
     /**
      * Whether the tables of the given version of the schema exist: the
-     * schema script records its versions last.
+     * schema script records its versions last, once every statement ran.
      */
     private static boolean hasVersion(Connection connection, int version) throws SQLException {
         if (!hasTable(connection, "pam_schema_version"))
@@ -248,23 +221,6 @@ public class PamDatabase {
                 return results.next() && results.getBoolean(1);
             }
         }
-    }
-
-    /**
-     * Whether "pam_session" exists, letting servers sharing the database
-     * see each other's sessions. Known once the database was first used.
-     */
-    public boolean hasSessionTable() {
-        return sessionTable;
-    }
-
-    /**
-     * Whether "pam_connection_secret" exists, letting the sensitive
-     * parameters of connections be kept encrypted. Known once the database
-     * was first used.
-     */
-    public boolean hasSecretTable() {
-        return secretTable;
     }
 
     /**
