@@ -37,6 +37,8 @@
         "templates/settingsPamHistory.html": "text/html",
         "templates/settingsPamApprovals.html": "text/html",
         "templates/pamApprovalPermissions.html": "text/html",
-        "templates/pamSessionPassword.html": "text/html"
+        "templates/pamSessionPassword.html": "text/html",
+        "templates/pamPlatformImport.html": "text/html",
+        "templates/pamPlatformImportHelp.html": "text/html"
     }
 }

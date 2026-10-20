@@ -230,8 +230,10 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   downloads the platforms listed (so the filter narrows it down) as JSON,
   without their passwords, which never leave the server. **Import** checks
   every platform as the editor does when saving one, and imports all of them
-  or none. Platforms are matched by name: a platform that already exists makes
-  the import fail, unless **Update platforms that already exist** is ticked.
+  or none, on an import page laid out as Guacamole's own connection import
+  (with its format tips). Platforms are matched by name: a platform that
+  already exists makes the import fail, unless **Update existing platforms**
+  is ticked.
   Updated platforms keep their stored passwords, unless where they are sent
   changes. A new platform that needs a password can be given it among its
   settings in the file, such as `"winrm-admin-password"`. **Restore

@@ -1,0 +1,75 @@
+<div class="settings-view view import pam-platform-import">
+
+    <div class="header">
+        <h2>{{'PAM_PLATFORM_IMPORT.SECTION_HEADER_PLATFORM_IMPORT' | translate}}</h2>
+        <guac-user-menu></guac-user-menu>
+    </div>
+
+    <div ng-show="fileName" class="file-upload-container file-selected">
+        <div class="file-name"> {{fileName}} </div>
+        <button class="danger clear" ng-click="clear()">
+            {{'IMPORT.ACTION_CLEAR' | translate}}
+        </button>
+    </div>
+
+    <div ng-show="!fileName" class="file-upload-container">
+
+        <div class="upload-header">
+            <span class="file-options">{{'PAM_PLATFORM_IMPORT.HELP_UPLOAD_FILE_TYPES' | translate}}</span>
+            <a href="#/import/pam/platforms/file-format-help" target="_blank"
+               class="file-help-link">{{'IMPORT.ACTION_VIEW_FORMAT_HELP' | translate}}</a>
+        </div>
+
+        <div class="drop-target" guac-upload="handleFiles"
+             guac-drop="handleFiles" guac-multiple="false"
+             guac-dragged-class="'drop-pending'">
+            <div class="title">{{'IMPORT.HELP_UPLOAD_DROP_TITLE' | translate}}</div>
+            <a class="browse-link">{{'IMPORT.ACTION_BROWSE' | translate}}</a>
+        </div>
+
+        <ul class="import-config">
+            <li>
+                <input type="checkbox" id="pam-existing-platform-mode" ng-model="options.update"/>
+                <label for="pam-existing-platform-mode">
+                    {{'PAM_PLATFORM_IMPORT.FIELD_HEADER_EXISTING_PLATFORM_MODE' | translate}}
+                </label>
+                <span ng-attr-title="{{'PAM_PLATFORM_IMPORT.HELP_EXISTING_PLATFORM_MODE' | translate}}" class="help"></span>
+            </li>
+        </ul>
+
+    </div>
+
+    <div class="import-buttons">
+        <button ng-click="import()" ng-disabled="!platforms || processing" class="save import">
+            {{'IMPORT.ACTION_IMPORT' | translate}}
+        </button>
+        <button ng-click="cancel()" ng-disabled="processing" class="cancel">
+            {{'IMPORT.ACTION_CANCEL' | translate}}
+        </button>
+    </div>
+
+    <div ng-show="processing" class="loading"></div>
+
+    <!-- Platforms refusing the import, if any -->
+    <div ng-show="errors.length" class="errors">
+        <table class="sorted">
+            <thead>
+                <tr>
+                    <th>{{'IMPORT.TABLE_HEADER_ROW_NUMBER' | translate}}</th>
+                    <th>{{'IMPORT.TABLE_HEADER_NAME' | translate}}</th>
+                    <th>{{'PAM_PLATFORM_IMPORT.TABLE_HEADER_TYPE' | translate}}</th>
+                    <th>{{'IMPORT.TABLE_HEADER_ERRORS' | translate}}</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr ng-repeat="error in errors">
+                    <td>{{error.rowNumber}}</td>
+                    <td>{{error.name}}</td>
+                    <td>{{error.type}}</td>
+                    <td class="error-message has-errors"><ul><li>{{error.message}}</li></ul></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>

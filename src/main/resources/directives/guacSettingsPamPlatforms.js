@@ -273,6 +273,9 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
              */
             $scope.exportPlatforms = function exportPlatforms() {
 
+                if (!$scope.filteredPlatforms.length)
+                    return;
+
                 var file = {
                     format    : EXPORT_FORMAT,
                     version   : EXPORT_VERSION,
@@ -290,115 +293,6 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
                 $window.document.body.removeChild(link);
                 $timeout(function releaseFile() { $window.URL.revokeObjectURL(url); }, 0, false);
 
-            };
-
-            /**
-             * The import dialog, or null: the platforms read from the chosen
-             * file, whether existing ones are updated, and the report of the
-             * last attempt.
-             */
-            $scope.importing = null;
-
-            $scope.openImport = function openImport() {
-                if (confirmDiscard())
-                    $scope.importing = { update : false };
-            };
-
-            $scope.closeImport = function closeImport($event) {
-                if ($event && $event.target !== $event.currentTarget)
-                    return;
-                $scope.importing = null;
-            };
-
-            /**
-             * The platforms of an exported file, given its text.
-             *
-             * @throws {String}
-             *     The translation key of why the file cannot be imported.
-             */
-            var readExport = function readExport(text) {
-
-                var data;
-                try {
-                    data = JSON.parse(text);
-                }
-                catch (e) {
-                    throw 'PAM_PLATFORM_TRANSFER.ERROR_NOT_JSON';
-                }
-
-                // A bare list of platforms is read as well
-                var platforms = angular.isArray(data) ? data : data && data.platforms;
-                if (!angular.isArray(data) && (!angular.isObject(data) || data.format !== EXPORT_FORMAT))
-                    throw 'PAM_PLATFORM_TRANSFER.ERROR_FORMAT';
-                if (!angular.isArray(data) && data.version > EXPORT_VERSION)
-                    throw 'PAM_PLATFORM_TRANSFER.ERROR_VERSION';
-                if (!angular.isArray(platforms))
-                    throw 'PAM_PLATFORM_TRANSFER.ERROR_FORMAT';
-                if (!platforms.length)
-                    throw 'PAM_PLATFORM_TRANSFER.ERROR_EMPTY';
-
-                return platforms;
-
-            };
-
-            $scope.readImportFile = function readImportFile(file) {
-
-                var importing = $scope.importing;
-                if (!importing || !file)
-                    return;
-
-                var reader = new $window.FileReader();
-                reader.onload = function fileRead() {
-                    $scope.$apply(function showFile() {
-                        importing.fileName = file.name;
-                        importing.report = null;
-                        try {
-                            importing.platforms = readExport(reader.result);
-                            importing.error = null;
-                        }
-                        catch (key) {
-                            importing.platforms = null;
-                            importing.error = key;
-                        }
-                    });
-                };
-                reader.onerror = function fileFailed() {
-                    $scope.$apply(function showFailure() {
-                        importing.platforms = null;
-                        importing.error = 'PAM_PLATFORM_TRANSFER.ERROR_READ';
-                    });
-                };
-                reader.readAsText(file);
-
-            };
-
-            $scope.runImport = function runImport() {
-
-                var importing = $scope.importing;
-                importing.busy = true;
-
-                pamService.importPlatforms(importing.platforms, importing.update).then(function imported(report) {
-                    importing.report = report;
-                    if (report.imported) {
-                        loadPlatforms();
-                        loadUsage();
-                    }
-                }, guacNotification.SHOW_REQUEST_ERROR)
-                ['finally'](function importDone() {
-                    importing.busy = false;
-                });
-
-            };
-
-            /**
-             * How many platforms of a report had each outcome.
-             */
-            $scope.countOutcomes = function countOutcomes(report) {
-                var counts = { CREATED : 0, UPDATED : 0, SKIPPED : 0, INVALID : 0 };
-                angular.forEach(report && report.results, function countResult(result) {
-                    counts[result.outcome]++;
-                });
-                return counts;
             };
 
             /**

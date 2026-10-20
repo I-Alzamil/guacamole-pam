@@ -4,26 +4,24 @@
     <div class="settings section pam-platforms">
         <p>{{ 'PAM.HELP_PLATFORMS' | translate }}</p>
 
-        <div class="toolbar pam-platform-toolbar">
+        <!-- As Guacamole's own toolbars: action buttons, then the filter -->
+        <div class="toolbar">
+
+            <div class="action-buttons" ng-show="!editing">
+                <a class="button pam-import-platforms"
+                   href="#/import/pam/platforms">{{ 'PAM_PLATFORM_TRANSFER.ACTION_IMPORT' | translate }}</a>
+                <a class="button pam-export-platforms" href="" ng-click="exportPlatforms()"
+                   ng-class="{disabled: !filteredPlatforms.length}"
+                   title="{{ 'PAM_PLATFORM_TRANSFER.HELP_EXPORT' | translate }}">{{ 'PAM_PLATFORM_TRANSFER.ACTION_EXPORT' | translate }}</a>
+                <a class="button pam-restore-platforms" href="" ng-click="restoreDefaults()"
+                   title="{{ 'PAM_PLATFORM_TRANSFER.HELP_RESTORE_DEFAULTS' | translate }}">{{ 'PAM_PLATFORM_TRANSFER.ACTION_RESTORE_DEFAULTS' | translate }}</a>
+            </div>
 
             <!-- Outside the views below, whose own scopes would hide the result -->
             <guac-filter filtered-items="filteredPlatforms" items="platforms"
                          placeholder="'PAM.FIELD_PLACEHOLDER_FILTER' | translate"
                          properties="filteredPlatformProperties"
                          ng-show="platforms.length"></guac-filter>
-
-            <div class="pam-platform-transfer" ng-if="!editing">
-                <button ng-click="openImport()" title="{{ 'PAM_PLATFORM_TRANSFER.HELP_IMPORT' | translate }}">
-                    {{ 'PAM_PLATFORM_TRANSFER.ACTION_IMPORT' | translate }}
-                </button>
-                <button ng-click="exportPlatforms()" ng-disabled="!filteredPlatforms.length"
-                        title="{{ 'PAM_PLATFORM_TRANSFER.HELP_EXPORT' | translate }}">
-                    {{ 'PAM_PLATFORM_TRANSFER.ACTION_EXPORT' | translate }}
-                </button>
-                <button ng-click="restoreDefaults()" title="{{ 'PAM_PLATFORM_TRANSFER.HELP_RESTORE_DEFAULTS' | translate }}">
-                    {{ 'PAM_PLATFORM_TRANSFER.ACTION_RESTORE_DEFAULTS' | translate }}
-                </button>
-            </div>
 
         </div>
 
@@ -123,66 +121,6 @@
                     <button class="delete danger" ng-show="editing.id" ng-click="deletePlatform()">{{ 'PAM.ACTION_DELETE' | translate }}</button>
                     <span class="pam-saved" ng-show="saved">{{ 'PAM.INFO_SAVED' | translate }}</span>
                 </div>
-            </div>
-
-        </div>
-    </div>
-
-    <!-- Import -->
-    <div class="pam-request-overlay" ng-if="importing" ng-click="closeImport($event)">
-        <div class="pam-request-dialog pam-import-dialog" role="dialog" aria-modal="true"
-             aria-labelledby="pam-import-dialog-title">
-
-            <button class="pam-dialog-close" ng-click="closeImport()" title="{{ 'PAM.ACTION_CLOSE' | translate }}"
-                    aria-label="{{ 'PAM.ACTION_CLOSE' | translate }}">&times;</button>
-
-            <h2 id="pam-import-dialog-title">{{ 'PAM_PLATFORM_TRANSFER.DIALOG_HEADER_IMPORT' | translate }}</h2>
-            <p class="pam-request-hint">{{ 'PAM_PLATFORM_TRANSFER.HELP_IMPORT_FILE' | translate }}</p>
-
-            <label class="pam-import-drop" pam-file-drop="readImportFile(file)">
-                <input type="file" accept=".json,application/json" pam-file-select="readImportFile(file)"
-                       ng-disabled="importing.busy"/>
-                <strong ng-show="importing.fileName && importing.platforms">
-                    {{ 'PAM_PLATFORM_TRANSFER.INFO_FILE_READ' | translate:{ FILE: importing.fileName, COUNT: importing.platforms.length } }}
-                </strong>
-                <strong ng-show="importing.fileName && !importing.platforms">{{ importing.fileName }}</strong>
-                <span>{{ (importing.fileName ? 'PAM_PLATFORM_TRANSFER.TEXT_DROP_ANOTHER_FILE' : 'PAM_PLATFORM_TRANSFER.TEXT_DROP_FILE') | translate }}</span>
-            </label>
-            <p class="pam-import-error" ng-show="importing.error">{{ importing.error | translate }}</p>
-
-            <label class="pam-import-option">
-                <input type="checkbox" ng-model="importing.update" ng-disabled="importing.busy"/>
-                {{ 'PAM_PLATFORM_TRANSFER.FIELD_UPDATE_EXISTING' | translate }}
-            </label>
-
-            <!-- Outcome of the last attempt -->
-            <div ng-if="importing.report">
-                <p ng-if="importing.report.imported" class="pam-import-done">
-                    {{ 'PAM_PLATFORM_TRANSFER.TEXT_IMPORTED' | translate:countOutcomes(importing.report) }}
-                </p>
-                <p ng-if="!importing.report.imported" class="pam-import-error">
-                    {{ 'PAM_PLATFORM_TRANSFER.TEXT_NOT_IMPORTED' | translate }}
-                </p>
-                <table class="pam-import-results" ng-if="!importing.report.imported">
-                    <tr>
-                        <th>{{ 'PAM.TABLE_HEADER_PLATFORM' | translate }}</th>
-                        <th>{{ 'PAM_PLATFORM_TRANSFER.TABLE_HEADER_OUTCOME' | translate }}</th>
-                    </tr>
-                    <tr ng-repeat="result in importing.report.results" ng-class="{'pam-import-invalid': result.outcome === 'INVALID'}">
-                        <td>{{ result.name }}</td>
-                        <td>
-                            {{ 'PAM_PLATFORM_TRANSFER.OUTCOME_' + result.outcome | translate }}<span ng-show="result.message">: {{ result.message }}</span>
-                        </td>
-                    </tr>
-                </table>
-            </div>
-
-            <div class="pam-request-actions">
-                <button ng-click="runImport()" ng-hide="importing.report.imported"
-                        ng-disabled="importing.busy || !importing.platforms">
-                    {{ 'PAM_PLATFORM_TRANSFER.ACTION_IMPORT' | translate }}
-                </button>
-                <button class="cancel" ng-click="closeImport()">{{ 'PAM.ACTION_CLOSE' | translate }}</button>
             </div>
 
         </div>

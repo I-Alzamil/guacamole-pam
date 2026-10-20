@@ -815,85 +815,48 @@ td.pam-truncate {
     height: 60px;
 }
 
-/* Import and export of platforms, next to the filter */
-.pam-platform-transfer {
-    display: flex;
-    gap: 0.25em;
-    margin-left: auto;
-    padding-left: 0.5em;
+/* Import, export and restoring platforms: buttons with icons, as those of
+   Guacamole's own toolbars (images are Guacamole's, or drawn alike) */
+a.button.pam-import-platforms,
+a.button.pam-export-platforms,
+a.button.pam-restore-platforms {
+    font-size: 0.8em;
+    padding-left: 1.8em;
+    position: relative;
 }
 
-.pam-platform-transfer button {
-    margin: 0;
-}
-
-.pam-import-dialog {
-    max-width: 40em;
-}
-
-/* Choosing the file to import, or dropping it */
-.pam-import-drop {
-    display: block;
-    margin: 0.75em 0;
-    padding: 1em;
-    border: 2px dashed rgba(0, 0, 0, 0.25);
-    border-radius: 0.3em;
-    text-align: center;
-    cursor: pointer;
-}
-
-.pam-import-drop:hover,
-.pam-import-drop.pam-drop-target {
-    border-color: rgba(0, 0, 0, 0.5);
-    background: rgba(0, 0, 0, 0.03);
-}
-
-/* The whole area is the input's label, which opens the file chooser */
-.pam-import-drop input[type="file"] {
+a.button.pam-import-platforms:before,
+a.button.pam-export-platforms:before,
+a.button.pam-restore-platforms:before {
+    content: " ";
     position: absolute;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-    overflow: hidden;
+    width: 1.8em;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    background-repeat: no-repeat;
+    background-size: 1em;
+    background-position: 0.5em 0.45em;
 }
 
-.pam-import-drop:focus-within {
-    outline: 2px solid rgba(0, 0, 0, 0.5);
+a.button.pam-import-platforms:before {
+    background-image: url(images/action-icons/guac-file-import.svg);
 }
 
-.pam-import-drop strong {
-    display: block;
-    margin-bottom: 0.25em;
+a.button.pam-export-platforms:before {
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='64'%20height='64'%3E%3Cmask%20id='a'%3E%3Crect%20width='64'%20height='64'%20fill='%23fff'/%3E%3Cpath%20d='M32.422%2012a1.642%201.642%200%200%201%201.258.586L50.459%2032.6a1.642%201.642%200%200%201-1.258%202.697h-8.84v17.98a1.642%201.642%200%200%201-1.64%201.643H26.623a1.642%201.642%200%200%201-1.643-1.643v-17.98h-9.337a1.642%201.642%200%200%201-1.258-2.697l16.78-20.014A1.642%201.642%200%200%201%2032.421%2012z'%20transform='rotate%28180%2032.4%2033.6%29'/%3E%3C/mask%3E%3Cpath%20fill='%23fff'%20mask='url%28%23a%29'%20d='M8.813%200A1.813%201.813%200%200%200%207%201.814v60.373C7%2063.188%207.812%2064%208.813%2064h48.374C58.188%2064%2059%2063.188%2059%2062.187V13.89c0-.482-.19-.943-.531-1.284L46.375.531c-.34-.34-.8-.53-1.281-.531H8.812zm37.49%203.02%2010.885%2010.867H46.303V3.02z'/%3E%3C/svg%3E");
 }
 
-.pam-import-option {
-    display: block;
-    margin: 0.5em 0;
+a.button.pam-restore-platforms:before {
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='64'%20height='64'%3E%3Cpath%20fill='none'%20stroke='%23fff'%20stroke-width='7'%20stroke-linecap='round'%20d='M14%2022A22%2022%200%201%201%2010%2036'/%3E%3Cpath%20fill='%23fff'%20d='M4%206%2026%2010%208%2026z'/%3E%3C/svg%3E");
 }
 
-.pam-import-error {
-    color: #8a1c1c;
+a.button.disabled {
+    opacity: 0.5;
+    cursor: default;
 }
 
-.pam-import-done {
-    color: #1c5e1c;
-    font-weight: bold;
-}
-
-.pam-import-results {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 0.5em 0;
-}
-
-.pam-import-results th,
-.pam-import-results td {
-    text-align: left;
-    vertical-align: top;
-    padding: 0.3em 0.5em;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.pam-import-results tr.pam-import-invalid td {
-    color: #8a1c1c;
+/* The import page's options, as Guacamole's own */
+.pam-platform-import .import-config label {
+    margin-left: 0.25em;
 }
