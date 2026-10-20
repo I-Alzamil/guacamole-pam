@@ -201,6 +201,17 @@ public class PamREST {
                 request.isUpdate() ? PlatformImport.Existing.UPDATE : PlatformImport.Existing.REFUSE);
     }
 
+    /**
+     * Adds back the default platforms missing by name, leaving those that
+     * exist as they are.
+     */
+    @POST
+    @Path("platforms/defaults")
+    public PlatformImport.Report restoreDefaultPlatforms() throws GuacamoleException {
+        requireAdministrator();
+        return provider.getPlatformImport().restoreDefaults();
+    }
+
     @GET
     @Path("platforms/{id}")
     public Platform getPlatform(@PathParam("id") String id) throws GuacamoleException {

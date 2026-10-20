@@ -67,7 +67,8 @@ GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO guacamole_us
 GRANT SELECT,USAGE ON ALL SEQUENCES IN SCHEMA public TO guacamole_user;
 ```
 
-Tables created this way start without the two default platforms.
+Tables created this way start without the two default platforms: add them
+with **Restore defaults** on the **Platforms** tab.
 
 Do the same after upgrading to a version that changes the tables: until then,
 connections stored in the database can't be opened, as above.
@@ -233,7 +234,9 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   the import fail, unless **Update platforms that already exist** is ticked.
   Updated platforms keep their stored passwords, unless where they are sent
   changes. A new platform that needs a password can be given it among its
-  settings in the file, such as `"winrm-admin-password"`.
+  settings in the file, such as `"winrm-admin-password"`. **Restore
+  defaults** adds back "Linux (passwd)" and "Windows (net user)" if missing;
+  a platform with one of their names is left as it is, even if changed.
 - Approvers see a yellow badge counting requests awaiting their decision.
   Administrators also see a red badge counting failed rotations. Each user can
   turn either off under **Preferences → Notification badges**.

@@ -401,6 +401,62 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
                 return counts;
             };
 
+            /**
+             * Names of the platforms of a report with the given outcome, as
+             * a list for messages.
+             */
+            var namesWith = function namesWith(report, outcome) {
+                return report.results.filter(function hasOutcome(result) {
+                    return result.outcome === outcome;
+                }).map(function quote(result) {
+                    return '"' + result.name + '"';
+                }).join(', ');
+            };
+
+            var showRestored = function showRestored(report) {
+                var added = namesWith(report, 'CREATED');
+                guacNotification.showStatus({
+                    title   : 'PAM_PLATFORM_TRANSFER.DIALOG_HEADER_RESTORE_DEFAULTS',
+                    text    : added ? { key : 'PAM_PLATFORM_TRANSFER.TEXT_RESTORED', variables : { NAMES : added } }
+                                    : { key : 'PAM_PLATFORM_TRANSFER.TEXT_NOTHING_RESTORED',
+                                        variables : { NAMES : namesWith(report, 'SKIPPED') } },
+                    actions : [{
+                        name     : 'PAM.ACTION_CLOSE',
+                        callback : function closeRestored() {
+                            guacNotification.showStatus(false);
+                        }
+                    }]
+                });
+                if (added) {
+                    loadPlatforms();
+                    loadUsage();
+                }
+            };
+
+            /**
+             * Adds back the default platforms that are missing, once
+             * confirmed.
+             */
+            $scope.restoreDefaults = function restoreDefaults() {
+                guacNotification.showStatus({
+                    title   : 'PAM_PLATFORM_TRANSFER.DIALOG_HEADER_RESTORE_DEFAULTS',
+                    text    : { key : 'PAM_PLATFORM_TRANSFER.TEXT_CONFIRM_RESTORE' },
+                    actions : [{
+                        name     : 'PAM_PLATFORM_TRANSFER.ACTION_RESTORE',
+                        callback : function confirmRestore() {
+                            guacNotification.showStatus(false);
+                            pamService.restoreDefaultPlatforms().then(showRestored,
+                                    guacNotification.SHOW_REQUEST_ERROR);
+                        }
+                    }, {
+                        name     : 'PAM.ACTION_CANCEL',
+                        callback : function cancelRestore() {
+                            guacNotification.showStatus(false);
+                        }
+                    }]
+                });
+            };
+
             $scope.$watch('editing', function editingChanged() {
                 $scope.saved = $scope.saved && !$scope.isDirty();
             }, true);

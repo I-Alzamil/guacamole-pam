@@ -74,3 +74,31 @@ create_user t2-platform-user t2-platform-user-pw
 USER_TOKEN=$(token t2-platform-user t2-platform-user-pw)
 check "a user who is not an administrator cannot import" 403 \
     "$(status_of "$(import_platforms "[$SSH_PLATFORM]" true "$USER_TOKEN")")"
+
+# ---------------------------------------------------------------- defaults
+section "Restoring the default platforms"
+
+# rename_platform OLD NEW: connections refer to platforms by identifier
+rename_platform() {
+    local id body
+    id=$(platform_id "$1")
+    body=$(api GET "$PAM/platforms/$id" "$ADMIN" | cut -d' ' -f2- | python3 -I -c "
+import sys,json; p=json.load(sys.stdin); print(json.dumps({'name':sys.argv[1],'description':p.get('description'),
+    'type':p['type'],'settings':p['settings'],'policy':p['policy']}))" "$2")
+    api PUT "$PAM/platforms/$id" "$ADMIN" "$body" >/dev/null
+}
+
+LINUX_MODIFIED=$(platform_field "Linux (passwd)" "d['lastModified']")
+R=$(api POST "$PAM/platforms/defaults" "$ADMIN")
+check "with both there, nothing is added" "imported: Linux (passwd)=SKIPPED Windows (net user)=SKIPPED" "$(outcomes "$R")"
+check "...nor changed" "$LINUX_MODIFIED" "$(platform_field "Linux (passwd)" "d['lastModified']")"
+
+WINDOWS=$(platform_id "Windows (net user)")
+rename_platform "Windows (net user)" "t2 renamed default"
+on_cleanup "cleanup_platform 'Windows (net user)'; rename_platform 't2 renamed default' 'Windows (net user)'"
+R=$(api POST "$PAM/platforms/defaults" "$ADMIN")
+check "the missing one is added back" "imported: Linux (passwd)=SKIPPED Windows (net user)=CREATED" "$(outcomes "$R")"
+check "...as a new platform" yes "$([ -n "$(platform_id "Windows (net user)")" ] && [ "$(platform_id "Windows (net user)")" != "$WINDOWS" ] && echo yes)"
+check_contains "...with its script" "net user <USER> *" "$(platform_field "Windows (net user)" "d['settings']['script']")"
+check "a user who is not an administrator cannot restore them" 403 \
+    "$(status_of "$(api POST "$PAM/platforms/defaults" "$USER_TOKEN")")"

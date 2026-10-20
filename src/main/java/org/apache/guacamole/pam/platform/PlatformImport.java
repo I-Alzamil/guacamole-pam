@@ -237,6 +237,15 @@ public class PlatformImport {
 
     }
 
+    /**
+     * Adds back the default platforms ({@link DefaultPlatforms}) missing by
+     * name. Those that exist are left as they are, even if changed, as
+     * connections may rely on them.
+     */
+    public Report restoreDefaults() throws GuacamoleException {
+        return run(DefaultPlatforms.read(), Existing.SKIP);
+    }
+
     private void save(List<Planned> planned) throws GuacamoleException {
 
         try (Connection connection = repository.getConnection()) {

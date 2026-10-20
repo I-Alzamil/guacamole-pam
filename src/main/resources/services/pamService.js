@@ -84,6 +84,14 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
         return request('POST', 'platforms/import', { platforms : platforms, update : !!update });
     };
 
+    /**
+     * Adds back the default platforms missing by name, resolving with the
+     * report of each: created, or skipped as it exists.
+     */
+    service.restoreDefaultPlatforms = function restoreDefaultPlatforms() {
+        return request('POST', 'platforms/defaults');
+    };
+
     service.deletePlatform = function deletePlatform(id) {
         return request('DELETE', 'platforms/' + encodeURIComponent(id));
     };
