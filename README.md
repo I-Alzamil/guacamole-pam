@@ -234,6 +234,94 @@ may approve in the editor's connections list. A connection group covers every
 connection in it, including ones added later. Set how many distinct approvers a
 connection needs in its *Access requests* section.
 
+### Setting up WinRM over HTTPS
+
+Windows doesn't listen for WinRM over HTTPS by default, and WinRM platforms
+need it (see [Security notes](#security-notes)). Each host needs an HTTPS
+listener with a certificate. How the extension trusts that certificate is up
+to the platform:
+
+| Platform's *CA certificates* | Host certificates | Renewals |
+|---|---|---|
+| Empty | Any, such as self-signed. The first one seen is trusted from then on, or the fingerprint pinned on the connection | A new certificate fails until its fingerprint is pinned on the connection |
+| Your CA's certificate | Issued by that CA, naming the host as Guacamole reaches it | Trusted as they come |
+
+#### One host, with a self-signed certificate
+
+In an elevated PowerShell on the host:
+
+```powershell
+Enable-PSRemoting -Force   # if WinRM isn't enabled yet (it is on Windows Server)
+$cert = New-SelfSignedCertificate -DnsName $env:COMPUTERNAME -CertStoreLocation Cert:\LocalMachine\My
+New-Item -Path WSMan:\localhost\Listener -Transport HTTPS -Address * -CertificateThumbPrint $cert.Thumbprint -Force
+New-NetFirewallRule -Name WinRM-HTTPS -DisplayName 'WinRM over HTTPS' -Direction Inbound -LocalPort 5986 -Protocol TCP -Action Allow
+Set-Item WSMan:\localhost\Service\Auth\CbtHardeningLevel Strict
+```
+
+Leave the platform's *CA certificates* empty. To skip trusting the first
+certificate seen, pin it in the connection's **Trusted certificate** field.
+Get its fingerprint on the host:
+
+```powershell
+[BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($cert.RawData)).Replace('-', ':')
+```
+
+Or get it from the Guacamole server:
+
+```sh
+openssl s_client -connect <host>:5986 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256
+```
+
+#### Many hosts, with certificates from Active Directory Certificate Services
+
+1. **A certificate template.** In *Certificate Templates*, duplicate **Web
+   Server**. Under *Subject Name*, choose **Build from this Active Directory
+   information**, with the DNS name. Under *Security*, give **Domain
+   Computers** (or the servers' group) *Enroll* and *Autoenroll*. Then issue
+   the template on the CA.
+2. **Auto-enrollment, by Group Policy.** In *Computer Configuration →
+   Policies → Windows Settings → Security Settings → Public Key Policies*,
+   enable **Certificate Services Client – Auto-Enrollment**, with renewal and
+   updating of certificates.
+3. **The listener, by a startup script.** A WinRM listener keeps the
+   certificate it was created with, so a renewed certificate isn't used
+   until the listener changes. Run this as a computer startup script in the
+   same policy, or also as a daily scheduled task. It creates the listener
+   with the newest valid certificate naming the computer, and moves it to a
+   renewed one:
+
+   ```powershell
+   $fqdn = [Net.Dns]::GetHostEntry($env:COMPUTERNAME).HostName
+   $cert = Get-ChildItem Cert:\LocalMachine\My |
+       Where-Object { $_.HasPrivateKey -and $_.NotAfter -gt (Get-Date) -and
+                      $_.EnhancedKeyUsageList.ObjectId -contains '1.3.6.1.5.5.7.3.1' -and
+                      $_.DnsNameList.Unicode -contains $fqdn } |
+       Sort-Object NotAfter -Descending | Select-Object -First 1
+   if (-not $cert) { return }
+   $listener = Get-ChildItem WSMan:\localhost\Listener | Where-Object { $_.Keys -contains 'Transport=HTTPS' }
+   $current = if ($listener) { (Get-ChildItem $listener.PSPath | Where-Object Name -eq CertificateThumbprint).Value }
+   if ($current -ne $cert.Thumbprint) {
+       if ($listener) { $listener | Remove-Item -Recurse -Force }
+       New-Item -Path WSMan:\localhost\Listener -Transport HTTPS -Address * -CertificateThumbPrint $cert.Thumbprint -Force | Out-Null
+   }
+   Set-Item WSMan:\localhost\Service\Auth\CbtHardeningLevel Strict
+   ```
+
+   Also allow TCP 5986 inbound in *Windows Defender Firewall with Advanced
+   Security*, in the same policy.
+4. **The platform.** Export the CA's certificate in PEM, on the CA:
+
+   ```
+   certutil -ca.cert ca.cer
+   certutil -encode ca.cer ca.pem
+   ```
+
+   Paste `ca.pem` into the WinRM platform's **CA certificates**. Paste the
+   root CA's certificate, or the issuing CA's; several may follow each other.
+   Give each connection the host's name as the certificate names it (its
+   DNS name, not an IP address), in its **WinRM hostname** if its own
+   hostname differs.
+
 ## Security notes
 
 - **Secrets stay on the server.** Platform secrets, such as an LDAP rotation
@@ -278,8 +366,9 @@ connection needs in its *Access requests* section.
   certificate must be issued by one of them and name the host. Without any,
   like SSH host keys, the certificate is trusted on first contact and required
   from then on. Either way, a fingerprint in the connection's **Trusted
-  certificate** field is required instead. Revocation isn't checked.
-  Passwords are sent on PowerShell's input, never on a
+  certificate** field is required instead. Revocation isn't checked. See
+  [Setting up WinRM over HTTPS](#setting-up-winrm-over-https). Passwords are
+  sent on PowerShell's input, never on a
   command line. Without an administrator on the platform, each account sets its
   own password, so it must be a local administrator. Only local accounts are
   supported: manage domain accounts with an LDAP or Kerberos platform.
