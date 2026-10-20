@@ -41,11 +41,11 @@ import org.apache.guacamole.protocol.GuacamoleConfiguration;
  * connections, users or groups keep doing so, but cannot change how
  * passwords are managed, who must request access, or who approves, nor the
  * account and host of a managed connection (see {@link ProtectedFields}).
- * Balancing connection groups, which Guacamole connects through without
-
- * this extension's connections, refuse connections it must check. Wherever a
- * connection is saved from, its passwords and keys are kept apart, encrypted,
- * when a key is set (see {@link ConnectionSecrets}).
+ * Balancing connection groups, through which Guacamole opens a connection
+ * without going through this extension, refuse to balance over connections
+ * it must check. Wherever a connection is saved from, its passwords and keys
+ * are kept apart, encrypted, when a key is set (see
+ * {@link ConnectionSecrets}).
  */
 public class PamUserContextDecorator extends DelegatingUserContext {
 

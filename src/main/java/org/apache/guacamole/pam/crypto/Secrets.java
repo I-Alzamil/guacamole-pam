@@ -15,7 +15,6 @@ import org.apache.guacamole.properties.StringGuacamoleProperty;
 
 /**
  * Encryption at rest of the secrets this extension stores: platform secrets,
-
  * passwords kept from unconfirmed rotations, and the passwords, keys and
  * passphrases of every connection, Accounts included (see ConnectionSecrets).
  *

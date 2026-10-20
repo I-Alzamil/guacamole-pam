@@ -14,7 +14,6 @@ import org.slf4j.LoggerFactory;
 /**
  * Decisions on requests by approvers: users whose approval
  * permission, of their own or of one of their groups, covers the request's
-
  * connection. Administrators may decide on any. A request needs as many
  * distinct approvers as its connection requires, none of them the requester; a
  * single denial rejects it. The final approval starts the checkout.
