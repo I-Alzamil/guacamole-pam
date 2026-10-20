@@ -13,10 +13,10 @@
     },
     {
       "name": "macOS",
-      "description": "The connection account changes its own password with passwd, then that of its login keychain, which must use the same password.",
+      "description": "The connection account changes its own password with sysadminctl, which also changes that of its login keychain, if it has one. Tested on macOS 15.",
       "type": "ssh",
       "settings": {
-        "script": "# Changes the password of the connection account itself, then that of its\n# login keychain, which passwd leaves as it was. passwd asks for the current\n# password first, unless the account is root.\npasswd\n@case (?i)\\b(current|old|existing)\\b[^:\\n]*password:\n<OLDPASS>\n@expect assword:\n@case (?i)\\bnew\\b[^:\\n]*password:\n@end\n<NEWPASS>\n@expect assword:\n<NEWPASS>\n@case (?m)^passwd: \n@fail passwd did not change the password.\n@case keychain password\n@regex (?m)^#{10,}\\s*$\n@end\nsecurity set-keychain-password ~/Library/Keychains/login.keychain-db\n@expect Old Password:\n<OLDPASS>\n@expect New Password:\n<NEWPASS>\n@expect Retype New Password:\n<NEWPASS>\n@case (?m)^security: \n@fail The login keychain password was not changed.\n@case [%$#>] $\n@end\n"
+        "script": "# Changes the password of the connection account itself, and that of its\n# login keychain. An account that never logged in at the Mac has no login\n# keychain (-25294), which is fine; any other keychain error is reported.\nsysadminctl -newPassword - -oldPassword -\n@expect Old password:\n<OLDPASS>\n@expect New password:\n<NEWPASS>\n@case Incorrect password\n@fail The current password was refused.\n@case keychain password \\(-25294\\)\n@case keychain password \\(\n@fail The login keychain password was not changed.\n@case - Done\n@end\n"
       },
       "policy": {}
     },

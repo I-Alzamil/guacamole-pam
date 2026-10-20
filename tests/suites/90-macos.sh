@@ -1,9 +1,11 @@
 #!/bin/bash
 # The macOS default platform against a real Mac: the account's password and
-# its login keychain's, and a keychain left behind reported. Skipped unless
-# T2_MACOS_HOST, T2_MACOS_USER and T2_MACOS_PASSWORD name a throwaway account
+# its login keychain's, a keychain left behind reported, and an account
+# without a keychain. Skipped unless T2_MACOS_HOST, T2_MACOS_USER and
+# T2_MACOS_PASSWORD name a throwaway standard (not administrator) account
 # with Remote Login allowed, whose login keychain uses the same password.
-# The account's password is left changed; the suite prints the last one.
+# The account's password is left changed, and its login keychain deleted;
+# the suite prints the last password.
 
 if [ -z "$T2_MACOS_HOST" ] || [ -z "$T2_MACOS_USER" ] || [ -z "$T2_MACOS_PASSWORD" ]; then
     section "Skipped: no Mac (set T2_MACOS_HOST, T2_MACOS_USER and T2_MACOS_PASSWORD)"
@@ -28,6 +30,8 @@ keychain_opens() {
 section "macOS: the account's password and its login keychain's"
 check "precondition: the account's password is known" yes "$(mac_accepts "$T2_MACOS_USER" "$T2_MACOS_PASSWORD")"
 check "precondition: its login keychain uses the same password" yes "$(keychain_opens "$T2_MACOS_PASSWORD" "$T2_MACOS_PASSWORD")"
+check "precondition: it is not an administrator" no \
+    "$(mac_run "$T2_MACOS_PASSWORD" 'id -Gn' | tr ' ' '\n' | grep -qx admin && echo yes || echo no)"
 
 MACOS=$(platform_id "macOS")
 create_connection MAC_C "{\"name\":\"t2 macos\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",
@@ -55,4 +59,16 @@ check_contains "macOS: ...with the keychain reported" "login keychain password w
 check "macOS: ...and the Mac accepts it" yes "$(mac_accepts "$T2_MACOS_USER" "$NEW")"
 mac_run "$NEW" "security set-keychain-password -o 'T2-Other-Keychain1!' -p '$NEW' login.keychain" >/dev/null
 check "macOS: the keychain set back to the account's password" yes "$(keychain_opens "$NEW" "$NEW")"
+
+section "macOS: an account without a login keychain"
+mac_run "$NEW" "security delete-keychain login.keychain" >/dev/null
+check "precondition: the account has no login keychain" no \
+    "$(mac_run "$NEW" '[ -f ~/Library/Keychains/login.keychain-db ] && echo yes || echo no')"
+OLD=$NEW
+RESULT=$(rotate "$MAC_C")
+NEW=$(parameter "$MAC_C" password)
+check "macOS without a keychain: the rotation completes without a problem" "SUCCESS" "$RESULT"
+check "macOS without a keychain: the Mac accepts the new password" yes "$(mac_accepts "$T2_MACOS_USER" "$NEW")"
+check "macOS without a keychain: ...and refuses the old one" no "$(mac_accepts "$T2_MACOS_USER" "$OLD")"
+
 printf '  The password of %s on %s is now: %s\n' "$T2_MACOS_USER" "$T2_MACOS_HOST" "$NEW"
