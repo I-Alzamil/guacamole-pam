@@ -1,0 +1,26 @@
+<div class="pam-platform-picker" ng-class="{open: open}">
+
+    <!-- The platform chosen -->
+    <button type="button" class="pam-picker-current" ng-attr-id="{{ fieldId }}"
+            ng-click="toggle()" ng-keydown="buttonKeydown($event)" ng-disabled="disabled"
+            aria-haspopup="listbox" aria-expanded="{{ open }}">
+        <span class="pam-picker-label">{{ selected().label }}</span>
+        <span class="pam-type-badge" ng-show="selected().type">{{ selected().type }}</span>
+    </button>
+
+    <!-- The list, with a search on top -->
+    <div class="pam-picker-menu" ng-if="open">
+        <input type="text" class="pam-picker-search" ng-model="search.text" ng-keydown="keydown($event)"
+               placeholder="{{ 'PAM.FIELD_PLACEHOLDER_SEARCH_PLATFORMS' | translate }}"
+               aria-label="{{ 'PAM.FIELD_PLACEHOLDER_SEARCH_PLATFORMS' | translate }}">
+        <ul role="listbox">
+            <li ng-repeat-start="row in rows" ng-if="row.group" class="pam-picker-group">{{ row.group }}</li>
+            <li ng-repeat-end ng-if="row.option" role="option" class="pam-picker-option"
+                ng-class="{active: isActive(row.option), selected: isSelected(row.option)}"
+                aria-selected="{{ isSelected(row.option) }}"
+                ng-mousedown="$event.preventDefault()" ng-click="choose(row.option)">{{ row.option.label }}</li>
+            <li class="pam-picker-empty" ng-show="empty">{{ 'PAM.INFO_NO_MATCH' | translate }}</li>
+        </ul>
+    </div>
+
+</div>

@@ -35,6 +35,7 @@
         "templates/pamScriptEditor.html": "text/html",
         "templates/pamRequestDialog.html": "text/html",
         "templates/pamPlatformField.html": "text/html",
+        "templates/pamPlatformPicker.html": "text/html",
         "templates/pamScriptField.html": "text/html",
         "templates/settingsPamHistory.html": "text/html",
         "templates/settingsPamApprovals.html": "text/html",

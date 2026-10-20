@@ -940,3 +940,147 @@ a.button.disabled {
     visibility: visible;
     opacity: 1;
 }
+
+/* The platform of a connection (pamPlatformPicker): a button showing it,
+   opening a list grouped by type with a search on top */
+.pam-platform-picker {
+    position: relative;
+    top: -2px;
+    display: inline-block;
+}
+
+.pam-platform-picker button.pam-picker-current {
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    min-width: 16em;
+    margin: 0;
+    padding: 1px 1.8em 1px 0.4em;
+    border: 1px solid #999;
+    border-radius: 0.25em;
+    background: white;
+    box-shadow: none;
+    color: inherit;
+    font: inherit;
+    font-weight: normal;
+    line-height: normal;
+    text-align: left;
+    text-transform: none;
+    text-shadow: none;
+    cursor: pointer;
+    position: relative;
+}
+
+.pam-platform-picker button.pam-picker-current:hover {
+    background: white;
+    border-color: #666;
+}
+
+.pam-platform-picker button.pam-picker-current:focus {
+    outline: none;
+    border-color: #3C3C3C;
+    box-shadow: 0 0 0 2px rgba(60, 60, 60, 0.15);
+}
+
+.pam-platform-picker button.pam-picker-current:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+/* The drop-down arrow */
+.pam-platform-picker button.pam-picker-current:after {
+    content: "";
+    position: absolute;
+    right: 0.6em;
+    top: 50%;
+    margin-top: -0.15em;
+    border: 0.3em solid transparent;
+    border-top-color: currentColor;
+    opacity: 0.6;
+}
+
+.pam-platform-picker.open button.pam-picker-current:after {
+    margin-top: -0.45em;
+    border-top-color: transparent;
+    border-bottom-color: currentColor;
+}
+
+.pam-picker-label {
+    flex: 1 1 auto;
+}
+
+.pam-picker-menu {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 0.2em);
+    left: 0;
+    box-sizing: border-box;
+    min-width: 100%;
+    width: max-content;
+    max-width: 24em;
+    border: 1px solid #999;
+    border-radius: 0.25em;
+    background: white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.pam-picker-menu input.pam-picker-search {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    margin: 0;
+    padding: 0.4em 0.6em;
+    border: none;
+    border-bottom: 1px solid #ddd;
+    border-radius: 0.25em 0.25em 0 0;
+    background: transparent;
+    font: inherit;
+}
+
+.pam-picker-menu input.pam-picker-search:focus {
+    outline: none;
+}
+
+.pam-picker-menu ul {
+    max-height: 18em;
+    overflow-y: auto;
+    margin: 0;
+    padding: 0.25em 0;
+    list-style: none;
+}
+
+.pam-picker-group {
+    padding: 0.5em 0.75em 0.15em;
+    font-size: 0.75em;
+    font-weight: bold;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.55;
+}
+
+.pam-picker-option {
+    padding: 0.3em 0.75em 0.3em 1.6em;
+    position: relative;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.pam-picker-option.active {
+    background: #e9e9e9;
+}
+
+.pam-picker-option.selected {
+    font-weight: bold;
+}
+
+.pam-picker-option.selected:before {
+    content: "\2713";
+    position: absolute;
+    left: 0.5em;
+}
+
+.pam-picker-empty {
+    padding: 0.4em 0.75em;
+    opacity: 0.6;
+    font-style: italic;
+}

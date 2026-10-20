@@ -67,6 +67,7 @@
         "FIELD_HEADER_TYPE": "Type:",
         "FIELD_OPTION_STORED_ONLY": "Stored (not managed)",
         "FIELD_PLACEHOLDER_FILTER": "Filter",
+        "FIELD_PLACEHOLDER_SEARCH_PLATFORMS": "Search platforms",
         "HELP_BADGES": "Counts shown next to your name and on their settings tab, so you notice what needs your attention. Turning a badge off only hides the count; the tabs still list everything.",
         "HELP_CHECKOUTS": "Passwords and connection access currently held by users. Revoking a checkout ends it immediately, closes the holder's open sessions on that connection, and rotates the password if it is managed to rotate after each use.",
         "HELP_CONNECTIONS": "Connections assigned to a platform (set up on the Platforms tab). Rotation logs in to the target with the stored credentials, changes the password as the platform describes, and stores the new password only after the target accepts it.",

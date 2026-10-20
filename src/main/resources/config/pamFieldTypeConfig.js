@@ -1,16 +1,14 @@
 /**
  * Registers the field types of this extension:
  *
- * PAM_PLATFORM - drop-down of platforms, for the "pam-platform" connection
- *                attribute.
+ * PAM_PLATFORM - searchable picker of platforms (pamPlatformPicker), for the
+ *                "pam-platform" connection attribute.
  * PAM_SCRIPT   - sequence script editor with live validation, for the
  *                settings of SSH platforms.
  */
 angular.module('guacPam').config(['formServiceProvider', function pamFieldTypeConfig(formServiceProvider) {
 
     formServiceProvider.registerFieldType('PAM_PLATFORM', {
-        module      : 'guacPam',
-        controller  : 'pamPlatformFieldController',
         templateUrl : 'app/ext/pam/templates/pamPlatformField.html'
     });
 

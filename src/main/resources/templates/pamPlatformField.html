@@ -1,9 +1,3 @@
 <div class="select-field pam-platform-field">
-    <select ng-attr-id="{{ fieldId }}"
-            ng-attr-name="{{ field.name }}"
-            ng-disabled="disabled"
-            ng-model="model"
-            ng-options="platform.id as platform.label for platform in platforms">
-        <option value="">{{ 'PAM.FIELD_OPTION_STORED_ONLY' | translate }}</option>
-    </select>
+    <pam-platform-picker model="model" disabled="disabled" field-id="{{ fieldId }}"></pam-platform-picker>
 </div>
