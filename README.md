@@ -91,10 +91,10 @@ that is never stored in the database:
 
 - platform secrets, such as an LDAP, Kerberos or WinRM administrator's
   password;
-- Account passwords;
 - every connection's passwords, private keys and passphrases (`password`,
   `passphrase`, `private-key`, `gateway-password`, `sftp-password`,
-  `sftp-passphrase`, `sftp-private-key` and Kubernetes' `client-key`);
+  `sftp-passphrase`, `sftp-private-key` and Kubernetes' `client-key`),
+  Accounts' passwords included;
 - passwords kept from rotations that could not be confirmed.
 
 A connection's secrets are kept apart, in `pam_connection_secret`, each
@@ -111,6 +111,12 @@ be pasted into a connection.
 Values containing one of Guacamole's own tokens, such as `${GUAC_PASSWORD}`
 to pass the user's own password on, stay in their field for Guacamole to
 replace.
+
+Accounts' passwords never reach Guacamole's connections, but are kept the same
+way, so every connection shows its password as a token. If the database user
+can't create `pam_connection_secret`, Accounts' passwords are encrypted in
+their field instead (`pam:v1:…`), and other connections' secrets stay
+unencrypted.
 
 Generate a key once with `openssl rand -base64 32` and set it in
 `guacamole.properties` (or `PAM_ENCRYPTION_KEY` in the Docker image), then
@@ -158,7 +164,7 @@ psql -tAc "SELECT pending_password FROM pam_rotation_state WHERE connection_id =
 ```
 
 The last argument is the kind of value: `pending-password`,
-`connection-password` (an Account's password),
+`connection-password` (an Account's password encrypted in its field),
 `connection-secret:<connection id>:<field>` (from `pam_connection_secret`,
 such as `connection-secret:17:private-key`) or `platform-secrets`.
 
@@ -210,8 +216,7 @@ connection needs in its *Access requests* section.
   accordingly.
 - **Editors can read passwords, unless a key is set.** Users with *edit*
   permission on a connection can read its parameters, including its password.
-  With a key set, they see passwords and keys only as tokens, and Accounts'
-  passwords encrypted. They can still change a connection's other
+  With a key set, they see passwords and keys only as tokens. They can still change a connection's other
   parameters, and some protocols have parameters that could send the
   password elsewhere (such as its hostname, or a VNC repeater, unless the
   connection is managed), so give edit permission on sensitive connections

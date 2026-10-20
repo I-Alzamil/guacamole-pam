@@ -27,11 +27,12 @@ import org.slf4j.LoggerFactory;
  * straight to "guacamole_connection_parameter" lets rotations run without a
  * user session, such as for periodic rotation.
  *
- * Passwords of Accounts, which never reach guacd, and passwords kept from
- * unconfirmed rotations are encrypted if a key is set (see {@link Secrets}),
- * and the passwords, keys and passphrases of other connections are then kept
- * apart (see {@link ConnectionSecrets}). Values returned here are always
- * plaintext.
+ * If a key is set (see {@link Secrets}), passwords kept from unconfirmed
+ * rotations are encrypted, and the passwords, keys and passphrases of every
+ * connection, Accounts included, are kept apart (see
+ * {@link ConnectionSecrets}). Before that is possible (a database without
+ * the table for it), an Account's password is encrypted in its parameter.
+ * Values returned here are always plaintext.
  */
 public class ConnectionRepository {
 
@@ -513,8 +514,9 @@ public class ConnectionRepository {
                 while (results.next()) {
                     int id = results.getInt(1);
                     String stored = results.getString(3);
-                    // Kept apart, and moved by ConnectionSecrets
-                    if (stored.startsWith("${PAM_"))
+                    // Kept apart, or moved there, by ConnectionSecrets
+                    if (stored.startsWith("${PAM_") || (AccountProtocol.NAME.equals(results.getString(2))
+                            && connectionSecrets.keepsSecrets(AccountProtocol.NAME)))
                         continue;
                     if (!secrets.canReveal(stored)) {
                         report.unreadable(stored);

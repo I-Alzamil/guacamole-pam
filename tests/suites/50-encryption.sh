@@ -1,10 +1,11 @@
 #!/bin/bash
-# Encryption at rest: what the database holds (platform secrets, Account
-# passwords and pending passwords encrypted; connections' passwords, keys and
-# passphrases kept apart, encrypted, behind tokens such as ${PAM_PASSWORD_17};
-# Guacamole's own tokens left alone), what the API returns, saving
-# connections from the editor, and sessions, also through balancing groups.
-# Skipped when the test setup has no key.
+# Encryption at rest: what the database holds (platform secrets and pending
+# passwords encrypted; every connection's passwords, keys and passphrases,
+# Accounts' included, kept apart, encrypted, behind tokens such as
+# ${PAM_PASSWORD_17}; Guacamole's own tokens left alone), what the API
+# returns, saving connections from the editor, Accounts' passwords encrypted
+# in their field by earlier versions, and sessions, also through balancing
+# groups. Skipped when the test setup has no key.
 
 if [ -z "$PAM_TEST_KEY" ]; then
     section "Skipped: build.sh was run without an encryption key"
@@ -15,6 +16,18 @@ sql() { podman exec myguacdbtest psql -U postgres -tAc "$1"; }
 stored_password() { sql "SELECT parameter_value FROM guacamole_connection_parameter WHERE connection_id = $1 AND parameter_name = 'password'"; }
 raw_parameter() { json_get "$(curl -s "$DATA/connections/$1/parameters?token=$ADMIN")" "d.get('password')"; }
 is_encrypted() { case "$1" in pam:v1:*) echo yes;; *) echo no;; esac; }
+kept() { sql "SELECT value FROM pam_connection_secret WHERE connection_id = $1 AND parameter_name = '${2:-password}'"; }
+legacy_encrypt() { # PURPOSE VALUE: encrypted as earlier versions stored it in the field
+    cat >"$T2_TMP/Encrypt.java" <<'EOF'
+public class Encrypt {
+    public static void main(String[] args) throws Exception {
+        System.out.println(new org.apache.guacamole.pam.crypto.SecretCipher(System.getenv("PAM_ENCRYPTION_KEY"))
+                .encrypt(args[0], args[1]));
+    }
+}
+EOF
+    PAM_ENCRYPTION_KEY="$PAM_TEST_KEY" java -cp "$T2_JAR" "$T2_TMP/Encrypt.java" "$1" "$2"
+}
 checkout_password() { # ID -> the password a checkout hands over, then releases it
     json_get "$(api POST "$PAM/requests/$1" "$ADMIN" '{"reason":"T2 encryption"}' | cut -d' ' -f2-)" "d.get('password')"
     api POST "$PAM/requests/$1/release" "$ADMIN" >/dev/null
@@ -40,19 +53,21 @@ SECRETS=$(sql "SELECT secrets FROM pam_platform WHERE platform_id = $KRB")
 check "platform secrets are encrypted" yes "$(is_encrypted "$SECRETS")"
 check_contains "...and decrypt to the administrator password" "$MIT_ADMIN_PASSWORD" "$(reveal platform-secrets "$SECRETS")"
 check "...which appears nowhere in the table" 0 "$(sql "SELECT count(*) FROM pam_platform WHERE secrets LIKE '%$MIT_ADMIN_PASSWORD%'")"
-STORED=$(stored_password "$ACCOUNT")
-check "an Account's password is encrypted" yes "$(is_encrypted "$STORED")"
-check "...and decrypts to the password" "$ACCOUNT_PASSWORD" "$(reveal connection-password "$STORED")"
+check "an Account's password is kept apart, behind its token" "\${PAM_PASSWORD_$ACCOUNT}" "$(stored_password "$ACCOUNT")"
+STORED=$(kept "$ACCOUNT")
+check "...encrypted" yes "$(is_encrypted "$STORED")"
+check "...for this Account alone" "$ACCOUNT_PASSWORD" "$(reveal "connection-secret:$ACCOUNT:password" "$STORED")"
 check "a connection's password is kept apart, behind its token" "\${PAM_PASSWORD_$SSH}" "$(stored_password "$SSH")"
 check "...and is the password" "T2-Ssh-Plain1!" "$(parameter "$SSH" password)"
-check "no Account password is stored as plaintext" 0 \
+check "no Account password is left in its field" 0 \
     "$(sql "SELECT count(*) FROM guacamole_connection_parameter p JOIN guacamole_connection c USING (connection_id)
-            WHERE c.protocol = 'pam-account' AND p.parameter_name = 'password' AND p.parameter_value NOT LIKE 'pam:v1:%'")"
+            WHERE c.protocol = 'pam-account' AND p.parameter_name = 'password'
+            AND p.parameter_value <> '\${PAM_PASSWORD_' || p.connection_id || '}'")"
 check "no platform secrets are stored as plaintext" 0 "$(sql "SELECT count(*) FROM pam_platform WHERE secrets NOT LIKE 'pam:v1:%'")"
 
 # ---------------------------------------------------------------- API
 section "What the API returns"
-check "the connection API returns the Account's password encrypted only" yes "$(is_encrypted "$(raw_parameter "$ACCOUNT")")"
+check "the connection API returns only the Account's token" "\${PAM_PASSWORD_$ACCOUNT}" "$(raw_parameter "$ACCOUNT")"
 check "a checkout hands over the plaintext" "$ACCOUNT_PASSWORD" "$(checkout_password "$ACCOUNT")"
 check_contains "the platform editor only says which secrets are stored" "['kerberos-admin-password'] {}" \
     "$(json_get "$(curl -s "$PAM/platforms/$KRB?token=$ADMIN")" "str(d.get('storedSecrets')) + ' ' + str({k: v for k, v in d['settings'].items() if 'password' in k})")"
@@ -60,12 +75,12 @@ check_contains "the platform editor only says which secrets are stored" "['kerbe
 # ---------------------------------------------------------------- editing
 section "Saving connections from the editor"
 edit_connection "$ADMIN" "$ACCOUNT" '' '' "t2 enc account renamed" >/dev/null
-check "saved unchanged (the editor sends the encrypted value back), the value is kept" "$STORED" "$(stored_password "$ACCOUNT")"
+check "saved unchanged (the editor sends the token back), the kept password is unchanged" "$STORED" "$(kept "$ACCOUNT")"
 check "...and still hands over the password" "$ACCOUNT_PASSWORD" "$(checkout_password "$ACCOUNT")"
 
 R=$(edit_connection "$ADMIN" "$ACCOUNT" '{"password":"T2-Enc-Typed1!"}')
 check "a new password typed in the editor is saved" 204 "$(status_of "$R")"
-check "...encrypted" yes "$(is_encrypted "$(stored_password "$ACCOUNT")")"
+check "...kept apart" "\${PAM_PASSWORD_$ACCOUNT} yes" "$(stored_password "$ACCOUNT") $(is_encrypted "$(kept "$ACCOUNT")")"
 check "...as typed" "T2-Enc-Typed1!" "$(checkout_password "$ACCOUNT")"
 podman exec mykdctest kadmin.local -q "cpw -pw T2-Enc-Typed1! t2enc" >/dev/null 2>&1
 
@@ -77,20 +92,32 @@ check_contains "a value encrypted with an unknown key is refused" "not configure
 check "...and the stored password is unchanged" "T2-Enc-Typed1!" "$(checkout_password "$ACCOUNT")"
 
 # Stored decrypted, an editor could read it back: a decryption oracle
-R=$(edit_connection "$ADMIN" "$SSH" "{\"password\":\"$(raw_parameter "$ACCOUNT")\"}")
-check "an Account's encrypted password pasted into another connection is refused" 400 "$(status_of "$R")"
+R=$(edit_connection "$ADMIN" "$SSH" "{\"password\":\"$(legacy_encrypt connection-password T2-Enc-Typed1!)\"}")
+check "an Account's password as earlier versions encrypted it, pasted into another connection, is refused" 400 "$(status_of "$R")"
 check_contains "...as encrypted passwords are not copied" "cannot be copied" "$(message_of "$R")"
 check "...and that connection's password is unchanged" "T2-Ssh-Plain1!" "$(parameter "$SSH" password)"
 
 # ---------------------------------------------------------------- rotation
 section "Rotation"
-BEFORE=$(stored_password "$ACCOUNT")
+BEFORE=$(parameter "$ACCOUNT" password)
 check "rotation of the Account succeeds" SUCCESS "$(rotate "$ACCOUNT" | cut -d: -f1)"
-AFTER=$(stored_password "$ACCOUNT")
-check "...the new password is stored encrypted" yes "$(is_encrypted "$AFTER")"
-check "...the KDC accepts it" yes "$(mit_accepts t2enc "$(reveal connection-password "$AFTER")")"
-check "...and refuses the old one" no "$(mit_accepts t2enc "$(reveal connection-password "$BEFORE")")"
-check "...which a checkout hands over" "$(reveal connection-password "$AFTER")" "$(checkout_password "$ACCOUNT")"
+AFTER=$(parameter "$ACCOUNT" password)
+check "...the new password is kept apart, encrypted" "\${PAM_PASSWORD_$ACCOUNT} yes" \
+    "$(stored_password "$ACCOUNT") $(is_encrypted "$(kept "$ACCOUNT")")"
+check "...the KDC accepts it" yes "$(mit_accepts t2enc "$AFTER")"
+check "...and refuses the old one" no "$(mit_accepts t2enc "$BEFORE")"
+check "...which a checkout hands over" "$AFTER" "$(checkout_password "$ACCOUNT")"
+
+# Earlier versions encrypted an Account's password in its field
+CURRENT=$AFTER
+sql "DELETE FROM pam_connection_secret WHERE connection_id = $ACCOUNT;
+     UPDATE guacamole_connection_parameter SET parameter_value = '$(legacy_encrypt connection-password "$CURRENT")'
+     WHERE connection_id = $ACCOUNT AND parameter_name = 'password'" >/dev/null
+check "an Account's password encrypted in its field, as earlier versions stored it, is still handed over" \
+    "$CURRENT" "$(checkout_password "$ACCOUNT")"
+edit_connection "$ADMIN" "$ACCOUNT" '' '' "t2 enc account legacy" >/dev/null
+check "...and saved unchanged from the editor, it is moved apart" "\${PAM_PASSWORD_$ACCOUNT}" "$(stored_password "$ACCOUNT")"
+check "...unchanged" "$CURRENT" "$(reveal "connection-secret:$ACCOUNT:password" "$(kept "$ACCOUNT")")"
 
 # The password about to be set is kept from before the target is touched
 # until the rotation is confirmed: seen during a rotation slowed down on the
@@ -139,7 +166,6 @@ session_of() { # ID [TYPE]: opens a session for a few seconds; whether guacd log
     kill $! 2>/dev/null
     [ "$(guacd_logged_in_since "$since")" -gt 0 ] && echo yes || echo no
 }
-kept() { sql "SELECT value FROM pam_connection_secret WHERE connection_id = $1 AND parameter_name = '${2:-password}'"; }
 ssh_connection() { # VARIABLE NAME EXTRA-PARAMETERS-JSON [ATTRIBUTES-JSON] [PARENT]
     create_connection "$1" "$(python3 -I -c '
 import json, sys
