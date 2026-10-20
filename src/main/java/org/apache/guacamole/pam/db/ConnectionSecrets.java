@@ -166,6 +166,10 @@ public class ConnectionSecrets {
         boolean keeps = keepsSecrets(protocol);
         boolean account = AccountProtocol.NAME.equals(protocol);
 
+        // Only read where a value is this connection's own token, which an
+        // existing connection alone has
+        int id = connectionId == null ? -1 : connectionId;
+
         for (Map.Entry<String, String> parameter : parameters.entrySet()) {
 
             String name = parameter.getKey();
@@ -198,7 +202,7 @@ public class ConnectionSecrets {
             // Not kept here, an Account's password is encrypted in its parameter
             if (accountPassword && !keeps) {
                 saving.changes.put(name, secrets.protect(Secrets.CONNECTION_PASSWORD,
-                        own ? require(connectionId, name) : value));
+                        own ? require(id, name) : value));
                 saving.forgotten.add(name);
                 continue;
             }
@@ -213,7 +217,7 @@ public class ConnectionSecrets {
 
             if (keeps) {
                 if (own)
-                    require(connectionId, name);
+                    require(id, name);
                 else {
                     // Left out until the token naming the connection can be written
                     saving.changes.put(name, connectionId == null ? null : token(name, connectionId));
@@ -222,7 +226,7 @@ public class ConnectionSecrets {
             }
             else {
                 if (own)
-                    saving.changes.put(name, require(connectionId, name));
+                    saving.changes.put(name, require(id, name));
                 saving.forgotten.add(name);
             }
 

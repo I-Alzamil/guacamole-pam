@@ -22,7 +22,8 @@ public final class MigrationReport {
      */
     public void unreadable(String value) {
         String keyId = SecretCipher.keyIdOf(value);
-        unreadable.merge(keyId == null ? "?" : keyId, 1, Integer::sum);
+        String key = keyId == null ? "?" : keyId;
+        unreadable.put(key, unreadable.getOrDefault(key, 0) + 1);
     }
 
     public int getChanged() {

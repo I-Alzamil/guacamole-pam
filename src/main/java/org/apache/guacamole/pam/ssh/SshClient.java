@@ -167,7 +167,7 @@ public class SshClient {
         session.setConfig("PreferredAuthentications", useKey
                 ? "publickey,password,keyboard-interactive" : "password,keyboard-interactive");
         if (password != null && !password.isEmpty())
-            session.setPassword(password);
+            session.setPassword(password.getBytes(StandardCharsets.UTF_8));
 
         session.connect(CONNECT_TIMEOUT_MS);
         return session;

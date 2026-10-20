@@ -215,7 +215,7 @@ class SessionRegistry {
             for (Session session : local.values()) {
                 Integer id = Values.parseId(session.identifier);
                 if (id != null)
-                    counts.merge(id, 1, Integer::sum);
+                    counts.put(id, counts.getOrDefault(id, 0) + 1);
             }
             return counts;
         }
