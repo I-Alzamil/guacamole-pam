@@ -2,8 +2,10 @@ package org.apache.guacamole.pam.ssh;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -86,6 +88,66 @@ public class SequenceScriptTest {
     public void requiresNewPassword() {
         assertFalse(SequenceScript.parse("passwd\n@expect assword:\n<OLDPASS>\n").isValid());
         assertTrue(SequenceScript.parse("<NEWPASS>").isValid());
+    }
+
+    @Test
+    public void parsesChoices() {
+
+        SequenceScript script = SequenceScript.parse(
+                "passwd\n"
+              + "@case (?i)current\n"
+              + "<OLDPASS>\n"
+              + "@expect assword:\n"
+              + "@case (?i)new\n"
+              + "@end\n"
+              + "<NEWPASS>\n");
+
+        assertTrue(script.getErrors().toString(), script.isValid());
+        assertEquals(StepType.CASE, script.getSteps().get(1).getType());
+        assertEquals(StepType.END, script.getSteps().get(5).getType());
+
+        SequenceScript.Choice choice = script.getSteps().get(1).getChoice();
+        assertEquals(Arrays.asList(1, 4), choice.getCases());
+        assertEquals(5, choice.getEnd());
+        assertSame(choice, script.getSteps().get(4).getChoice());
+        assertSame(choice, script.getSteps().get(5).getChoice());
+
+    }
+
+    @Test
+    public void reportsUnbalancedChoices() {
+
+        SequenceScript open = SequenceScript.parse("<NEWPASS>\n@case a\n<OLDPASS>\n");
+        assertFalse(open.isValid());
+        assertEquals(2, open.getErrors().get(0).getLine());
+
+        SequenceScript stray = SequenceScript.parse("<NEWPASS>\n@end\n");
+        assertFalse(stray.isValid());
+        assertEquals(2, stray.getErrors().get(0).getLine());
+
+        SequenceScript empty = SequenceScript.parse("<NEWPASS>\n@case\n@case ([\n@end\n");
+        assertFalse(empty.isValid());
+        assertEquals(2, empty.getErrors().get(0).getLine());
+        assertEquals(3, empty.getErrors().get(1).getLine());
+
+    }
+
+    @Test
+    public void requiresNewPasswordOnEveryWay() {
+
+        // Sent after the choice, or in every case
+        assertTrue(SequenceScript.parse("@case a\n@case b\n@end\n<NEWPASS>\n").isValid());
+        assertTrue(SequenceScript.parse("@case a\n<NEWPASS>\n@case b\nx <NEWPASS>\n@end\n").isValid());
+
+        // A case that skips it
+        SequenceScript skipping = SequenceScript.parse("@case a\n<NEWPASS>\n@case b\n@end\n");
+        assertFalse(skipping.isValid());
+        assertTrue(skipping.getErrors().get(0).getMessage().contains("cases"));
+
+        // Every case of a later choice
+        assertTrue(SequenceScript.parse("@case a\n<NEWPASS>\n@case b\n@end\n"
+                + "@case c\n<NEWPASS>\n@case d\n<NEWPASS>\n@end\n").isValid());
+
     }
 
     @Test

@@ -24,7 +24,15 @@ import java.util.regex.PatternSyntaxException;
  * &#64;timeout 20               seconds to wait in each following expect (default 10)
  * &#64;send text                send text explicitly; "&#64;send" alone sends just Enter
  * \&#64;literal                 a leading backslash sends the rest of the line as-is
+ * &#64;case (?i)current         starts a choice: waits until the output since the
+ * ...                       last send matches the regex of one of its cases,
+ * &#64;case (?i)new             then runs the lines of the case matching earliest
+ * ...                       (the first written, if several match there) and
+ * &#64;end                      continues after &#64;end
  * </pre>
+ *
+ * Choices cannot be nested, and every way through the script must send
+ * &lt;NEWPASS&gt;.
  *
  * Placeholders &lt;USER&gt;, &lt;HOST&gt;, &lt;OLDPASS&gt; and &lt;NEWPASS&gt;
  * are replaced in sent lines and expected text.
@@ -45,7 +53,26 @@ public final class SequenceScript {
 
     private static final Pattern PLACEHOLDER = Pattern.compile("<([A-Z_]+)>");
 
-    public enum StepType { SEND, EXPECT, REGEX, TIMEOUT }
+    public enum StepType { SEND, EXPECT, REGEX, TIMEOUT, CASE, END }
+
+    /**
+     * The cases of a choice, as indexes of their steps, and the index of
+     * its END step.
+     */
+    public static final class Choice {
+
+        private final List<Integer> cases = new ArrayList<>();
+        private int end = -1;
+
+        public List<Integer> getCases() {
+            return Collections.unmodifiableList(cases);
+        }
+
+        public int getEnd() {
+            return end;
+        }
+
+    }
 
     /**
      * One instruction of the script.
@@ -55,6 +82,7 @@ public final class SequenceScript {
         private final StepType type;
         private final String value;
         private final int line;
+        private Choice choice;
 
         Step(StepType type, String value, int line) {
             this.type = type;
@@ -76,6 +104,13 @@ public final class SequenceScript {
 
         public int getLine() {
             return line;
+        }
+
+        /**
+         * The choice a CASE or END step belongs to, or null.
+         */
+        public Choice getChoice() {
+            return choice;
         }
 
         /**
@@ -141,6 +176,8 @@ public final class SequenceScript {
 
         List<Step> steps = new ArrayList<>();
         List<ParseError> errors = new ArrayList<>();
+        Choice open = null;
+        int openLine = 0;
 
         String[] lines = (script == null ? "" : script).split("\n", -1);
         for (int i = 0; i < lines.length; i++) {
@@ -208,22 +245,94 @@ public final class SequenceScript {
                     }
                     break;
 
+                case "case":
+                    if (argument.isEmpty()) {
+                        errors.add(new ParseError(number, "@case needs a regular expression."));
+                        break;
+                    }
+                    try {
+                        Pattern.compile(PLACEHOLDER.matcher(argument).replaceAll("x"));
+                    }
+                    catch (PatternSyntaxException e) {
+                        errors.add(new ParseError(number, "Invalid regular expression: " + e.getDescription()));
+                        break;
+                    }
+                    if (open == null) {
+                        open = new Choice();
+                        openLine = number;
+                    }
+                    open.cases.add(steps.size());
+                    addStep(steps, errors, StepType.CASE, argument, number);
+                    steps.get(steps.size() - 1).choice = open;
+                    break;
+
+                case "end":
+                    if (open == null) {
+                        errors.add(new ParseError(number, "@end without @case before it."));
+                        break;
+                    }
+                    open.end = steps.size();
+                    steps.add(new Step(StepType.END, "", number));
+                    steps.get(steps.size() - 1).choice = open;
+                    open = null;
+                    break;
+
                 default:
                     errors.add(new ParseError(number, "Unknown directive @" + directive
-                            + ". Use @expect, @regex, @timeout or @send, or start the line with \\ to send it as-is."));
+                            + ". Use @expect, @regex, @timeout, @send, @case or @end, or start the line with \\"
+                            + " to send it as-is."));
 
             }
 
         }
 
-        boolean sendsNewPassword = false;
-        for (Step step : steps)
-            sendsNewPassword |= step.sendsNewPassword();
+        if (open != null) {
+            errors.add(new ParseError(openLine, "@case without @end after it."));
+            return new SequenceScript(steps, errors);
+        }
 
-        if (!sendsNewPassword)
-            errors.add(new ParseError(0, "The sequence never sends <NEWPASS>, so it cannot change the password."));
+        if (!alwaysSendsNewPassword(steps))
+            errors.add(new ParseError(0, steps.stream().anyMatch(Step::sendsNewPassword)
+                    ? "One of the cases never sends <NEWPASS>, nor do the lines outside the choices,"
+                            + " so the password would not change that way."
+                    : "The sequence never sends <NEWPASS>, so it cannot change the password."));
 
         return new SequenceScript(steps, errors);
+
+    }
+
+    /**
+     * Whether every way through the steps sends the new password: a line
+     * outside the choices does, or every case of one choice does.
+     */
+    private static boolean alwaysSendsNewPassword(List<Step> steps) {
+
+        for (int i = 0; i < steps.size(); i++) {
+
+            Step step = steps.get(i);
+            if (step.type != StepType.CASE) {
+                if (step.sendsNewPassword())
+                    return true;
+                continue;
+            }
+
+            // Every case of this choice, up to the next case or the end
+            Choice choice = step.choice;
+            boolean everyCase = true;
+            for (int c = 0; c < choice.cases.size(); c++) {
+                int next = c + 1 < choice.cases.size() ? choice.cases.get(c + 1) : choice.end;
+                boolean sends = false;
+                for (int j = choice.cases.get(c) + 1; j < next; j++)
+                    sends |= steps.get(j).sendsNewPassword();
+                everyCase &= sends;
+            }
+            if (everyCase)
+                return true;
+            i = choice.end;
+
+        }
+
+        return false;
 
     }
 

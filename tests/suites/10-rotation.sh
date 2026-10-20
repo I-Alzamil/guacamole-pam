@@ -40,6 +40,41 @@ check "SSH: ...and the password still works" yes "$(ssh_accepts mysshtest "$(par
 edit_connection "$ADMIN" "$SSH_C" '' '{"pam-ssh-host-key":null}' >/dev/null
 check "SSH: with the pin removed, rotation works again" "SUCCESS" "$(rotate "$SSH_C" | cut -d: -f1)"
 
+section "SSH: a script choosing by the prompt, as the account and as root"
+
+# choice_platform VARIABLE NAME COMMAND: passwd asks root for no current password
+choice_platform() {
+    create_platform "$1" "$(python3 -I -c 'import json,sys; print(json.dumps({"name": sys.argv[1], "type": "ssh",
+        "settings": {"script": sys.argv[2] + "\n@case (?i)\\b(current|old|existing)\\b[^:\\n]*password:\n<OLDPASS>\n"
+            "@expect assword:\n@case (?i)\\bnew\\b[^:\\n]*password:\n@end\n<NEWPASS>\n@expect assword:\n<NEWPASS>\n"
+            "@regex (?i)(success|(?<!not |un)(updated|changed)\\b|\\bdone\\b)\n"}, "policy": {}}))' "$2" "$3")"
+}
+choice_platform OWN_CHOICE "t2 ssh choice own" "passwd"
+choice_platform ROOT_CHOICE "t2 ssh choice root" "sudo passwd <USER>"
+
+# Only for this test, the account may run passwd as root
+podman exec mysshtest sh -c 'echo "mysshtest ALL=(root) NOPASSWD: /usr/bin/passwd mysshtest" > /etc/sudoers.d/t2-passwd'
+on_cleanup "podman exec mysshtest rm -f /etc/sudoers.d/t2-passwd"
+
+for platform in "$OWN_CHOICE:as the account" "$ROOT_CHOICE:as root"; do
+    edit_connection "$ADMIN" "$SSH_C" '' "{\"pam-platform\":\"${platform%%:*}\"}" >/dev/null
+    RESULT=$(rotate "$SSH_C")
+    check "SSH choice, ${platform#*:}: the change completes without a problem" "SUCCESS" "$RESULT"
+    check "SSH choice, ${platform#*:}: the server accepts the new password" yes \
+        "$(ssh_accepts mysshtest "$(parameter "$SSH_C" password)")"
+done
+
+edit_connection "$ADMIN" "$SSH_C" '' "{\"pam-platform\":\"$OWN_CHOICE\"}" >/dev/null
+podman exec mysshtest sh -c 'printf "#!/bin/sh\necho Changing password\n" > /tmp/t2-nocase; chmod 755 /tmp/t2-nocase'
+on_cleanup "podman exec mysshtest rm -f /tmp/t2-nocase"
+choice_platform NO_CASE "t2 ssh choice none" "$(printf '@timeout 3\n/tmp/t2-nocase')"
+edit_connection "$ADMIN" "$SSH_C" '' "{\"pam-platform\":\"$NO_CASE\"}" >/dev/null
+RESULT=$(rotate "$SSH_C")
+check "SSH choice: when no case matches, the rotation fails" "FAILED" "${RESULT%%:*}"
+check_contains "SSH choice: ...saying so" "matched none of the cases" "$RESULT"
+check "SSH choice: ...and the password still works" yes "$(ssh_accepts mysshtest "$(parameter "$SSH_C" password)")"
+edit_connection "$ADMIN" "$SSH_C" '' "{\"pam-platform\":\"$LINUX\"}" >/dev/null
+
 # ---------------------------------------------------------------- OpenLDAP
 section "LDAP: OpenLDAP"
 

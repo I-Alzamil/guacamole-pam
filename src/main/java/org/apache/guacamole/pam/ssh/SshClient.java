@@ -4,8 +4,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import com.jcraft.jsch.ChannelShell;
@@ -14,6 +17,7 @@ import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.Session;
 
 import org.apache.guacamole.pam.rotation.ChangeOutcome;
+import org.apache.guacamole.pam.ssh.SequenceScript.Choice;
 import org.apache.guacamole.pam.ssh.SequenceScript.Step;
 
 /**
@@ -64,7 +68,9 @@ public class SshClient {
 
             int timeout = SequenceScript.DEFAULT_TIMEOUT;
 
-            for (Step step : script.getSteps()) {
+            List<Step> steps = script.getSteps();
+            for (int index = 0; index < steps.size(); index++) {
+                Step step = steps.get(index);
                 switch (step.getType()) {
 
                     case TIMEOUT:
@@ -90,6 +96,31 @@ public class SshClient {
                                     "Line " + step.getLine() + ": did not see \"" + step.getValue()
                                     + "\" within " + timeout + " seconds.",
                                     output.transcript(), hostKeys.getPresentedFingerprint());
+                        break;
+
+                    case CASE:
+                        Choice choice = step.getChoice();
+
+                        // Reached from the case before: that case is done
+                        if (choice.getCases().get(0) != index) {
+                            index = choice.getEnd();
+                            break;
+                        }
+
+                        List<Pattern> patterns = new ArrayList<>();
+                        for (int c : choice.getCases())
+                            patterns.add(Pattern.compile(
+                                    SequenceScript.substitute(steps.get(c).getValue(), values, true)));
+                        int matched = output.awaitAny(in, channel, patterns, timeout * 1000L);
+                        if (matched < 0)
+                            return new ChangeOutcome(false, newPasswordSent,
+                                    "Line " + step.getLine() + ": the output matched none of the cases"
+                                    + " within " + timeout + " seconds.",
+                                    output.transcript(), hostKeys.getPresentedFingerprint());
+                        index = choice.getCases().get(matched);
+                        break;
+
+                    case END:
                         break;
 
                 }
@@ -237,16 +268,37 @@ public class SshClient {
 
         boolean await(InputStream in, ChannelShell channel, Pattern pattern, long timeoutMs)
                 throws IOException, InterruptedException {
+            return awaitAny(in, channel, Arrays.asList(pattern), timeoutMs) == 0;
+        }
+
+        /**
+         * Waits until the output since the last send matches one of the
+         * given patterns, and returns the index of the one matching
+         * earliest (the first given, if several match there), or -1 if
+         * none did in time.
+         */
+        int awaitAny(InputStream in, ChannelShell channel, List<Pattern> patterns, long timeoutMs)
+                throws IOException, InterruptedException {
 
             long deadline = System.currentTimeMillis() + timeoutMs;
             while (true) {
                 pump(in);
-                if (pattern.matcher(clean(raw.substring(stepStart))).find())
-                    return true;
+                String seen = clean(raw.substring(stepStart));
+                int best = -1;
+                int bestStart = Integer.MAX_VALUE;
+                for (int i = 0; i < patterns.size(); i++) {
+                    Matcher matcher = patterns.get(i).matcher(seen);
+                    if (matcher.find() && matcher.start() < bestStart) {
+                        best = i;
+                        bestStart = matcher.start();
+                    }
+                }
+                if (best >= 0)
+                    return best;
                 if (channel.isClosed() && in.available() == 0)
-                    return false;
+                    return -1;
                 if (System.currentTimeMillis() >= deadline)
-                    return false;
+                    return -1;
                 Thread.sleep(POLL_INTERVAL_MS);
             }
 
