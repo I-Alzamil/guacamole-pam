@@ -23,6 +23,7 @@ public class ApprovalRequest {
     private String connectionName;
     private String accountName;
     private String username;
+    private String remoteHost;
     private String reason;
     private long requested;
     private int approvalsRequired;
@@ -91,6 +92,17 @@ public class ApprovalRequest {
 
     void setReason(String reason) {
         this.reason = reason;
+    }
+
+    /**
+     * Where the user requested from, or null if unknown.
+     */
+    public String getRemoteHost() {
+        return remoteHost;
+    }
+
+    void setRemoteHost(String remoteHost) {
+        this.remoteHost = remoteHost;
     }
 
     public long getRequested() {

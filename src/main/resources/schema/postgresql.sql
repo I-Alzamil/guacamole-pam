@@ -70,6 +70,11 @@ CREATE TABLE IF NOT EXISTS pam_checkout (
   connection_name varchar(128)  NOT NULL,
 
   username        varchar(128)  NOT NULL,
+
+  -- Where the user requested it from, as Guacamole's connection history
+  -- records it: the address they logged in from
+  remote_host     varchar(256),
+
   reason          varchar(500)  NOT NULL,
   checked_out     timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
   expires         timestamptz   NOT NULL,
@@ -116,6 +121,10 @@ CREATE TABLE IF NOT EXISTS pam_request (
   connection_name    varchar(128)  NOT NULL,
 
   username           varchar(128)  NOT NULL,
+
+  -- Where the user requested it from, which its checkout keeps
+  remote_host        varchar(256),
+
   reason             varchar(500)  NOT NULL,
   requested          timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
   approvals_required integer       NOT NULL,

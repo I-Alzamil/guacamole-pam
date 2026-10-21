@@ -41,6 +41,7 @@ public class Checkout {
     private String connectionIdentifier;
     private String connectionName;
     private String username;
+    private String remoteHost;
     private String reason;
     private long checkedOut;
     private long expires;
@@ -90,6 +91,18 @@ public class Checkout {
 
     void setUsername(String username) {
         this.username = username;
+    }
+
+    /**
+     * Where the user requested the checkout from: the address they logged
+     * in from, as Guacamole's connection history shows it. Null if unknown.
+     */
+    public String getRemoteHost() {
+        return remoteHost;
+    }
+
+    void setRemoteHost(String remoteHost) {
+        this.remoteHost = remoteHost;
     }
 
     public String getReason() {

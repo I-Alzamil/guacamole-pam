@@ -18,6 +18,9 @@
                     <th guac-sort-order="order" guac-sort-property="'entry.username'">
                         {{ 'PAM.TABLE_HEADER_USER' | translate }}
                     </th>
+                    <th guac-sort-order="order" guac-sort-property="'entry.remoteHost'">
+                        {{ 'SETTINGS_CONNECTION_HISTORY.TABLE_HEADER_SESSION_REMOTEHOST' | translate }}
+                    </th>
                     <th guac-sort-order="order" guac-sort-property="'entry.connectionName'">
                         {{ 'PAM.TABLE_HEADER_CONNECTION' | translate }}
                     </th>
@@ -40,13 +43,14 @@
             <tbody ng-class="{loading: !isLoaded()}">
                 <tr ng-repeat="checkout in page" class="history">
                     <td><guac-user-item username="checkout.entry.username"></guac-user-item></td>
+                    <td>{{ checkout.entry.remoteHost }}</td>
                     <td>{{ checkout.entry.connectionName }}</td>
                     <td class="pam-history-truncate"><a href="" class="pam-reason-link" ng-click="showReason(checkout.entry)"
                         title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ checkout.entry.reason }}</a></td>
                     <td class="pam-history-truncate" title="{{ checkout.entry.approvedBy.join(', ') }}">{{ checkout.entry.approvedBy.join(', ') }}</td>
                     <td>{{ checkout.entry.checkedOut | date : dateFormat }}</td>
                     <td>{{ formatDuration(checkout.duration) }}</td>
-                    <td>
+                    <td class="pam-history-ended">
                         {{ endKey(checkout.entry) | translate }}
                         <span ng-if="checkout.entry.released">{{ checkout.entry.released | date : dateFormat }}</span>
                         <span class="pam-ended-by" ng-if="checkout.entry.releasedBy && checkout.entry.releasedBy !== checkout.entry.username">

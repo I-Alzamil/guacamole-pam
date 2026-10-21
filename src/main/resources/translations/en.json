@@ -291,7 +291,7 @@
     },
     "PAM_HISTORY": {
         "FILENAME_CSV": "checkout-history.csv",
-        "HELP_HISTORY": "Every checkout of a password or of access to a connection, active or ended, newest first. Search matches the user, account, reason, or how and by whom a checkout ended. Click a reason to read it in full, or a column header to sort.",
+        "HELP_HISTORY": "Every checkout of a password or of access to a connection, active or ended, newest first. Search matches the user, remote host, account, reason, or how and by whom a checkout ended. Click a reason to read it in full, or a column header to sort.",
         "INFO_NO_HISTORY": "No matching checkouts",
         "TABLE_HEADER_APPROVED_BY": "Approved by",
         "TABLE_HEADER_DURATION": "Duration",

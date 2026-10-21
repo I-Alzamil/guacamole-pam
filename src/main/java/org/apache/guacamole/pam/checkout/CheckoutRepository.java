@@ -39,7 +39,8 @@ public class CheckoutRepository {
             + " k.reason, k.checked_out, k.expires, k.released, k.release_reason, k.released_by, k.reveal_count,"
             + " k.exclusive,"
             + " (SELECT array_agg(a.approver ORDER BY a.approved) FROM pam_request r"
-            + "   JOIN pam_request_approval a ON a.request_id = r.request_id WHERE r.checkout_id = k.checkout_id)"
+            + "   JOIN pam_request_approval a ON a.request_id = r.request_id WHERE r.checkout_id = k.checkout_id),"
+            + " k.remote_host"
             + " FROM pam_checkout k LEFT JOIN guacamole_connection c ON c.connection_id = k.connection_id";
 
     private final PamDatabase database;
@@ -49,25 +50,20 @@ public class CheckoutRepository {
     }
 
     /**
-     * Creates an active checkout.
+     * Creates an active checkout whose password was shown the given number
+     * of times so far: once when handed over directly, never yet when
+     * started by an approval.
+     *
+     * @param remoteHost
+     *     Where the user requested it from, or null if unknown.
      *
      * @throws GuacamoleClientException
      *     If the request conflicts with an active checkout: the user already
      *     holds the password, someone holds it exclusively, or an exclusive
      *     checkout is requested while anyone holds it.
      */
-    public Checkout create(int connectionId, String username, String reason, int minutes, boolean exclusive)
-            throws GuacamoleException {
-        return create(connectionId, username, reason, minutes, exclusive, 1);
-    }
-
-    /**
-     * Creates an active checkout whose password was shown the given number
-     * of times so far: once when handed over directly, never yet when
-     * started by an approval.
-     */
-    public Checkout create(int connectionId, String username, String reason, int minutes, boolean exclusive,
-            int revealCount) throws GuacamoleException {
+    public Checkout create(int connectionId, String username, String remoteHost, String reason, int minutes,
+            boolean exclusive, int revealCount) throws GuacamoleException {
 
         try (Connection connection = database.getConnection()) {
 
@@ -97,16 +93,17 @@ public class CheckoutRepository {
 
                 int id;
                 try (PreparedStatement statement = connection.prepareStatement(
-                        "INSERT INTO pam_checkout (connection_id, connection_name, username, reason, expires,"
-                      + " exclusive, reveal_count) SELECT connection_id, connection_name, ?, ?,"
+                        "INSERT INTO pam_checkout (connection_id, connection_name, username, remote_host, reason,"
+                      + " expires, exclusive, reveal_count) SELECT connection_id, connection_name, ?, ?, ?,"
                       + " CURRENT_TIMESTAMP + make_interval(mins => ?), ?, ? FROM guacamole_connection"
                       + " WHERE connection_id = ? RETURNING checkout_id")) {
                     statement.setString(1, username);
-                    statement.setString(2, reason);
-                    statement.setInt(3, minutes);
-                    statement.setBoolean(4, exclusive);
-                    statement.setInt(5, revealCount);
-                    statement.setInt(6, connectionId);
+                    statement.setString(2, remoteHost);
+                    statement.setString(3, reason);
+                    statement.setInt(4, minutes);
+                    statement.setBoolean(5, exclusive);
+                    statement.setInt(6, revealCount);
+                    statement.setInt(7, connectionId);
                     try (ResultSet results = statement.executeQuery()) {
                         if (!results.next())
                             throw new GuacamoleResourceNotFoundException("The connection no longer exists.");
@@ -204,8 +201,9 @@ public class CheckoutRepository {
 
     /**
      * Returns the newest checkouts, active or ended, matching every given
-     * term. A term matches when the user, connection name, reason, release
-     * reason, releasing user or an approver contains it, ignoring case.
+     * term. A term matches when the user, remote host, connection name,
+     * reason, release reason, releasing user or an approver contains it,
+     * ignoring case.
      */
     public List<Checkout> search(List<String> terms, int limit) throws GuacamoleException {
 
@@ -215,7 +213,7 @@ public class CheckoutRepository {
         for (String term : terms) {
             if (term == null || term.trim().isEmpty())
                 continue;
-            sql.append(" AND (k.username ILIKE ? ESCAPE '\\'"
+            sql.append(" AND (k.username ILIKE ? ESCAPE '\\' OR coalesce(k.remote_host, '') ILIKE ? ESCAPE '\\'"
                     + " OR coalesce(c.connection_name, k.connection_name) ILIKE ? ESCAPE '\\'"
                     + " OR k.reason ILIKE ? ESCAPE '\\' OR coalesce(k.release_reason, '') ILIKE ? ESCAPE '\\'"
                     + " OR coalesce(k.released_by, '') ILIKE ? ESCAPE '\\'"
@@ -231,7 +229,7 @@ public class CheckoutRepository {
 
             int index = 1;
             for (String pattern : patterns) {
-                for (int i = 0; i < 6; i++)
+                for (int i = 0; i < 7; i++)
                     statement.setString(index++, pattern);
             }
             statement.setInt(index, limit);
@@ -398,6 +396,7 @@ public class CheckoutRepository {
                 Array approvers = results.getArray(13);
                 if (approvers != null)
                     checkout.setApprovedBy(Arrays.asList((String[]) approvers.getArray()));
+                checkout.setRemoteHost(results.getString(14));
                 checkouts.add(checkout);
             }
         }

@@ -341,7 +341,8 @@ public class PamREST {
             throws GuacamoleException {
 
         RequestOutcome outcome = provider.getCheckoutService().request(provider.getDataSourceContext(user),
-                user.getIdentifier(), id, body == null ? null : body.get("reason"), provider.isAdministrator(user));
+                user.getIdentifier(), remoteHost(), id, body == null ? null : body.get("reason"),
+                provider.isAdministrator(user));
 
         // Awaiting approval: no password yet
         if (outcome.getGrant() == null)
@@ -360,6 +361,14 @@ public class PamREST {
     public Response revealPassword(@PathParam("id") String id) throws GuacamoleException {
         return uncached(provider.getCheckoutService().revealPassword(provider.getDataSourceContext(user),
                 user.getIdentifier(), id));
+    }
+
+    /**
+     * Where the user is, as Guacamole's connection history records it: the
+     * address they logged in from.
+     */
+    private String remoteHost() {
+        return user.getCredentials() == null ? null : user.getCredentials().getRemoteAddress();
     }
 
     private static Response uncached(PasswordGrant grant) {

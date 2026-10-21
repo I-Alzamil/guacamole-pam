@@ -70,7 +70,7 @@ public class ApprovalRepository {
             + " r.checkout_id,"
             + " (SELECT array_agg(a.approver ORDER BY a.approved) FROM pam_request_approval a"
             + "   WHERE a.request_id = r.request_id),"
-            + " r.decision_reason"
+            + " r.decision_reason, r.remote_host"
             + " FROM pam_request r LEFT JOIN guacamole_connection c ON c.connection_id = r.connection_id";
 
     private final PamDatabase database;
@@ -217,25 +217,29 @@ public class ApprovalRepository {
     /**
      * Creates a pending request.
      *
+     * @param remoteHost
+     *     Where the user requests from, or null if unknown.
+     *
      * @throws GuacamoleClientException
      *     If the user already has a pending request for the connection.
      */
-    public ApprovalRequest create(int connectionId, String username, String reason, int approvalsRequired)
-            throws GuacamoleException {
+    public ApprovalRequest create(int connectionId, String username, String remoteHost, String reason,
+            int approvalsRequired) throws GuacamoleException {
 
         expireStale(true);
 
         int id;
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                 "INSERT INTO pam_request (connection_id, connection_name, username, reason, approvals_required)"
-               + " SELECT connection_id, connection_name, ?, ?, ? FROM guacamole_connection"
+                 "INSERT INTO pam_request (connection_id, connection_name, username, remote_host, reason,"
+               + " approvals_required) SELECT connection_id, connection_name, ?, ?, ?, ? FROM guacamole_connection"
                + " WHERE connection_id = ? RETURNING request_id")) {
 
             statement.setString(1, username);
-            statement.setString(2, reason);
-            statement.setInt(3, approvalsRequired);
-            statement.setInt(4, connectionId);
+            statement.setString(2, remoteHost);
+            statement.setString(3, reason);
+            statement.setInt(4, approvalsRequired);
+            statement.setInt(5, connectionId);
 
             try (ResultSet results = statement.executeQuery()) {
                 if (!results.next())
@@ -581,6 +585,7 @@ public class ApprovalRepository {
                     if (approvers != null)
                         request.setApprovers(new ArrayList<>(Arrays.asList((String[]) approvers.getArray())));
                     request.setDecisionReason(results.getString(14));
+                    request.setRemoteHost(results.getString(15));
                     requests.add(request);
                 }
             }

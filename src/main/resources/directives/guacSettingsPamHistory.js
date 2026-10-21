@@ -43,6 +43,7 @@ angular.module('guacPam').directive('guacSettingsPamHistory', [function guacSett
             $scope.order = new SortOrder([
                 '-entry.checkedOut',
                 'entry.username',
+                'entry.remoteHost',
                 'entry.connectionName',
                 '-duration',
                 'ended',
@@ -128,6 +129,7 @@ angular.module('guacPam').directive('guacSettingsPamHistory', [function guacSett
 
                 var headers = [
                     'PAM.TABLE_HEADER_USER',
+                    'SETTINGS_CONNECTION_HISTORY.TABLE_HEADER_SESSION_REMOTEHOST',
                     'PAM.TABLE_HEADER_CONNECTION',
                     'PAM.TABLE_HEADER_REASON',
                     'PAM.TABLE_HEADER_CHECKED_OUT',
@@ -153,6 +155,7 @@ angular.module('guacPam').directive('guacSettingsPamHistory', [function guacSett
                         var checkout = wrapper.entry;
                         records.push([
                             checkout.username,
+                            checkout.remoteHost || '',
                             checkout.connectionName,
                             checkout.reason,
                             $filter('date')(checkout.checkedOut, $scope.dateFormat),

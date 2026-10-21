@@ -66,6 +66,10 @@ check "approver 2 (through a group) approves: request approved" "200 APPROVED" "
 
 GRANT=$(curl -s -D "$T2_TMP/headers" -X POST -H 'Content-Type: application/json' -d '{}' "$PAM/requests/$ACCOUNT?token=$REQUESTER")
 check "the requester now gets the password" "$ACCOUNT_PASSWORD" "$(json_get "$GRANT" "d.get('password')")"
+REQUESTED_FROM=$(podman exec myguacdbtest psql -U postgres -tAc "SELECT remote_host FROM pam_request WHERE request_id = $ID")
+check "...in a checkout keeping the remote host the request came from" "yes $REQUESTED_FROM" \
+    "$([ -n "$REQUESTED_FROM" ] && echo yes) $(podman exec myguacdbtest psql -U postgres -tAc "SELECT k.remote_host
+        FROM pam_checkout k JOIN pam_request r ON r.checkout_id = k.checkout_id WHERE r.request_id = $ID")"
 check_contains "...in a response that is never cached" "no-store" "$(grep -i '^cache-control' "$T2_TMP/headers")"
 check "the requester releases it" 204 "$(status_of "$(api POST "$PAM/requests/$ACCOUNT/release" "$REQUESTER")")"
 check "...after which there is no password without a new request" 202 "$(status_of "$(api POST "$PAM/requests/$ACCOUNT" "$REQUESTER" '{"reason":"again"}')")"
@@ -105,6 +109,15 @@ import sys,json
 m=[c['id'] for c in json.load(sys.stdin) if c['username']=='t2-requester' and c['connectionIdentifier']==sys.argv[1]]
 print(m[0] if m else '')" "$GATED")
 check "the administrator sees the active checkout" yes "$([ -n "$ACTIVE" ] && echo yes)"
+HOST=$(curl -s "$PAM/checkouts/active?token=$ADMIN" | python3 -I -c "
+import sys,json; print([c.get('remoteHost') or '' for c in json.load(sys.stdin) if c['id']==int(sys.argv[1])][0])" "$ACTIVE")
+check "...with the remote host the user requested from" yes "$([ -n "$HOST" ] && echo yes)"
+check "...as Guacamole's connection history records it for the session" "$HOST" \
+    "$(podman exec myguacdbtest psql -U postgres -tAc "SELECT remote_host FROM guacamole_connection_history
+        WHERE username = 't2-requester' AND connection_id = $GATED ORDER BY start_date DESC LIMIT 1")"
+check "...and the history can be searched by it" yes "$(curl -s -G --data-urlencode "contains=$HOST" \
+    --data-urlencode "contains=T2 maintenance" "$PAM/checkouts/history?token=$ADMIN" | python3 -I -c "
+import sys,json; print('yes' if any(c['id']==int(sys.argv[1]) for c in json.load(sys.stdin)) else 'no')" "$ACTIVE")"
 check "the administrator revokes it" 204 "$(status_of "$(api POST "$PAM/checkouts/$ACTIVE/revoke" "$ADMIN")")"
 check_contains "...and the connection refuses a new session" "403 You must request access" "$(tunnel "$REQUESTER" "$GATED" c)"
 

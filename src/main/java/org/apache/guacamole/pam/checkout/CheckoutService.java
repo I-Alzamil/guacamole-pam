@@ -151,11 +151,15 @@ public class CheckoutService {
      * administrator: administrators bypass approval, and also the reason
      * when they bypass requests.
      *
+     * @param remoteHost
+     *     Where the user requests from, kept with the request and the
+     *     checkout, or null if unknown.
+     *
      * @throws GuacamoleClientException
      *     If the reason is missing, or the connection cannot be held now.
      */
-    public RequestOutcome request(UserContext context, String username, String identifier, String reason,
-            boolean administrator) throws GuacamoleException {
+    public RequestOutcome request(UserContext context, String username, String remoteHost, String identifier,
+            String reason, boolean administrator) throws GuacamoleException {
 
         Target target = requireRequestable(context, identifier);
         int id = target.getId();
@@ -191,7 +195,7 @@ public class CheckoutService {
             String trimmed = validateReason(reason);
             requireAvailable(target);
 
-            ApprovalRequest pending = approvals.create(id, username, trimmed, approvalsRequired);
+            ApprovalRequest pending = approvals.create(id, username, remoteHost, trimmed, approvalsRequired);
             logger.info("User \"{}\" requested \"{}\" (request {}, {} approvals needed). Reason: {}",
                     username, Values.forLog(target.getName()), pending.getId(), approvalsRequired,
                     Values.forLog(trimmed));
@@ -213,7 +217,7 @@ public class CheckoutService {
             checkoutReason = validateReason(reason);
 
 
-        checkout = startCheckout(target, username, checkoutReason, account ? 1 : 0);
+        checkout = startCheckout(target, username, remoteHost, checkoutReason, account ? 1 : 0);
         return RequestOutcome.granted(toGrant(checkout, connections.load(id)));
 
     }
@@ -322,7 +326,7 @@ public class CheckoutService {
         if (target == null)
             throw new GuacamoleResourceNotFoundException("The connection no longer exists.");
         rotationService.expireCheckouts();
-        return startCheckout(target, request.getUsername(), request.getReason(), 0);
+        return startCheckout(target, request.getUsername(), request.getRemoteHost(), request.getReason(), 0);
     }
 
     /**
@@ -386,12 +390,12 @@ public class CheckoutService {
         return new Deletion(checkouts.listActive(id), approvals.listPending(id));
     }
 
-    private Checkout startCheckout(Target target, String username, String reason, int revealCount)
-            throws GuacamoleException {
+    private Checkout startCheckout(Target target, String username, String remoteHost, String reason,
+            int revealCount) throws GuacamoleException {
 
         int id = target.getId();
-        Checkout checkout = checkouts.create(id, username, reason, getDuration(target), isExclusive(target),
-                revealCount);
+        Checkout checkout = checkouts.create(id, username, remoteHost, reason, getDuration(target),
+                isExclusive(target), revealCount);
         holderCounts = null;
 
         // A rotation claims the connection before checking for checkouts,

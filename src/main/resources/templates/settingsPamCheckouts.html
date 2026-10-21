@@ -9,6 +9,7 @@
                 <tr>
                     <th>{{ 'PAM.TABLE_HEADER_CONNECTION' | translate }}</th>
                     <th>{{ 'PAM.TABLE_HEADER_USER' | translate }}</th>
+                    <th>{{ 'SETTINGS_CONNECTION_HISTORY.TABLE_HEADER_SESSION_REMOTEHOST' | translate }}</th>
                     <th>{{ 'PAM.TABLE_HEADER_REASON' | translate }}</th>
                     <th>{{ 'PAM.TABLE_HEADER_CHECKED_OUT' | translate }}</th>
                     <th>{{ 'PAM.TABLE_HEADER_EXPIRES' | translate }}</th>
@@ -19,6 +20,7 @@
                 <tr ng-repeat="checkout in activeCheckouts">
                     <td>{{ checkout.connectionName }}</td>
                     <td>{{ checkout.username }}</td>
+                    <td>{{ checkout.remoteHost }}</td>
                     <td class="pam-truncate"><a href="" class="pam-reason-link" ng-click="showReason(checkout)"
                         title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ checkout.reason }}</a></td>
                     <td>{{ checkout.checkedOut | date:'medium' }}</td>
@@ -26,7 +28,7 @@
                     <td><button class="danger" ng-click="revokeCheckout(checkout)">{{ 'PAM.ACTION_REVOKE' | translate }}</button></td>
                 </tr>
                 <tr ng-show="activeCheckouts && !activeCheckouts.length">
-                    <td colspan="6" class="pam-empty">{{ 'PAM.INFO_NO_ACTIVE_CHECKOUTS' | translate }}</td>
+                    <td colspan="7" class="pam-empty">{{ 'PAM.INFO_NO_ACTIVE_CHECKOUTS' | translate }}</td>
                 </tr>
             </tbody>
         </table>
@@ -43,7 +45,10 @@
             <button class="pam-dialog-close" ng-click="closeReason()" title="{{ 'PAM.ACTION_CLOSE' | translate }}"
                     aria-label="{{ 'PAM.ACTION_CLOSE' | translate }}">&times;</button>
             <h2 id="pam-checkout-reason-title">{{ reasonShown.connectionName }}</h2>
-            <p class="pam-request-hint">{{ reasonShown.username }} · {{ reasonShown.checkedOut | date:'medium' }}</p>
+            <p class="pam-request-hint">
+                {{ reasonShown.username }}<span ng-if="reasonShown.remoteHost"> ({{ reasonShown.remoteHost }})</span>
+                · {{ reasonShown.checkedOut | date:'medium' }}
+            </p>
             <label>{{ 'PAM.TABLE_HEADER_REASON' | translate }}</label>
             <div class="pam-request-notes pam-reason-full">{{ reasonShown.reason }}</div>
         </div>

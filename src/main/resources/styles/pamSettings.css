@@ -707,14 +707,21 @@
     text-decoration: underline;
 }
 
-/* Checkout history: one line per checkout; long reasons and approver lists
-   are cut short (reasons open in full, approvers show on hover) */
+/* Checkout history: one line per checkout, except how it ended; long
+   reasons and approver lists are cut short (reasons open in full, approvers
+   show on hover) */
+.pam-history .history-list th,
 .pam-history .history-list td {
     white-space: nowrap;
 }
 
+.pam-history .history-list td.pam-history-ended {
+    min-width: 10em;
+    white-space: normal;
+}
+
 .pam-history .history-list td.pam-history-truncate {
-    max-width: 16em;
+    max-width: 12em;
     overflow: hidden;
     text-overflow: ellipsis;
 }
