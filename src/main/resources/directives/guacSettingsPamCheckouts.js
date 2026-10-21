@@ -42,6 +42,11 @@ angular.module('guacPam').directive('guacSettingsPamCheckouts', [function guacSe
                 $scope.reasonShown = checkout;
             };
 
+            // From the history below, which shows reasons in this dialog too
+            $scope.$on('pamShowCheckoutReason', function showHistoryReason(event, checkout) {
+                $scope.showReason(checkout);
+            });
+
             /**
              * Closes the reason; when given a click, only one on the
              * backdrop itself.

@@ -41,7 +41,8 @@
                 <tr ng-repeat="checkout in page" class="history">
                     <td><guac-user-item username="checkout.entry.username"></guac-user-item></td>
                     <td>{{ checkout.entry.connectionName }}</td>
-                    <td class="pam-history-truncate" title="{{ checkout.entry.reason }}">{{ checkout.entry.reason }}</td>
+                    <td class="pam-history-truncate"><a href="" class="pam-reason-link" ng-click="showReason(checkout.entry)"
+                        title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ checkout.entry.reason }}</a></td>
                     <td class="pam-history-truncate" title="{{ checkout.entry.approvedBy.join(', ') }}">{{ checkout.entry.approvedBy.join(', ') }}</td>
                     <td>{{ checkout.entry.checkedOut | date : dateFormat }}</td>
                     <td>{{ formatDuration(checkout.duration) }}</td>

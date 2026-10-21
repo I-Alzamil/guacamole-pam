@@ -708,7 +708,7 @@
 }
 
 /* Checkout history: one line per checkout; long reasons and approver lists
-   are cut short, and shown in full on hover */
+   are cut short (reasons open in full, approvers show on hover) */
 .pam-history .history-list td {
     white-space: nowrap;
 }

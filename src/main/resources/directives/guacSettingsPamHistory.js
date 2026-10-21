@@ -89,6 +89,14 @@ angular.module('guacPam').directive('guacSettingsPamHistory', [function guacSett
              * Translation key describing how a checkout ended, or that it is
              * still active.
              */
+            /**
+             * Shows a reason in full, in the dialog of the Checkouts tab
+             * this history is part of.
+             */
+            $scope.showReason = function showReason(checkout) {
+                $scope.$emit('pamShowCheckoutReason', checkout);
+            };
+
             $scope.endKey = function endKey(checkout) {
                 return checkout.released ? 'PAM.RELEASE_' + checkout.releaseReason : 'PAM.INFO_ACTIVE';
             };
