@@ -1,5 +1,8 @@
 package org.apache.guacamole.pam.ldap;
 
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 
@@ -77,7 +80,8 @@ public class LdapClient {
 
         }
         catch (LDAPException e) {
-            return new ChangeOutcome(false, sent, describe(e, trust, useAdmin), null, trust.getPresentedFingerprint());
+            return new ChangeOutcome(false, sent, describe(e, target, trust, useAdmin), null,
+                    trust.getPresentedFingerprint());
         }
 
     }
@@ -87,21 +91,23 @@ public class LdapClient {
      * target account.
      *
      * @throws LDAPException
-     *     If the server could not be reached or its certificate is not trusted.
+     *     If the server could not be reached or its certificate is not
+     *     trusted, with a message saying so as the outcome of a change does.
      */
     public boolean acceptsPassword(LdapTarget target, String password) throws LDAPException {
 
         if (password == null || password.isEmpty())
             return false;
 
-        try (LDAPConnection connection = open(target, new CertificateTrustManager(target.getPinnedCertificate()))) {
+        CertificateTrustManager trust = new CertificateTrustManager(target.getPinnedCertificate());
+        try (LDAPConnection connection = open(target, trust)) {
             connection.bind(target.getUserDn(), password);
             return true;
         }
         catch (LDAPException e) {
             if (e.getResultCode() == ResultCode.INVALID_CREDENTIALS)
                 return false;
-            throw e;
+            throw new LDAPException(e.getResultCode(), describe(e, target, trust, false), e);
         }
 
     }
@@ -136,7 +142,7 @@ public class LdapClient {
 
         }
         catch (LDAPException e) {
-            return result.failed(describe(e, trust, true));
+            return result.failed(describe(e, target, trust, true));
         }
 
     }
@@ -198,9 +204,15 @@ public class LdapClient {
         return ("\"" + password + "\"").getBytes(StandardCharsets.UTF_16LE);
     }
 
-    private static String describe(LDAPException e, CertificateTrustManager trust, boolean useAdmin) {
+    /**
+     * What went wrong, for administrators. The SDK's own messages nest the
+     * exceptions they wrap, with the SDK's version and build: the cause is
+     * told in plain words instead, and the version left out.
+     */
+    private static String describe(LDAPException e, LdapTarget target, CertificateTrustManager trust,
+            boolean useAdmin) {
 
-        String message = e.getMessage() == null ? "" : e.getMessage();
+        String message = withoutVersion(e.getMessage() == null ? "" : e.getMessage());
 
         if (message.contains("does not match the pinned fingerprint"))
             return "The LDAP server certificate " + trust.getPresentedFingerprint()
@@ -214,12 +226,35 @@ public class LdapClient {
         if (e.getResultCode() == ResultCode.INVALID_CREDENTIALS)
             return useAdmin ? "The directory rejected the rotation account credentials."
                             : "The directory rejected the account's current password.";
-        if (e.getResultCode() == ResultCode.CONNECT_ERROR || e.getResultCode() == ResultCode.SERVER_DOWN)
-            return "Unable to reach the LDAP server: " + message;
+        if (e.getResultCode() == ResultCode.CONNECT_ERROR || e.getResultCode() == ResultCode.SERVER_DOWN
+                || e.getResultCode() == ResultCode.TIMEOUT)
+            return "Unable to reach the LDAP server " + target.getHostname() + ":" + target.getPort() + ": "
+                    + connectionProblem(e) + ".";
 
         return "LDAP error: " + describe(e.getResultCode(), e.getDiagnosticMessage() != null
-                ? e.getDiagnosticMessage() : message);
+                ? withoutVersion(e.getDiagnosticMessage()) : message);
 
+    }
+
+    /**
+     * Why the server could not be reached, in plain words.
+     */
+    private static String connectionProblem(LDAPException e) {
+        if (findCause(e, UnknownHostException.class) != null)
+            return "unknown host";
+        if (findCause(e, ConnectException.class) != null)
+            return "connection refused";
+        if (findCause(e, SocketTimeoutException.class) != null || e.getResultCode() == ResultCode.TIMEOUT)
+            return "no answer in time";
+        return withoutVersion(rootMessage(e));
+    }
+
+    /**
+     * The message without the SDK's version and build, which the SDK adds
+     * to the exceptions it nests.
+     */
+    static String withoutVersion(String message) {
+        return message.replaceAll(",?\\s*ldapSDKVersion=[^,)']*(,\\s*revision=[0-9a-fA-F]+)?", "");
     }
 
     private static Throwable findCause(Throwable error, Class<? extends Throwable> type) {

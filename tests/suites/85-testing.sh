@@ -57,7 +57,11 @@ check_contains "a certificate of a CA Java does not trust: failed" "failed: FAIL
 check_contains "...naming its fingerprint, to pin in the platform" "$LDAP_FP is not trusted" "$R"
 
 R=$(summary "$(test_platform "$(ldap "\"hostname\":\"t2-no-such-host\",\"ldap-certificate-fingerprint\":\"$LDAP_FP\"")")")
-check_contains "an unknown server: failed" "failed: FAILED Unable to reach the LDAP server" "$R"
+check "an unknown server: failed, saying why in plain words" \
+    "failed: FAILED Unable to reach the LDAP server t2-no-such-host:636: unknown host." "$R"
+R=$(summary "$(test_platform "$(ldap "$OPENLDAP,\"port\":\"1\"")")")
+check "a server refusing connections: likewise" \
+    "failed: FAILED Unable to reach the LDAP server myldaptest:1: connection refused." "$R"
 
 R=$(summary "$(test_platform "{\"name\":\"t2 test ad\",\"type\":\"ldap\",\"settings\":{\"hostname\":\"myadtest\",
     \"ldap-directory-type\":\"active-directory\",\"ldap-certificate-fingerprint\":\"$AD_FP\",
