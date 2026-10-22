@@ -10,7 +10,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
-import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.zaxxer.hikari.HikariConfig;
@@ -20,13 +19,13 @@ import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.environment.Environment;
 import org.apache.guacamole.properties.IntegerGuacamoleProperty;
-import org.apache.guacamole.properties.StringGuacamoleProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Access to the Guacamole PostgreSQL database. Reuses the "postgresql-*"
- * properties and the driver of Guacamole's PostgreSQL authentication, and
+ * properties (see {@link DatabaseSettings}, SSL settings included) and the
+ * driver of Guacamole's PostgreSQL authentication, and
  * creates this extension's own tables on first use, then runs what a fresh
  * install starts with ({@link #onFreshInstall}). The driver is loaded by
  * name, so this class loads (and {@link #getUnavailableReason} can tell why
@@ -41,31 +40,6 @@ import org.slf4j.LoggerFactory;
 public class PamDatabase {
 
     private static final Logger logger = LoggerFactory.getLogger(PamDatabase.class);
-
-    private static final StringGuacamoleProperty POSTGRESQL_HOSTNAME = new StringGuacamoleProperty() {
-        @Override
-        public String getName() { return "postgresql-hostname"; }
-    };
-
-    private static final IntegerGuacamoleProperty POSTGRESQL_PORT = new IntegerGuacamoleProperty() {
-        @Override
-        public String getName() { return "postgresql-port"; }
-    };
-
-    private static final StringGuacamoleProperty POSTGRESQL_DATABASE = new StringGuacamoleProperty() {
-        @Override
-        public String getName() { return "postgresql-database"; }
-    };
-
-    private static final StringGuacamoleProperty POSTGRESQL_USERNAME = new StringGuacamoleProperty() {
-        @Override
-        public String getName() { return "postgresql-username"; }
-    };
-
-    private static final StringGuacamoleProperty POSTGRESQL_PASSWORD = new StringGuacamoleProperty() {
-        @Override
-        public String getName() { return "postgresql-password"; }
-    };
 
     private static final IntegerGuacamoleProperty MAX_CONNECTIONS = new IntegerGuacamoleProperty() {
         @Override
@@ -90,11 +64,6 @@ public class PamDatabase {
     private static final String SCHEMA_RESOURCE = "/schema/postgresql.sql";
 
     /**
-     * Driver installed with Guacamole's PostgreSQL authentication.
-     */
-    private static final String DRIVER_CLASS = "org.postgresql.Driver";
-
-    /**
      * Version the schema script records once it has run, which must match
      * the latest version it inserts into "pam_schema_version". A database
      * without it runs the script, creating or upgrading the tables.
@@ -106,19 +75,15 @@ public class PamDatabase {
      */
     private static final String INSUFFICIENT_PRIVILEGE = "42501";
 
-    private final Driver driver;
+    private final DatabaseSettings settings;
 
-    private final String username;
+    private final Driver driver;
 
     /**
      * Whether the instructions for creating the tables by hand were logged,
      * so they are logged once rather than on every attempt.
      */
     private volatile boolean instructionsLogged = false;
-
-    private final String url;
-
-    private final Properties connectionProperties = new Properties();
 
     private final int maxConnections;
 
@@ -157,42 +122,20 @@ public class PamDatabase {
      * as the extension manages its connections.
      */
     public static String getUnavailableReason(Environment environment) throws GuacamoleException {
-
-        if (environment.getProperty(POSTGRESQL_DATABASE) == null)
-            return "Guacamole's PostgreSQL authentication is not configured (no \""
-                    + POSTGRESQL_DATABASE.getName() + "\" property).";
-
-        try {
-            Class.forName(DRIVER_CLASS, false, PamDatabase.class.getClassLoader());
-        }
-        catch (ClassNotFoundException | LinkageError e) {
-            return "the PostgreSQL JDBC driver is not installed. It comes with Guacamole's PostgreSQL"
-                    + " authentication, which must be installed.";
-        }
-
-        return null;
-
+        return DatabaseSettings.getUnavailableReason(environment);
     }
 
     public PamDatabase(Environment environment) throws GuacamoleException {
 
+        settings = DatabaseSettings.fromEnvironment(environment);
+
         try {
-            driver = (Driver) Class.forName(DRIVER_CLASS, true, PamDatabase.class.getClassLoader())
+            driver = (Driver) Class.forName(settings.getDriverClass(), true, PamDatabase.class.getClassLoader())
                     .getDeclaredConstructor().newInstance();
         }
         catch (ReflectiveOperationException | LinkageError e) {
             throw new GuacamoleServerException("Unable to load the PostgreSQL JDBC driver.", e);
         }
-
-        url = "jdbc:postgresql://"
-                + environment.getProperty(POSTGRESQL_HOSTNAME, "localhost") + ":"
-                + environment.getProperty(POSTGRESQL_PORT, 5432) + "/"
-                + environment.getRequiredProperty(POSTGRESQL_DATABASE);
-
-        username = environment.getRequiredProperty(POSTGRESQL_USERNAME);
-        connectionProperties.setProperty("user", username);
-        connectionProperties.setProperty("password", environment.getRequiredProperty(POSTGRESQL_PASSWORD));
-        connectionProperties.setProperty("ApplicationName", "guacamole-pam");
 
         maxConnections = Math.max(2, environment.getProperty(MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS));
 
@@ -206,9 +149,9 @@ public class PamDatabase {
         if (pool == null) {
             HikariConfig config = new HikariConfig();
             config.setPoolName("guacamole-pam");
-            config.setDriverClassName(DRIVER_CLASS);
-            config.setJdbcUrl(url);
-            config.setDataSourceProperties(connectionProperties);
+            config.setDriverClassName(settings.getDriverClass());
+            config.setJdbcUrl(settings.getUrl());
+            config.setDataSourceProperties(settings.getProperties());
             config.setMaximumPoolSize(maxConnections);
             config.setMinimumIdle(Math.min(MIN_IDLE_CONNECTIONS, maxConnections));
             config.setConnectionTimeout(CONNECTION_TIMEOUT_MS);
@@ -244,7 +187,7 @@ public class PamDatabase {
     public Connection getDedicatedConnection() throws GuacamoleException {
         Connection connection;
         try {
-            connection = driver.connect(url, connectionProperties);
+            connection = driver.connect(settings.getUrl(), settings.getProperties());
         }
         catch (SQLException e) {
             throw new GuacamoleServerException("Unable to connect to the PAM database.", e);
@@ -400,7 +343,7 @@ public class PamDatabase {
                 + " GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO \"{}\";"
                 + " GRANT SELECT,USAGE ON ALL SEQUENCES IN SCHEMA public TO \"{}\";"
                 + " Until then, connections stored in the database cannot be opened: their access cannot be checked.",
-                username, firstLine(e.getMessage()), username, username);
+                settings.getUsername(), firstLine(e.getMessage()), settings.getUsername(), settings.getUsername());
 
     }
 
