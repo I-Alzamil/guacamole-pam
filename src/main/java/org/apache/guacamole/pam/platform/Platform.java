@@ -15,7 +15,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * passwords are rotated.
  *
  * Secret settings are never serialized. Clients send new secret values in
- * {@link #getSettings()}; an empty value keeps the stored secret.
+ * {@link #getSettings()}; a missing (null) value keeps the stored secret,
+ * and an empty one removes it.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(JsonInclude.Include.NON_NULL)
