@@ -49,7 +49,10 @@
                         {{ connection.platformName || ('PAM.INFO_MISSING_PLATFORM' | translate) }}
                         <span class="pam-type-badge" ng-show="connection.platformType">{{ 'PAM.TYPE_' + (connection.platformType | uppercase) | translate }}</span>
                     </td>
-                    <td>{{ connection.lastSuccess ? (connection.lastSuccess | date:'medium') : ('PAM.INFO_NEVER' | translate) }}</td>
+                    <td>
+                        <span ng-if="connection.lastSuccess" title="{{ connection.lastSuccess | pamUtc }}">{{ connection.lastSuccess | date:'medium' }} {{ connection.lastSuccess | pamZone }}</span>
+                        <span ng-if="!connection.lastSuccess">{{ 'PAM.INFO_NEVER' | translate }}</span>
+                    </td>
                     <td class="pam-status">
                         <span class="pam-status-badge {{ connection.status | lowercase }}" ng-show="connection.status">
                             {{ 'PAM.STATUS_' + connection.status | translate }}

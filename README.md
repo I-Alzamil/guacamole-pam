@@ -19,7 +19,11 @@ Privileged access management for [Apache Guacamole](https://guacamole.apache.org
   one or more distinct approvers. A connection can also let the holder see its
   password, which is then rotated once they're done.
 - **Audit.** The checkout and approval histories are searchable and can be
-  exported as CSV.
+  exported as CSV. Times are stored as absolute times (in UTC where the
+  database's type has no time zone), shown in the browser's time zone with
+  its name (the UTC time on hover), and exported in ISO 8601 in that time
+  zone with its offset from UTC, such as `2026-10-22T16:18:20.372+03:00`,
+  which every reader and tool takes for the same moment.
 
 ## Requirements
 

@@ -110,6 +110,11 @@ angular.module('guacPam').directive('guacSettingsPamApprovals', [function guacSe
 
             };
 
+            /**
+             * Saves the history as CSV, with its times in ISO 8601: in the
+             * browser's time zone, with its offset from UTC, so they stay
+             * unambiguous wherever the file is read.
+             */
             $scope.downloadCSV = function downloadCSV() {
 
                 var headers = [
@@ -140,10 +145,10 @@ angular.module('guacPam').directive('guacSettingsPamApprovals', [function guacSe
                             request.connectionName,
                             request.accountName || '',
                             request.reason,
-                            $filter('date')(request.requested, $scope.dateFormat),
+                            $filter('pamLocalIso')(request.requested),
                             request.approvalsRequired,
                             request.status,
-                            request.decided ? $filter('date')(request.decided, $scope.dateFormat) : '',
+                            $filter('pamLocalIso')(request.decided),
                             wrapper.decidedBy,
                             request.decisionReason || ''
                         ]);

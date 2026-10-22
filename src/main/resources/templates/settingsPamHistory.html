@@ -48,11 +48,11 @@
                     <td class="pam-history-truncate"><a href="" class="pam-reason-link" ng-click="showReason(checkout.entry)"
                         title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ checkout.entry.reason }}</a></td>
                     <td class="pam-history-truncate" title="{{ checkout.entry.approvedBy.join(', ') }}">{{ checkout.entry.approvedBy.join(', ') }}</td>
-                    <td>{{ checkout.entry.checkedOut | date : dateFormat }}</td>
+                    <td><span title="{{ checkout.entry.checkedOut | pamUtc }}">{{ checkout.entry.checkedOut | date : dateFormat }} {{ checkout.entry.checkedOut | pamZone }}</span></td>
                     <td>{{ formatDuration(checkout.duration) }}</td>
                     <td class="pam-history-ended">
                         {{ endKey(checkout.entry) | translate }}
-                        <span ng-if="checkout.entry.released">{{ checkout.entry.released | date : dateFormat }}</span>
+                        <span ng-if="checkout.entry.released" title="{{ checkout.entry.released | pamUtc }}">{{ checkout.entry.released | date : dateFormat }} {{ checkout.entry.released | pamZone }}</span>
                         <span class="pam-ended-by" ng-if="checkout.entry.releasedBy && checkout.entry.releasedBy !== checkout.entry.username">
                             ({{ 'PAM_HISTORY.TEXT_ENDED_BY' | translate:{ USER: checkout.entry.releasedBy } }})
                         </span>

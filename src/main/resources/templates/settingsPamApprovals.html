@@ -24,7 +24,7 @@
                     <td>{{ request.username }}</td>
                     <td class="pam-truncate"><a href="" class="pam-reason-link" ng-click="showReason(request)"
                         title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ request.reason }}</a></td>
-                    <td>{{ request.requested | date:'medium' }}</td>
+                    <td><span title="{{ request.requested | pamUtc }}">{{ request.requested | date:'medium' }} {{ request.requested | pamZone }}</span></td>
                     <td>
                         {{ request.approvers.length }} / {{ request.approvalsRequired }}
                         <div class="pam-approvers" ng-show="request.approvers.length">{{ request.approvers.join(', ') }}</div>
@@ -98,9 +98,9 @@
                             <a href="" class="pam-reason-link" ng-click="showReason(decision.entry)"
                                title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ decision.entry.reason }}</a>
                         </td>
-                        <td>{{ decision.entry.requested | date : dateFormat }}</td>
+                        <td><span title="{{ decision.entry.requested | pamUtc }}">{{ decision.entry.requested | date : dateFormat }} {{ decision.entry.requested | pamZone }}</span></td>
                         <td><span class="pam-status-badge {{ decision.entry.status | lowercase }}">{{ 'PAM_APPROVALS.STATUS_' + decision.entry.status | translate }}</span></td>
-                        <td>{{ decision.entry.decided | date : dateFormat }}</td>
+                        <td><span title="{{ decision.entry.decided | pamUtc }}">{{ decision.entry.decided | date : dateFormat }} {{ decision.entry.decided | pamZone }}</span></td>
                         <td class="pam-history-truncate" title="{{ decision.decidedBy }}">{{ decision.decidedBy }}</td>
                         <td class="pam-history-truncate">
                             <a href="" class="pam-reason-link" ng-if="decision.entry.decisionReason" ng-click="showReason(decision.entry)"
@@ -132,7 +132,7 @@
             <h2 id="pam-approval-dialog-title">{{ (dialog.deny ? 'PAM_APPROVALS.DIALOG_HEADER_DENY' : 'PAM_APPROVALS.DIALOG_HEADER_REQUEST') | translate }}</h2>
             <p class="pam-request-hint">
                 {{ 'PAM_APPROVALS.TEXT_REQUEST_BY' | translate:{ USER: dialog.request.username, NAME: dialog.request.connectionName } }}
-                · {{ dialog.request.requested | date:'medium' }}
+                · <span title="{{ dialog.request.requested | pamUtc }}">{{ dialog.request.requested | date:'medium' }} {{ dialog.request.requested | pamZone }}</span>
             </p>
 
             <label>{{ 'PAM.TABLE_HEADER_REASON' | translate }}</label>

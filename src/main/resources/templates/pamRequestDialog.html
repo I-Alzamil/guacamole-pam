@@ -64,7 +64,7 @@
 
             <!-- Held by someone else -->
             <p ng-if="request.heldExclusively" class="pam-request-held">
-                {{ 'PAM.REQUEST.TEXT_HELD_BY_OTHER' | translate:{ USER: request.holders.join(', '), EXPIRES: (request.expires | date:'medium') } }}
+                {{ 'PAM.REQUEST.TEXT_HELD_BY_OTHER' | translate:{ USER: request.holders.join(', '), EXPIRES: (request.expires | date:'medium') + ' ' + (request.expires | pamZone) } }}
             </p>
 
             <!-- Others holding a shared password -->

@@ -125,6 +125,11 @@ angular.module('guacPam').directive('guacSettingsPamHistory', [function guacSett
 
             };
 
+            /**
+             * Saves the history as CSV, with its times in ISO 8601: in the
+             * browser's time zone, with its offset from UTC, so they stay
+             * unambiguous wherever the file is read.
+             */
             $scope.downloadCSV = function downloadCSV() {
 
                 var headers = [
@@ -158,9 +163,9 @@ angular.module('guacPam').directive('guacSettingsPamHistory', [function guacSett
                             checkout.remoteHost || '',
                             checkout.connectionName,
                             checkout.reason,
-                            $filter('date')(checkout.checkedOut, $scope.dateFormat),
-                            $filter('date')(checkout.expires, $scope.dateFormat),
-                            checkout.released ? $filter('date')(checkout.released, $scope.dateFormat) : '',
+                            $filter('pamLocalIso')(checkout.checkedOut),
+                            $filter('pamLocalIso')(checkout.expires),
+                            $filter('pamLocalIso')(checkout.released),
                             checkout.releaseReason || '',
                             checkout.releasedBy || '',
                             Math.round(wrapper.duration / 1000),

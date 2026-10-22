@@ -23,8 +23,8 @@
                     <td>{{ checkout.remoteHost }}</td>
                     <td class="pam-truncate"><a href="" class="pam-reason-link" ng-click="showReason(checkout)"
                         title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ checkout.reason }}</a></td>
-                    <td>{{ checkout.checkedOut | date:'medium' }}</td>
-                    <td>{{ checkout.expires | date:'medium' }}</td>
+                    <td><span title="{{ checkout.checkedOut | pamUtc }}">{{ checkout.checkedOut | date:'medium' }} {{ checkout.checkedOut | pamZone }}</span></td>
+                    <td><span title="{{ checkout.expires | pamUtc }}">{{ checkout.expires | date:'medium' }} {{ checkout.expires | pamZone }}</span></td>
                     <td><button class="danger" ng-click="revokeCheckout(checkout)">{{ 'PAM.ACTION_REVOKE' | translate }}</button></td>
                 </tr>
                 <tr ng-show="activeCheckouts && !activeCheckouts.length">
@@ -47,7 +47,7 @@
             <h2 id="pam-checkout-reason-title">{{ reasonShown.connectionName }}</h2>
             <p class="pam-request-hint">
                 {{ reasonShown.username }}<span ng-if="reasonShown.remoteHost"> ({{ reasonShown.remoteHost }})</span>
-                · {{ reasonShown.checkedOut | date:'medium' }}
+                · <span title="{{ reasonShown.checkedOut | pamUtc }}">{{ reasonShown.checkedOut | date:'medium' }} {{ reasonShown.checkedOut | pamZone }}</span>
             </p>
             <label>{{ 'PAM.TABLE_HEADER_REASON' | translate }}</label>
             <div class="pam-request-notes pam-reason-full">{{ reasonShown.reason }}</div>
