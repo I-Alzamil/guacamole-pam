@@ -466,10 +466,18 @@ The scripts at the top of the repository run a test setup with podman, on a
 network named `myguacnet`. They're meant for development only: they use fixed
 test passwords.
 
+The database is PostgreSQL unless `PAM_DB` says `mysql` (MySQL 8.4),
+`mariadb` (MariaDB 11.4) or `sqlserver` (SQL Server 2022) when `build.sh` or
+`reset.sh` starts it, as `PAM_DB=sqlserver ./build.sh`. The other scripts
+and the tests use whichever is running. Each keeps its own data
+(`podman/db` for PostgreSQL, podman volumes for the others), created with
+Guacamole's schema and `guacadmin` / `guacadmin` on first start
+(`podman/database.sh`).
+
 | Script | What it does |
 |---|---|
-| `reset.sh` | Recreates the Guacamole database from `podman/init/initdb.sql` (Guacamole's schema, with `guacadmin` / `guacadmin`) |
-| `build.sh` | Builds the jar and (re)starts PostgreSQL, guacd and Guacamole with the extension, on http://localhost:8080. Stored secrets are encrypted with a fixed test key; run `PAM_ENCRYPTION_KEY= ./build.sh` to store them unencrypted |
+| `reset.sh` | Recreates the Guacamole database, with only Guacamole's schema and `guacadmin` / `guacadmin` |
+| `build.sh` | Builds the jar and (re)starts the database, guacd and Guacamole with the extension, on http://localhost:8080. Stored secrets are encrypted with a fixed test key; run `PAM_ENCRYPTION_KEY= ./build.sh` to store them unencrypted |
 | `startssh.sh` | SSH server `mysshtest` on port 22, user `mysshtest` / `P@ssw0rd` |
 | `startldap.sh` | OpenLDAP server `myldaptest`, test user `uid=ldaptest,ou=people,dc=example,dc=org` |
 | `startad.sh` | Samba Active Directory `myadtest` (LDAPS and Kerberos), test user `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`. Prints the certificate fingerprint to pin |

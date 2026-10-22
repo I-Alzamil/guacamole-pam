@@ -6,9 +6,12 @@
 # Everything a suite creates is named with the "t2" prefix and removed by its
 # cleanup, which runs even when a check fails.
 
+# The test database (podman/database.sh): its "sql" and Guacamole data source
+source "$(dirname "${BASH_SOURCE[0]}")/../podman/database.sh"
+
 GUAC_URL="${GUAC_URL:-http://localhost:8080}"
 API="$GUAC_URL/api"
-DATA="$API/session/data/postgresql"
+DATA="$API/session/data/$PAM_DATA_SOURCE"
 PAM="$API/session/ext/pam"
 GUAC_ADMIN="${GUAC_ADMIN:-guacadmin}"
 GUAC_ADMIN_PASSWORD="${GUAC_ADMIN_PASSWORD:-guacadmin}"
@@ -56,7 +59,7 @@ run_cleanup() {
     for ((i = ${#T2_CLEANUP[@]} - 1; i >= 0; i--)); do
         result=$(eval "${T2_CLEANUP[$i]}" 2>&1)
         case "${T2_CLEANUP[$i]}" in
-            api\ *) case "$result" in 2[0-9][0-9]\ *|2[0-9][0-9]) ;; *)
+            api\ *|delete_user_group\ *) case "$result" in 2[0-9][0-9]\ *|2[0-9][0-9]) ;; *)
                 printf '  CLEANUP FAILED  %s\n        %s\n' "${T2_CLEANUP[$i]}" "${result:0:200}";;
             esac;;
         esac
@@ -142,12 +145,25 @@ create_user() {
     on_cleanup "api DELETE '$DATA/users/$1' \"\$ADMIN\""
 }
 
+# delete_user_group NAME -> "HTTP-STATUS BODY". Guacamole 1.6 cannot delete
+# user groups on MySQL (its statement lacks an AND), so there the group is
+# removed from the database instead, as Guacamole would
+delete_user_group() {
+    local result
+    result=$(api DELETE "$DATA/userGroups/$1" "$ADMIN")
+    if [ "${result%% *}" = 500 ] && [ "$PAM_DATA_SOURCE" = mysql ] \
+            && sql "DELETE FROM guacamole_entity WHERE type = 'USER_GROUP' AND name = '$1'"; then
+        result="204 removed from the database"
+    fi
+    printf '%s\n' "$result"
+}
+
 # create_user_group NAME ATTRIBUTES-JSON MEMBER... (removed at cleanup)
 create_user_group() {
     local name=$1 attributes=$2 member
     shift 2
     api POST "$DATA/userGroups" "$ADMIN" "{\"identifier\":\"$name\",\"attributes\":$attributes}" >/dev/null
-    on_cleanup "api DELETE '$DATA/userGroups/$name' \"\$ADMIN\""
+    on_cleanup "delete_user_group '$name'"
     for member in "$@"; do
         api PATCH "$DATA/userGroups/$name/memberUsers" "$ADMIN" "[{\"op\":\"add\",\"path\":\"/\",\"value\":\"$member\"}]" >/dev/null
     done
@@ -165,11 +181,11 @@ parameter() {
     local value
     value=$(json_get "$(curl -s "$DATA/connections/$1/parameters?token=$ADMIN")" "d.get('$2')")
     if [ "$value" = '********' ]; then
-        value=$(podman exec myguacdbtest psql -U postgres -tAc "SELECT parameter_value
+        value=$(sql "SELECT parameter_value
             FROM guacamole_connection_parameter WHERE connection_id = $1 AND parameter_name = '$2'")
     fi
     if [[ "$value" == '${PAM_'*"_$1}" ]]; then
-        value=$(reveal "connection-secret:$1:$2" "$(podman exec myguacdbtest psql -U postgres -tAc \
+        value=$(reveal "connection-secret:$1:$2" "$(sql \
             "SELECT value FROM pam_connection_secret WHERE connection_id = $1 AND parameter_name = '$2'")")
     fi
     printf '%s\n' "$value"
@@ -215,7 +231,7 @@ rotate() {
 # tunnel TOKEN ID TYPE(c|g) -> "HTTP-STATUS [error message]"
 tunnel() {
     curl -s -m 8 -D - -o /dev/null -X POST "$GUAC_URL/tunnel?connect" --data \
-        "token=$1&GUAC_DATA_SOURCE=postgresql&GUAC_ID=$2&GUAC_TYPE=$3&GUAC_WIDTH=800&GUAC_HEIGHT=600&GUAC_DPI=96" \
+        "token=$1&GUAC_DATA_SOURCE=$PAM_DATA_SOURCE&GUAC_ID=$2&GUAC_TYPE=$3&GUAC_WIDTH=800&GUAC_HEIGHT=600&GUAC_DPI=96" \
         | tr -d '\r' | awk '/^HTTP\// {s=$2} tolower($0) ~ /^guacamole-error-message:/ {sub(/^[^:]*: */,""); m=$0} END {print s (m ? " " m : "")}'
 }
 
@@ -227,6 +243,21 @@ ssh_accepts() {
     podman exec -e T2PW="$2" -e SSH_ASKPASS=/usr/local/bin/t2askpass -e SSH_ASKPASS_REQUIRE=force mysshtest \
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o PubkeyAuthentication=no \
         -o NumberOfPasswordPrompts=1 -o LogLevel=ERROR "$1@localhost" true >/dev/null 2>&1 && echo yes || echo no
+}
+
+# known_ssh_password SEEDED-ID -> mysshtest's current password: that of the
+# seeded connection (seed.sh), whose password suites keep in step with the
+# account; otherwise the image's, set again on the server if a rotation
+# without a seeded connection to keep it changed it
+known_ssh_password() {
+    local password
+    password=$( [ -n "$1" ] && parameter "$1" password )
+    if [ "$(ssh_accepts mysshtest "$password")" != yes ]; then
+        password='P@ssw0rd'
+        [ "$(ssh_accepts mysshtest "$password")" = yes ] \
+            || podman exec mysshtest sh -c "echo 'mysshtest:$password' | chpasswd" >/dev/null 2>&1
+    fi
+    printf '%s\n' "$password"
 }
 
 openldap_accepts() {

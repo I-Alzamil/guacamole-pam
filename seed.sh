@@ -21,6 +21,9 @@
 #     Vendor portal     stored-only account, 2 approvals
 #     test              stored-only account, 1 approval
 
+# Guacamole's data source of the test database (PAM_DATA_SOURCE)
+source "$(dirname "$0")/podman/database.sh"
+
 # SHA-256 fingerprint of a certificate file inside a container, or empty
 fingerprint() {
     podman exec "$1" cat "$2" 2>/dev/null | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2
@@ -62,7 +65,7 @@ else:
     sys.exit("Guacamole does not answer on " + B)
 
 T = call("POST", "/tokens", form={"username": "guacadmin", "password": "guacadmin"})["authToken"]
-D, E = "/session/data/postgresql", "/session/ext/pam"
+D, E = "/session/data/" + os.environ.get("PAM_DATA_SOURCE", "postgresql"), "/session/ext/pam"
 
 # Platforms
 platforms = {p["name"]: p["id"] for p in call("GET", E + "/platforms", token=T)}

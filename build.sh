@@ -1,4 +1,9 @@
 #!/bin/bash
+# Builds the extension and starts it in Guacamole on port 8080, with guacd
+# and the test database (PostgreSQL, or PAM_DB=mysql, mariadb or sqlserver:
+# see podman/database.sh).
+cd "$(dirname "$0")" || exit 1
+source ./podman/database.sh
 # Stop previous containers
 podman stop myguactest
 podman stop myguacdtest
@@ -9,14 +14,8 @@ podman stop --ignore myguactest2
 mvn clean
 mvn package
 # Start db
-podman run --rm -d \
---name myguacdbtest \
---hostname myguacdbtest \
---net myguacnet \
--e POSTGRES_PASSWORD=mysecretpassword \
--e PGDATA=/var/lib/postgresql/data/pgdata \
--v ./podman/db:/var/lib/postgresql/data:Z \
-docker.io/postgres:18.4
+db_start
+db_wait || exit 1
 # Start gaucd
 podman run --rm -d \
 --name myguacdtest \
@@ -25,18 +24,16 @@ podman run --rm -d \
 docker.io/guacamole/guacd:1.6.0
 # Start guacamole. Stored secrets are encrypted with a fixed test key (for
 # development only); run with PAM_ENCRYPTION_KEY= to store them unencrypted
+mapfile -t DB_ENV < <(db_guacamole_env)
 podman run --rm -d \
 --name myguactest \
 --hostname myguactest \
 --net myguacnet \
 -e GUACD_HOSTNAME=myguacdtest \
--e POSTGRESQL_HOSTNAME=myguacdbtest \
--e POSTGRESQL_DATABASE=postgres \
--e POSTGRESQL_USER=postgres \
--e POSTGRESQL_PASSWORD=mysecretpassword \
+"${DB_ENV[@]}" \
 -e WEBAPP_CONTEXT=ROOT \
 -e PAM_ENCRYPTION_KEY="${PAM_ENCRYPTION_KEY-um/hqZa6cc89CtHmc9vYOuoDd8S1jY8IaASlz5S00iY=}" \
 -p 8080:8080 \
 -v "$(./podman/extension-jar.sh)":/opt/guacamole/extensions/guacamole-pam.jar:Z \
 -v ./podman/entrypoint.d/855-add-pam.sh:/opt/guacamole/entrypoint.d/855-add-pam.sh:Z \
-docker.io/guacamole/guacamole:1.6.0
+"$PAM_GUACAMOLE_IMAGE"

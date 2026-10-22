@@ -3,16 +3,16 @@
 # default, only to the holder, each display recorded, and a managed password
 # rotated once the connection is no longer in use, whatever its rotation mode.
 
-sql() { podman exec myguacdbtest psql -U postgres -tAc "$1"; }
 shown() { # TOKEN ID -> "STATUS password username"
     local r
     r=$(api POST "$PAM/requests/$2/password" "$1")
     printf '%s %s\n' "$(status_of "$r")" "$(json_get "${r#* }" "(d.get('password') or '') + ' ' + (d.get('accountName') or '')")"
 }
 reveal_count() { # ID -> how many times the latest checkout showed the password
-    sql "SELECT reveal_count FROM pam_checkout WHERE connection_id = $1 ORDER BY checkout_id DESC LIMIT 1"
+    sql "SELECT reveal_count FROM pam_checkout WHERE checkout_id = (SELECT max(checkout_id) FROM pam_checkout
+         WHERE connection_id = $1)"
 }
-last_success() { sql "SELECT coalesce(last_success::text, '') FROM pam_rotation_state WHERE connection_id = $1"; }
+last_success() { sql "SELECT last_success FROM pam_rotation_state WHERE connection_id = $1"; }
 wait_for_rotation() { # ID SINCE: waits up to 30 seconds for a rotation after SINCE; yes or no
     local i
     for i in $(seq 30); do
@@ -26,8 +26,7 @@ wait_for_rotation() { # ID SINCE: waits up to 30 seconds for a rotation after SI
 section "Setup"
 # mysshtest's account is shared with the seeded "PAM test (Linux)" connection
 SEEDED=$(connection_id "PAM test (Linux)")
-SSH_PASSWORD=$( [ -n "$SEEDED" ] && parameter "$SEEDED" password )
-[ "$(ssh_accepts mysshtest "$SSH_PASSWORD")" = yes ] || SSH_PASSWORD='P@ssw0rd'
+SSH_PASSWORD=$(known_ssh_password "$SEEDED")
 check "precondition: the SSH server's password is known" yes "$(ssh_accepts mysshtest "$SSH_PASSWORD")"
 LINUX=$(platform_id "Unix")
 create_connection SHOWN "{\"name\":\"t2 reveal managed\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",
@@ -85,7 +84,7 @@ check_contains "the history shows the displays" "'revealCount': 2" \
 
 # ---------------------------------------------------------------- rotation
 section "Rotated once released, although its mode is never"
-SINCE=$(sql "SELECT now()")
+SINCE=$(sql "SELECT $(sql_now)")
 api POST "$PAM/requests/$SHOWN/release" "$HOLDER" >/dev/null
 check "a rotation follows the release" yes "$(wait_for_rotation "$SHOWN" "$SINCE")"
 AFTER=$(parameter "$SHOWN" password)
@@ -96,7 +95,7 @@ check_contains "...logged as caused by the display" "Rotation (password shown) o
     "$(podman logs --since 1m myguactest 2>&1 | grep 'password shown')"
 
 # A checkout that showed nothing leaves a "never" password alone
-SINCE=$(sql "SELECT now()")
+SINCE=$(sql "SELECT $(sql_now)")
 api POST "$PAM/requests/$SHOWN" "$HOLDER" '{"reason":"T2 reveal unused"}' >/dev/null
 api POST "$PAM/requests/$SHOWN/release" "$HOLDER" >/dev/null
 sleep 8

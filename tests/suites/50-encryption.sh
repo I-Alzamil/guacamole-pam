@@ -12,7 +12,6 @@ if [ -z "$PAM_TEST_KEY" ]; then
     return 0
 fi
 
-sql() { podman exec myguacdbtest psql -U postgres -tAc "$1"; }
 stored_password() { sql "SELECT parameter_value FROM guacamole_connection_parameter WHERE connection_id = $1 AND parameter_name = 'password'"; }
 raw_parameter() { json_get "$(curl -s "$DATA/connections/$1/parameters?token=$ADMIN")" "d.get('password')"; }
 is_encrypted() { case "$1" in pam:v1:*) echo yes;; *) echo no;; esac; }
@@ -49,9 +48,10 @@ check "...for this Account alone" "$ACCOUNT_PASSWORD" "$(reveal "connection-secr
 check "a connection's password is kept apart, behind its token" "\${PAM_PASSWORD_$SSH}" "$(stored_password "$SSH")"
 check "...and is the password" "T2-Ssh-Plain1!" "$(parameter "$SSH" password)"
 check "no Account password is left in its field" 0 \
-    "$(sql "SELECT count(*) FROM guacamole_connection_parameter p JOIN guacamole_connection c USING (connection_id)
+    "$(sql "SELECT count(*) FROM guacamole_connection_parameter p
+            JOIN guacamole_connection c ON c.connection_id = p.connection_id
             WHERE c.protocol = 'pam-account' AND p.parameter_name = 'password'
-            AND p.parameter_value <> '\${PAM_PASSWORD_' || p.connection_id || '}'")"
+            AND p.parameter_value <> CONCAT('\${PAM_PASSWORD_', p.connection_id, '}')")"
 check "no platform secrets are stored as plaintext" 0 "$(sql "SELECT count(*) FROM pam_platform WHERE secrets NOT LIKE 'pam:v1:%'")"
 
 # ---------------------------------------------------------------- API
@@ -96,8 +96,7 @@ check "...which a checkout hands over" "$AFTER" "$(checkout_password "$ACCOUNT")
 # until the rotation is confirmed: seen during a rotation slowed down on the
 # SSH server, whose account the seeded "PAM test (Linux)" connection shares
 SEEDED=$(connection_id "PAM test (Linux)")
-SSH_PASSWORD=$( [ -n "$SEEDED" ] && parameter "$SEEDED" password )
-[ "$(ssh_accepts mysshtest "$SSH_PASSWORD")" = yes ] || SSH_PASSWORD='P@ssw0rd'
+SSH_PASSWORD=$(known_ssh_password "$SEEDED")
 create_platform SLOW '{"name":"t2 enc slow passwd","type":"ssh","settings":{"script":"@timeout 20\nsleep 5; passwd\n@expect assword:\n<OLDPASS>\n@expect assword:\n<NEWPASS>\n@expect assword:\n<NEWPASS>\n@regex (?i)(success|updated|changed)\n"},"policy":{}}'
 create_connection SLOW_C "{\"name\":\"t2 enc slow\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",
     \"parameters\":{\"hostname\":\"mysshtest\",\"port\":\"22\",\"username\":\"mysshtest\",\"password\":\"$SSH_PASSWORD\"},
@@ -204,8 +203,7 @@ check "...and stay in the parameter, for Guacamole to replace" '${GUAC_PASSWORD}
 check "...with nothing kept for them" "" "$(kept "$SSH")"
 
 # Moved in the database, a kept value does not decrypt for another connection
-sql "UPDATE pam_connection_secret SET value = (SELECT value FROM pam_connection_secret
-     WHERE connection_id = $SLOW_C AND parameter_name = 'password') WHERE connection_id = $MANAGED" >/dev/null
+sql "UPDATE pam_connection_secret SET value = '$(kept "$SLOW_C")' WHERE connection_id = $MANAGED" >/dev/null
 check "another connection's kept password, moved in the database, is refused" 500 "$(tunnel "$ADMIN" "$MANAGED" c | cut -d' ' -f1)"
 check_contains "...and the log says why" 'Connection "t2 enc managed renamed" cannot be opened: A secret could not be decrypted' \
     "$(podman logs --since 1m myguactest 2>&1 | grep 'cannot be opened')"
@@ -253,6 +251,6 @@ done
 sleep 4
 for i in 1 2; do kill "$(cat "$T2_TMP/balance-$i.pid")" 2>/dev/null; done
 check "two sessions through the group open both members" "$(printf '%s\n' "$MEMBER_PW" "$MEMBER_KEY" | sort | xargs)" \
-    "$(sql "SELECT string_agg(DISTINCT connection_id::text, ' ' ORDER BY connection_id::text) FROM guacamole_connection_history
-            WHERE history_id > $HISTORY AND connection_id IN ($MEMBER_PW, $MEMBER_KEY)")"
+    "$(sql "SELECT DISTINCT connection_id FROM guacamole_connection_history
+            WHERE history_id > $HISTORY AND connection_id IN ($MEMBER_PW, $MEMBER_KEY)" | sort | xargs)"
 check "...and both log in, with their own secrets" 2 "$(guacd_logged_in_since "$SINCE")"

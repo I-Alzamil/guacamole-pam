@@ -40,7 +40,6 @@ wait_for() {
     echo no
 }
 
-sql() { podman exec myguacdbtest psql -U postgres -tAc "$1"; }
 session_rows() { sql "SELECT count(*) FROM pam_session WHERE connection_id = $1"; }
 # The helper reports "closed" at once; Guacamole ends the tunnel itself up to
 # 15 seconds later, when the client's reads stop
@@ -59,8 +58,7 @@ print(m[0] if m else '')" "$3"
 
 section "Setup"
 SEEDED=$(connection_id "PAM test (Linux)")
-SSH_PASSWORD=$( [ -n "$SEEDED" ] && parameter "$SEEDED" password )
-[ "$(ssh_accepts mysshtest "$SSH_PASSWORD")" = yes ] || SSH_PASSWORD='P@ssw0rd'
+SSH_PASSWORD=$(known_ssh_password "$SEEDED")
 check "precondition: mysshtest's current password is known" yes "$(ssh_accepts mysshtest "$SSH_PASSWORD")"
 
 LINUX=$(platform_id "Unix")
@@ -160,10 +158,10 @@ sleep 10 # lets after-use rotations of earlier sessions finish
 edit_connection "$ADMIN" "$SSH_C" '' '{"pam-rotation-mode":"after-use"}' >/dev/null
 PASSWORD=$(parameter "$SSH_C" password)
 sql "INSERT INTO pam_session (session_id, connection_id, username, server, started, heartbeat)
-     VALUES ('t2-fresh', $SSH_C, 't2-servers', 't2-running', now(), now())" >/dev/null
+     VALUES ('t2-fresh', $SSH_C, 't2-servers', 't2-running', $(sql_now), $(sql_now))" >/dev/null
 check "a session recorded by another running server counts" 1 "$(active_sessions "$PAM" "$ADMIN" "$SSH_C")"
-sql "UPDATE pam_session SET server = 't2-stopped', started = now() - interval '1 hour',
-     heartbeat = now() - interval '10 minutes' WHERE session_id = 't2-fresh'" >/dev/null
+sql "UPDATE pam_session SET server = 't2-stopped', started = $(sql_ago 3600),
+     heartbeat = $(sql_ago 600) WHERE session_id = 't2-fresh'" >/dev/null
 check "once its heartbeat is stale, it no longer counts" 0 "$(active_sessions "$PAM" "$ADMIN" "$SSH_C")"
 check "a server removes it, and rotates the connection after use" yes "$(wait_for 90 password_changed "$SSH_C" "$PASSWORD")"
 check "...and the server accepts the new password" yes "$(ssh_accepts mysshtest "$(parameter "$SSH_C" password)")"

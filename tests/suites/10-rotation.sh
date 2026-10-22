@@ -16,8 +16,7 @@ section "SSH: Unix, the account changes its own password"
 # The image only lets its own user in, so the seeded connection's account is
 # used, and its new password is written back to that connection afterwards
 SEEDED=$(connection_id "PAM test (Linux)")
-SSH_PASSWORD=$( [ -n "$SEEDED" ] && parameter "$SEEDED" password )
-[ "$(ssh_accepts mysshtest "$SSH_PASSWORD")" = yes ] || SSH_PASSWORD='P@ssw0rd'
+SSH_PASSWORD=$(known_ssh_password "$SEEDED")
 check "precondition: mysshtest's current password is known" yes "$(ssh_accepts mysshtest "$SSH_PASSWORD")"
 
 LINUX=$(platform_id "Unix")

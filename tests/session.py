@@ -9,6 +9,7 @@ Prints "open" once the tunnel is connected and "closed" when it ends, from
 either side. Ends the session cleanly on SIGTERM or SIGINT.
 """
 
+import os
 import signal
 import sys
 import threading
@@ -21,7 +22,7 @@ kind = sys.argv[4] if len(sys.argv) > 4 else "c"
 tunnel = url + "/tunnel"
 
 data = urllib.parse.urlencode({
-    "token": token, "GUAC_DATA_SOURCE": "postgresql", "GUAC_ID": connection, "GUAC_TYPE": kind,
+    "token": token, "GUAC_DATA_SOURCE": os.environ.get("PAM_DATA_SOURCE", "postgresql"), "GUAC_ID": connection, "GUAC_TYPE": kind,
     "GUAC_WIDTH": "800", "GUAC_HEIGHT": "600", "GUAC_DPI": "96",
 }).encode()
 

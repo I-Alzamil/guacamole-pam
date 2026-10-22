@@ -66,9 +66,9 @@ check "approver 2 (through a group) approves: request approved" "200 APPROVED" "
 
 GRANT=$(curl -s -D "$T2_TMP/headers" -X POST -H 'Content-Type: application/json' -d '{}' "$PAM/requests/$ACCOUNT?token=$REQUESTER")
 check "the requester now gets the password" "$ACCOUNT_PASSWORD" "$(json_get "$GRANT" "d.get('password')")"
-REQUESTED_FROM=$(podman exec myguacdbtest psql -U postgres -tAc "SELECT remote_host FROM pam_request WHERE request_id = $ID")
+REQUESTED_FROM=$(sql "SELECT remote_host FROM pam_request WHERE request_id = $ID")
 check "...in a checkout keeping the remote host the request came from" "yes $REQUESTED_FROM" \
-    "$([ -n "$REQUESTED_FROM" ] && echo yes) $(podman exec myguacdbtest psql -U postgres -tAc "SELECT k.remote_host
+    "$([ -n "$REQUESTED_FROM" ] && echo yes) $(sql "SELECT k.remote_host
         FROM pam_checkout k JOIN pam_request r ON r.checkout_id = k.checkout_id WHERE r.request_id = $ID")"
 check_contains "...in a response that is never cached" "no-store" "$(grep -i '^cache-control' "$T2_TMP/headers")"
 check "the requester releases it" 204 "$(status_of "$(api POST "$PAM/requests/$ACCOUNT/release" "$REQUESTER")")"
@@ -113,8 +113,8 @@ HOST=$(curl -s "$PAM/checkouts/active?token=$ADMIN" | python3 -I -c "
 import sys,json; print([c.get('remoteHost') or '' for c in json.load(sys.stdin) if c['id']==int(sys.argv[1])][0])" "$ACTIVE")
 check "...with the remote host the user requested from" yes "$([ -n "$HOST" ] && echo yes)"
 check "...as Guacamole's connection history records it for the session" "$HOST" \
-    "$(podman exec myguacdbtest psql -U postgres -tAc "SELECT remote_host FROM guacamole_connection_history
-        WHERE username = 't2-requester' AND connection_id = $GATED ORDER BY start_date DESC LIMIT 1")"
+    "$(sql "SELECT remote_host FROM guacamole_connection_history WHERE history_id = (SELECT max(history_id)
+        FROM guacamole_connection_history WHERE username = 't2-requester' AND connection_id = $GATED)")"
 check "...and the history can be searched by it" yes "$(curl -s -G --data-urlencode "contains=$HOST" \
     --data-urlencode "contains=T2 maintenance" "$PAM/checkouts/history?token=$ADMIN" | python3 -I -c "
 import sys,json; print('yes' if any(c['id']==int(sys.argv[1]) for c in json.load(sys.stdin)) else 'no')" "$ACTIVE")"
@@ -126,7 +126,7 @@ check_contains "...and the connection refuses a new session" "403 You must reque
 section "A checkout past its time limit, not ended yet"
 check "the requester checks out the gated connection again" 200 \
     "$(status_of "$(api POST "$PAM/requests/$GATED" "$REQUESTER" '{"reason":"T2 expiry"}')")"
-podman exec myguacdbtest psql -U postgres -qc "UPDATE pam_checkout SET expires = CURRENT_TIMESTAMP - interval '1 second'
+sql "UPDATE pam_checkout SET expires = $(sql_ago 1)
     WHERE connection_id = $GATED AND released IS NULL" >/dev/null
 check_contains "once past its time limit, it opens no session" "403 You must request access" "$(tunnel "$REQUESTER" "$GATED" c)"
 check "...and a new request is granted at once" 200 \

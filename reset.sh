@@ -1,15 +1,15 @@
 #!/bin/bash
+# Starts the test database afresh, with only Guacamole's schema and its
+# guacadmin user (PostgreSQL, or PAM_DB=mysql, mariadb or sqlserver: see
+# podman/database.sh). Run build.sh afterwards.
+cd "$(dirname "$0")" || exit 1
+source ./podman/database.sh
 # Make sure all container are stopped
 podman stop myguactest
 podman stop myguacdtest
 podman stop myguacdbtest
 # Remove old DB
-sudo rm -rf podman/db/*
+db_reset
 # Start db and init db
-podman run --rm -d \
---name myguacdbtest \
--e POSTGRES_PASSWORD=mysecretpassword \
--e PGDATA=/var/lib/postgresql/data/pgdata \
--v ./podman/db:/var/lib/postgresql/data:Z \
--v ./podman/init/initdb.sql:/docker-entrypoint-initdb.d/initdb.sql:Z \
-docker.io/postgres:18.4
+db_start
+db_wait

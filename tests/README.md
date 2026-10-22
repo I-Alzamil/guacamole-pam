@@ -46,6 +46,11 @@ extension (OpenSSH, `ldapwhoami`, Samba's `ldapsearch`, MIT `kinit`).
 
 `seed.sh` is not needed: suites create what they use.
 
+The suites run against whichever database `build.sh` started: PostgreSQL by
+default, or `PAM_DB=mysql`, `mariadb` or `sqlserver` (see the main README's
+Development section). Queries they make directly go through `sql` in
+`podman/database.sh`, so every suite runs on each of them.
+
 ### Running
 
 ```
