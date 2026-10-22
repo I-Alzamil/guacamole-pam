@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -65,10 +66,13 @@ public class ConnectionSecrets {
 
     private final PamDatabase database;
 
+    private final SqlDialect dialect;
+
     private final Secrets secrets;
 
     public ConnectionSecrets(PamDatabase database, Secrets secrets) {
         this.database = database;
+        this.dialect = database.getDialect();
         this.secrets = secrets;
     }
 
@@ -224,7 +228,8 @@ public class ConnectionSecrets {
                 try {
                     for (Map.Entry<String, String> value : kept.entrySet()) {
                         keep(connection, connectionId, value.getKey(), value.getValue());
-                        setParameter(connection, connectionId, value.getKey(), token(value.getKey(), connectionId));
+                        ConnectionRepository.setParameter(dialect, connection, connectionId, value.getKey(),
+                                token(value.getKey(), connectionId));
                     }
                     for (String parameter : forgotten)
                         forget(connection, connectionId, parameter);
@@ -445,9 +450,12 @@ public class ConnectionSecrets {
      */
     void keep(Connection connection, int connectionId, String parameter, String value)
             throws SQLException, GuacamoleException {
-        try (PreparedStatement statement = connection.prepareStatement(
-                "INSERT INTO pam_connection_secret (connection_id, parameter_name, value) VALUES (?, ?, ?)"
-              + " ON CONFLICT (connection_id, parameter_name) DO UPDATE SET value = EXCLUDED.value")) {
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("connection_id", "?");
+        values.put("parameter_name", "?");
+        values.put("value", "?");
+        try (PreparedStatement statement = connection.prepareStatement(dialect.upsert("pam_connection_secret",
+                Arrays.asList("connection_id", "parameter_name"), values, "value = EXCLUDED.value"))) {
             statement.setInt(1, connectionId);
             statement.setString(2, parameter);
             statement.setString(3, secrets.protect(purpose(connectionId, parameter), value));
@@ -460,19 +468,6 @@ public class ConnectionSecrets {
                 "DELETE FROM pam_connection_secret WHERE connection_id = ? AND parameter_name = ?")) {
             statement.setInt(1, connectionId);
             statement.setString(2, parameter);
-            statement.executeUpdate();
-        }
-    }
-
-    private static void setParameter(Connection connection, int connectionId, String parameter, String value)
-            throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(
-                "INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, parameter_value)"
-              + " VALUES (?, ?, ?) ON CONFLICT (connection_id, parameter_name)"
-              + " DO UPDATE SET parameter_value = EXCLUDED.parameter_value")) {
-            statement.setInt(1, connectionId);
-            statement.setString(2, parameter);
-            statement.setString(3, value);
             statement.executeUpdate();
         }
     }
@@ -493,8 +488,11 @@ public class ConnectionSecrets {
             List<Misplaced> misplaced = new ArrayList<>();
             try (PreparedStatement statement = connection.prepareStatement(
                     "SELECT connection_id, parameter_name, parameter_value FROM guacamole_connection_parameter"
-                  + " WHERE parameter_name = ANY (?) AND parameter_value <> ''")) {
-                statement.setArray(1, connection.createArrayOf("varchar", SENSITIVE.toArray()));
+                  + " WHERE parameter_name IN " + SqlDialect.parameters(SENSITIVE.size())
+                  + " AND parameter_value <> ''")) {
+                int index = 1;
+                for (String name : SENSITIVE)
+                    statement.setString(index++, name);
                 try (ResultSet results = statement.executeQuery()) {
                     while (results.next()) {
                         int id = results.getInt(1);

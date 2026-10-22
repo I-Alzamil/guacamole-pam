@@ -29,6 +29,7 @@ import org.apache.guacamole.pam.Values;
 import org.apache.guacamole.pam.crypto.MigrationReport;
 import org.apache.guacamole.pam.crypto.Secrets;
 import org.apache.guacamole.pam.db.PamDatabase;
+import org.apache.guacamole.pam.db.SqlDialect;
 import org.apache.guacamole.pam.management.ManagementType;
 import org.apache.guacamole.pam.management.ManagementTypes;
 
@@ -40,8 +41,6 @@ import org.apache.guacamole.pam.management.ManagementTypes;
  * reach a client.
  */
 public class PlatformRepository {
-
-    private static final String UNIQUE_VIOLATION = "23505";
 
     private static final int MAX_NAME_LENGTH = 128;
 
@@ -210,8 +209,9 @@ public class PlatformRepository {
 
         try (PreparedStatement statement = connection.prepareStatement(
                 "INSERT INTO pam_platform (name, description, type, settings, secrets, policy)"
-              + " VALUES (?, ?, ?, ?, ?, ?)"
-              + (unlessExisting ? " ON CONFLICT (name) DO NOTHING" : "") + " RETURNING platform_id")) {
+              + (unlessExisting
+                  ? " SELECT ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM pam_platform WHERE name = ?)"
+                  : " VALUES (?, ?, ?, ?, ?, ?)"), new String[] { "platform_id" })) {
 
             statement.setString(1, clean.getName());
             statement.setString(2, clean.getDescription());
@@ -219,8 +219,12 @@ public class PlatformRepository {
             statement.setString(4, toJson(clean.getSettings()));
             statement.setString(5, secrets.protect(Secrets.PLATFORM_SECRETS, toJson(clean.getSecrets())));
             statement.setString(6, toJson(clean.getPolicy()));
+            if (unlessExisting)
+                statement.setString(7, clean.getName());
 
-            try (ResultSet results = statement.executeQuery()) {
+            if (statement.executeUpdate() == 0)
+                return -1;
+            try (ResultSet results = statement.getGeneratedKeys()) {
                 return results.next() ? results.getInt(1) : -1;
             }
 
@@ -264,7 +268,7 @@ public class PlatformRepository {
     void update(Connection connection, int id, Platform clean) throws SQLException, GuacamoleException {
         try (PreparedStatement statement = connection.prepareStatement(
                 "UPDATE pam_platform SET name = ?, description = ?, settings = ?, secrets = ?, policy = ?,"
-              + " last_modified = CURRENT_TIMESTAMP WHERE platform_id = ?")) {
+              + " last_modified = " + database.getDialect().now() + " WHERE platform_id = ?")) {
             statement.setString(1, clean.getName());
             statement.setString(2, clean.getDescription());
             statement.setString(3, toJson(clean.getSettings()));
@@ -501,8 +505,16 @@ public class PlatformRepository {
         return names;
     }
 
-    private static GuacamoleException translate(SQLException e, Platform platform) {
-        if (UNIQUE_VIOLATION.equals(e.getSQLState()))
+    /**
+     * Whether the error is a violation of a unique index, such as that of
+     * platform names.
+     */
+    boolean isUniqueViolation(SQLException e) {
+        return database.getDialect().isUniqueViolation(e);
+    }
+
+    private GuacamoleException translate(SQLException e, Platform platform) {
+        if (isUniqueViolation(e))
             return new GuacamoleClientException("A platform named \"" + platform.getName() + "\" already exists.");
         return new GuacamoleServerException("Unable to save platform.", e);
     }
@@ -558,7 +570,7 @@ public class PlatformRepository {
                 ? fromJson(secrets.reveal(Secrets.PLATFORM_SECRETS, results.getString("secrets")))
                 : new HashMap<String, String>());
         platform.setPolicy(fromJson(results.getString("policy")));
-        platform.setLastModified(results.getTimestamp("last_modified").getTime());
+        platform.setLastModified(SqlDialect.getTimestamp(results, "last_modified").getTime());
         return platform;
     }
 

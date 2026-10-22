@@ -1,13 +1,11 @@
 package org.apache.guacamole.pam.checkout;
 
-import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -20,16 +18,17 @@ import org.apache.guacamole.GuacamoleResourceNotFoundException;
 import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.pam.db.PamDatabase;
 import org.apache.guacamole.pam.db.SearchPattern;
+import org.apache.guacamole.pam.db.SqlDialect;
 
 /**
- * Storage of checkouts in "pam_checkout". Creating a checkout locks its
- * connection for the duration of the transaction, so concurrent requests
- * cannot both get an exclusive checkout, or mix exclusive and shared ones.
- * Unique indexes enforce the same rules as a last line of defence.
+ * Storage of checkouts in "pam_checkout". Creating a checkout locks the row
+ * of its connection for the duration of the transaction, so concurrent
+ * requests cannot both get an exclusive checkout, or mix exclusive and
+ * shared ones. On PostgreSQL and MySQL, unique indexes enforce the same
+ * rules as a last line of defence (not on SQL Server: see
+ * schema/sqlserver.sql).
  */
 public class CheckoutRepository {
-
-    private static final String UNIQUE_VIOLATION = "23505";
 
     /**
      * The connection's current name, or the one it had once deleted.
@@ -37,16 +36,16 @@ public class CheckoutRepository {
     private static final String SELECT = "SELECT k.checkout_id, k.connection_id,"
             + " coalesce(c.connection_name, k.connection_name), k.username,"
             + " k.reason, k.checked_out, k.expires, k.released, k.release_reason, k.released_by, k.reveal_count,"
-            + " k.exclusive,"
-            + " (SELECT array_agg(a.approver ORDER BY a.approved) FROM pam_request r"
-            + "   JOIN pam_request_approval a ON a.request_id = r.request_id WHERE r.checkout_id = k.checkout_id),"
-            + " k.remote_host"
+            + " k.exclusive, k.remote_host"
             + " FROM pam_checkout k LEFT JOIN guacamole_connection c ON c.connection_id = k.connection_id";
 
     private final PamDatabase database;
 
+    private final SqlDialect dialect;
+
     public CheckoutRepository(PamDatabase database) {
         this.database = database;
+        this.dialect = database.getDialect();
     }
 
     /**
@@ -72,9 +71,13 @@ public class CheckoutRepository {
 
                 // Serializes checkouts of this connection until commit
                 try (PreparedStatement statement = connection.prepareStatement(
-                        "SELECT pg_advisory_xact_lock(?)")) {
+                        "SELECT connection_id FROM " + dialect.lockingRead("guacamole_connection")
+                      + " WHERE connection_id = ?" + dialect.forUpdate())) {
                     statement.setInt(1, connectionId);
-                    statement.execute();
+                    try (ResultSet results = statement.executeQuery()) {
+                        if (!results.next())
+                            throw new GuacamoleResourceNotFoundException("The connection no longer exists.");
+                    }
                 }
 
                 for (Checkout active : query(connection, SELECT
@@ -95,16 +98,17 @@ public class CheckoutRepository {
                 try (PreparedStatement statement = connection.prepareStatement(
                         "INSERT INTO pam_checkout (connection_id, connection_name, username, remote_host, reason,"
                       + " expires, exclusive, reveal_count) SELECT connection_id, connection_name, ?, ?, ?,"
-                      + " CURRENT_TIMESTAMP + make_interval(mins => ?), ?, ? FROM guacamole_connection"
-                      + " WHERE connection_id = ? RETURNING checkout_id")) {
+                      + " " + dialect.plusSeconds(dialect.now(), "?") + ", ?, ? FROM guacamole_connection"
+                      + " WHERE connection_id = ?", new String[] { "checkout_id" })) {
                     statement.setString(1, username);
                     statement.setString(2, remoteHost);
                     statement.setString(3, reason);
-                    statement.setInt(4, minutes);
+                    statement.setInt(4, minutes * 60);
                     statement.setBoolean(5, exclusive);
                     statement.setInt(6, revealCount);
                     statement.setInt(7, connectionId);
-                    try (ResultSet results = statement.executeQuery()) {
+                    statement.executeUpdate();
+                    try (ResultSet results = statement.getGeneratedKeys()) {
                         if (!results.next())
                             throw new GuacamoleResourceNotFoundException("The connection no longer exists.");
                         id = results.getInt(1);
@@ -122,7 +126,7 @@ public class CheckoutRepository {
 
         }
         catch (SQLException e) {
-            if (UNIQUE_VIOLATION.equals(e.getSQLState()))
+            if (dialect.isUniqueViolation(e))
                 throw new GuacamoleClientException("This password is already checked out.");
             throw new GuacamoleServerException("Unable to create the checkout.", e);
         }
@@ -152,11 +156,11 @@ public class CheckoutRepository {
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(SELECT
                  + " WHERE k.connection_id = ? AND k.username = ? AND k.released IS NULL"
-                 + " AND k.expires > CURRENT_TIMESTAMP")) {
+                 + " AND k.expires > " + dialect.now())) {
 
             statement.setInt(1, connectionId);
             statement.setString(2, username);
-            List<Checkout> checkouts = read(statement);
+            List<Checkout> checkouts = read(connection, statement);
             return checkouts.isEmpty() ? null : checkouts.get(0);
 
         }
@@ -207,22 +211,24 @@ public class CheckoutRepository {
      */
     public List<Checkout> search(List<String> terms, int limit) throws GuacamoleException {
 
-        StringBuilder sql = new StringBuilder(SELECT).append(" WHERE TRUE");
+        StringBuilder sql = new StringBuilder(SELECT).append(" WHERE 1 = 1");
         List<String> patterns = new ArrayList<>();
 
         for (String term : terms) {
             if (term == null || term.trim().isEmpty())
                 continue;
-            sql.append(" AND (k.username ILIKE ? ESCAPE '\\' OR coalesce(k.remote_host, '') ILIKE ? ESCAPE '\\'"
-                    + " OR coalesce(c.connection_name, k.connection_name) ILIKE ? ESCAPE '\\'"
-                    + " OR k.reason ILIKE ? ESCAPE '\\' OR coalesce(k.release_reason, '') ILIKE ? ESCAPE '\\'"
-                    + " OR coalesce(k.released_by, '') ILIKE ? ESCAPE '\\'"
+            sql.append(" AND (" + SearchPattern.matches("k.username")
+                    + " OR " + SearchPattern.matches("coalesce(k.remote_host, '')")
+                    + " OR " + SearchPattern.matches("coalesce(c.connection_name, k.connection_name)")
+                    + " OR " + SearchPattern.matches("k.reason")
+                    + " OR " + SearchPattern.matches("coalesce(k.release_reason, '')")
+                    + " OR " + SearchPattern.matches("coalesce(k.released_by, '')")
                     + " OR EXISTS (SELECT 1 FROM pam_request r JOIN pam_request_approval a ON a.request_id = r.request_id"
-                    + "   WHERE r.checkout_id = k.checkout_id AND a.approver ILIKE ? ESCAPE '\\'))");
+                    + "   WHERE r.checkout_id = k.checkout_id AND " + SearchPattern.matches("a.approver") + "))");
             patterns.add(SearchPattern.contains(term));
         }
 
-        sql.append(" ORDER BY k.checked_out DESC LIMIT ?");
+        sql.append(" ORDER BY k.checked_out DESC, k.checkout_id DESC").append(dialect.limit());
 
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql.toString())) {
@@ -234,7 +240,7 @@ public class CheckoutRepository {
             }
             statement.setInt(index, limit);
 
-            return read(statement);
+            return read(connection, statement);
 
         }
         catch (SQLException e) {
@@ -252,7 +258,7 @@ public class CheckoutRepository {
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                  "UPDATE pam_checkout SET reveal_count = reveal_count + 1"
-               + " WHERE checkout_id = ? AND released IS NULL AND expires > CURRENT_TIMESTAMP")) {
+               + " WHERE checkout_id = ? AND released IS NULL AND expires > " + dialect.now())) {
             statement.setInt(1, checkoutId);
             return statement.executeUpdate() > 0;
         }
@@ -301,7 +307,7 @@ public class CheckoutRepository {
 
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                 "UPDATE pam_checkout SET released = CURRENT_TIMESTAMP, release_reason = ?, released_by = ?"
+                 "UPDATE pam_checkout SET released = " + dialect.now() + ", release_reason = ?, released_by = ?"
                + " WHERE checkout_id = ? AND released IS NULL")) {
 
             statement.setString(1, releaseReason);
@@ -323,14 +329,26 @@ public class CheckoutRepository {
 
         List<Integer> expired = new ArrayList<>();
 
-        try (Connection connection = database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                 "UPDATE pam_checkout SET released = CURRENT_TIMESTAMP, release_reason = 'EXPIRED'"
-               + " WHERE released IS NULL AND expires <= CURRENT_TIMESTAMP RETURNING checkout_id");
-             ResultSet results = statement.executeQuery()) {
+        try (Connection connection = database.getConnection()) {
 
-            while (results.next())
-                expired.add(results.getInt(1));
+            List<Integer> due = new ArrayList<>();
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT checkout_id FROM pam_checkout WHERE released IS NULL AND expires <= " + dialect.now());
+                 ResultSet results = statement.executeQuery()) {
+                while (results.next())
+                    due.add(results.getInt(1));
+            }
+
+            // Each released once, here or by another server
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE pam_checkout SET released = " + dialect.now() + ", release_reason = 'EXPIRED'"
+                  + " WHERE checkout_id = ? AND released IS NULL")) {
+                for (int id : due) {
+                    statement.setInt(1, id);
+                    if (statement.executeUpdate() > 0)
+                        expired.add(id);
+                }
+            }
 
         }
         catch (SQLException e) {
@@ -349,7 +367,7 @@ public class CheckoutRepository {
      * on any server.
      */
     public List<Checkout> listEndedWithin(int seconds) throws GuacamoleException {
-        return query(SELECT + " WHERE k.released > CURRENT_TIMESTAMP - make_interval(secs => ?)", seconds);
+        return query(SELECT + " WHERE k.released > " + dialect.plusSeconds(dialect.now(), "?"), -seconds);
     }
 
     private List<Checkout> query(String sql, int... parameters) throws GuacamoleException {
@@ -367,12 +385,12 @@ public class CheckoutRepository {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             for (int i = 0; i < parameters.length; i++)
                 statement.setInt(i + 1, parameters[i]);
-            return read(statement);
+            return read(connection, statement);
         }
 
     }
 
-    private static List<Checkout> read(PreparedStatement statement) throws SQLException {
+    private static List<Checkout> read(Connection connection, PreparedStatement statement) throws SQLException {
 
         List<Checkout> checkouts = new ArrayList<>();
 
@@ -385,23 +403,49 @@ public class CheckoutRepository {
                 checkout.setConnectionName(results.getString(3));
                 checkout.setUsername(results.getString(4));
                 checkout.setReason(results.getString(5));
-                checkout.setCheckedOut(results.getTimestamp(6).getTime());
-                checkout.setExpires(results.getTimestamp(7).getTime());
-                Timestamp released = results.getTimestamp(8);
+                checkout.setCheckedOut(SqlDialect.getTimestamp(results, 6).getTime());
+                checkout.setExpires(SqlDialect.getTimestamp(results, 7).getTime());
+                Timestamp released = SqlDialect.getTimestamp(results, 8);
                 checkout.setReleased(released == null ? null : released.getTime());
                 checkout.setReleaseReason(results.getString(9));
                 checkout.setReleasedBy(results.getString(10));
                 checkout.setRevealCount(results.getInt(11));
                 checkout.setExclusive(results.getBoolean(12));
-                Array approvers = results.getArray(13);
-                if (approvers != null)
-                    checkout.setApprovedBy(Arrays.asList((String[]) approvers.getArray()));
-                checkout.setRemoteHost(results.getString(14));
+                checkout.setRemoteHost(results.getString(13));
                 checkouts.add(checkout);
             }
         }
 
+        readApprovers(connection, checkouts);
         return checkouts;
+
+    }
+
+    /**
+     * Adds who approved the request that started each checkout, in the
+     * order they approved, to the checkouts started by an approval.
+     */
+    private static void readApprovers(Connection connection, List<Checkout> checkouts) throws SQLException {
+
+        Map<Integer, Checkout> byId = new HashMap<>();
+        for (Checkout checkout : checkouts)
+            byId.put(checkout.getId(), checkout);
+        if (byId.isEmpty())
+            return;
+
+        Map<Integer, List<String>> approvers = new HashMap<>();
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT r.checkout_id, a.approver FROM pam_request r"
+              + " JOIN pam_request_approval a ON a.request_id = r.request_id"
+              + " WHERE r.checkout_id IN " + SqlDialect.in(byId.keySet())
+              + " ORDER BY a.approved, a.approver");
+             ResultSet results = statement.executeQuery()) {
+            while (results.next())
+                approvers.computeIfAbsent(results.getInt(1), id -> new ArrayList<>()).add(results.getString(2));
+        }
+
+        for (Map.Entry<Integer, List<String>> entry : approvers.entrySet())
+            byId.get(entry.getKey()).setApprovedBy(entry.getValue());
 
     }
 

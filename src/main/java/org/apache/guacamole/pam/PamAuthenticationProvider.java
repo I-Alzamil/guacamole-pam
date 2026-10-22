@@ -33,12 +33,13 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Privileged access management extension. Every connection stored in the
- * PostgreSQL database gets password management: stored only, or managed by a
- * platform, which rotates the password over SSH, LDAP or other management
- * types. Also adds "pam-account" connections: accounts whose password users
- * request and check out for a limited time instead of opening a session.
- * Without Guacamole's PostgreSQL authentication, it stays inactive: it logs
- * why once, and changes nothing.
+ * database of Guacamole's database authentication (PostgreSQL, MySQL or SQL
+ * Server) gets password management: stored only, or managed by a platform,
+ * which rotates the password over SSH, LDAP or other management types. Also
+ * adds "pam-account" connections: accounts whose password users request and
+ * check out for a limited time instead of opening a session. Without one of
+ * those authentications, it stays inactive: it logs why once, and changes
+ * nothing.
  */
 public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
@@ -50,11 +51,6 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
      */
     public static final String IDENTIFIER = "pam";
 
-    /**
-     * Identifier of the auth provider whose connections are managed. The
-     * rotation engine reads and writes that provider's tables directly.
-     */
-    private static final String MANAGED_DATA_SOURCE = "postgresql";
 
     /**
      * Whether administrators connect, and check out Accounts, without a
@@ -89,7 +85,14 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
     private final PamDatabase database;
 
     /**
-     * The PostgreSQL UserContext of each session, used for permission checks.
+     * Identifier of the auth provider whose connections are managed
+     * ("postgresql", "mysql" or "sqlserver"), or null while inactive. The
+     * rotation engine reads and writes that provider's tables directly.
+     */
+    private final String managedDataSource;
+
+    /**
+     * The managed data source's UserContext of each session, used for permission checks.
      * Keys are weak and compared by identity, so entries vanish with their
      * session.
      */
@@ -97,7 +100,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             new MapMaker().weakKeys().makeMap();
 
     /**
-     * Whether the extension is active: false without Guacamole's PostgreSQL
+     * Whether the extension is active: false without a Guacamole database
      * authentication, in which case every service is null.
      */
     private final boolean active;
@@ -122,6 +125,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             secretMigration = null;
             connectionSecrets = null;
             database = null;
+            managedDataSource = null;
             return;
         }
 
@@ -129,6 +133,9 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         logEncryption(secrets);
 
         database = new PamDatabase(environment);
+        managedDataSource = database.getDialect().getName();
+        logger.info("The PAM extension manages the connections stored in {}.",
+                database.getDialect().getDisplayName());
         CheckoutRepository checkouts = new CheckoutRepository(database);
         connectionSecrets = new ConnectionSecrets(database, secrets);
         platforms = new PlatformRepository(database, secrets);
@@ -181,7 +188,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             AuthenticatedUser authenticatedUser, Credentials credentials)
             throws GuacamoleException {
 
-        if (!active || !MANAGED_DATA_SOURCE.equals(context.getAuthenticationProvider().getIdentifier()))
+        if (!active || !managedDataSource.equals(context.getAuthenticationProvider().getIdentifier()))
             return context;
 
         dataSourceContexts.put(authenticatedUser, context);
@@ -221,6 +228,13 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     }
 
+    /**
+     * Identifier of the data source whose connections are managed.
+     */
+    public String getManagedDataSource() {
+        return managedDataSource;
+    }
+
     public PlatformRepository getPlatforms() {
         return platforms;
     }
@@ -257,10 +271,24 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
      *     If the user has no account in the managed data source.
      */
     public Approver getApprover(AuthenticatedUser authenticatedUser) throws GuacamoleException {
-        getDataSourceContext(authenticatedUser);
-        return new Approver(authenticatedUser.getIdentifier(), isAdministrator(authenticatedUser),
-                approvals.getApprovableConnections(authenticatedUser.getIdentifier(),
-                        authenticatedUser.getEffectiveUserGroups()));
+        String username = getUsername(authenticatedUser);
+        return new Approver(username, isAdministrator(authenticatedUser),
+                approvals.getApprovableConnections(username, authenticatedUser.getEffectiveUserGroups()));
+    }
+
+    /**
+     * Returns the user's username in the managed data source, under which
+     * their requests, checkouts and approvals are recorded and compared.
+     * It may differ from the one they logged in with by case only: MySQL and
+     * SQL Server compare usernames ignoring case by default, so "Bob"
+     * logging in through LDAP is the database's "bob". Comparing that one
+     * keeps such a user from approving their own request.
+     *
+     * @throws GuacamoleSecurityException
+     *     If the user has no account in the managed data source.
+     */
+    public String getUsername(AuthenticatedUser authenticatedUser) throws GuacamoleException {
+        return getDataSourceContext(authenticatedUser).self().getIdentifier();
     }
 
     @Override

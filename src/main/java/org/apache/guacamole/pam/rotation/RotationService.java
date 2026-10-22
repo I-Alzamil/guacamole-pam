@@ -456,10 +456,15 @@ public class RotationService {
 
         Map<String, Platform> all = platforms.getAll();
         Map<Integer, Integer> counts = sessions.countAll();
-        Set<Integer> rotating = locks.getClaimed();
+        List<Target> targets = connections.listManaged();
+
+        List<Integer> ids = new ArrayList<>();
+        for (Target target : targets)
+            ids.add(target.getId());
+        Set<Integer> rotating = locks.getClaimed(ids);
 
         List<ManagedConnection> managed = new ArrayList<>();
-        for (Target target : connections.listManaged()) {
+        for (Target target : targets) {
             Platform platform = all.get(target.getAttribute(PamAttributes.PLATFORM));
             managed.add(new ManagedConnection(target, platform, EffectivePolicy.of(platform, target),
                     counts.getOrDefault(target.getId(), 0), rotating.contains(target.getId())));

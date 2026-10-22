@@ -27,6 +27,14 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
 
     };
 
+    /**
+     * Identifier of the data source whose connections are managed, as
+     * { identifier }.
+     */
+    service.getDataSource = function getDataSource() {
+        return request('GET', 'data-source');
+    };
+
     service.getAccess = function getAccess() {
         return request('GET', 'access');
     };

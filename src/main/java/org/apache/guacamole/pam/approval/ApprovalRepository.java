@@ -1,7 +1,6 @@
 package org.apache.guacamole.pam.approval;
 
 import java.io.IOException;
-import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -28,15 +27,17 @@ import org.apache.guacamole.pam.AccountProtocol;
 import org.apache.guacamole.pam.PamAttributes;
 import org.apache.guacamole.pam.db.PamDatabase;
 import org.apache.guacamole.pam.db.SearchPattern;
+import org.apache.guacamole.pam.db.SqlDialect;
 
 /**
  * Storage of requests needing approval ("pam_request") and their
  * approvals ("pam_request_approval"), and the approval permissions of users
- * and user groups deciding who may approve them.
+ * and user groups deciding who may approve them. Creating a request locks
+ * the row of its connection, as creating a checkout does, so a user has at
+ * most one pending request per connection; on PostgreSQL and MySQL a unique
+ * index enforces it too.
  */
 public class ApprovalRepository {
-
-    private static final String UNIQUE_VIOLATION = "23505";
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -45,7 +46,15 @@ public class ApprovalRepository {
      */
     private static final String ROOT_GROUP = "ROOT";
 
+    /**
+     * Attributes deciding who may approve.
+     */
+    private static final List<String> APPROVAL_ATTRIBUTES = Arrays.asList(PamAttributes.APPROVER,
+            PamAttributes.APPROVER_CONNECTIONS, PamAttributes.APPROVER_CONNECTION_GROUPS);
+
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<List<String>>() { };
+
+    private static final String ALREADY_PENDING = "You already have a request for this password awaiting approval.";
 
     /**
      * How long a request may stay pending, in hours.
@@ -67,16 +76,16 @@ public class ApprovalRepository {
             + " (SELECT parameter_value FROM guacamole_connection_parameter p"
             + "   WHERE p.connection_id = r.connection_id AND p.parameter_name = '" + AccountProtocol.USERNAME + "'),"
             + " r.username, r.reason, r.requested, r.approvals_required, r.status, r.decided, r.decided_by,"
-            + " r.checkout_id,"
-            + " (SELECT array_agg(a.approver ORDER BY a.approved) FROM pam_request_approval a"
-            + "   WHERE a.request_id = r.request_id),"
-            + " r.decision_reason, r.remote_host"
+            + " r.checkout_id, r.decision_reason, r.remote_host"
             + " FROM pam_request r LEFT JOIN guacamole_connection c ON c.connection_id = r.connection_id";
 
     private final PamDatabase database;
 
+    private final SqlDialect dialect;
+
     public ApprovalRepository(PamDatabase database) {
         this.database = database;
+        this.dialect = database.getDialect();
     }
 
     /**
@@ -90,55 +99,47 @@ public class ApprovalRepository {
             throws GuacamoleException {
 
         Set<String> connections = new HashSet<>();
+        Set<String> groups = new HashSet<>();
 
-        try (Connection connection = database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                 "WITH RECURSIVE member_of (entity_id) AS ("
-               + "   SELECT g.entity_id FROM guacamole_entity e"
-               + "   JOIN guacamole_user_group_member m ON m.member_entity_id = e.entity_id"
-               + "   JOIN guacamole_user_group g ON g.user_group_id = m.user_group_id"
-               + "   WHERE e.type = 'USER' AND e.name = ? AND NOT g.disabled"
-               + " UNION"
-               + "   SELECT g.entity_id FROM member_of p"
-               + "   JOIN guacamole_user_group_member m ON m.member_entity_id = p.entity_id"
-               + "   JOIN guacamole_user_group g ON g.user_group_id = m.user_group_id"
-               + "   WHERE NOT g.disabled"
-               + " ),"
-               // Approval attributes of the user...
-               + " grants (entity_id, attribute_name, attribute_value) AS ("
-               + "   SELECT u.entity_id, a.attribute_name, a.attribute_value FROM guacamole_user_attribute a"
-               + "   JOIN guacamole_user u ON u.user_id = a.user_id"
-               + "   JOIN guacamole_entity e ON e.entity_id = u.entity_id"
-               + "   WHERE e.type = 'USER' AND e.name = ? AND NOT u.disabled"
-               // ...and of the groups the user belongs to
-               + " UNION ALL"
-               + "   SELECT g.entity_id, a.attribute_name, a.attribute_value FROM guacamole_user_group_attribute a"
-               + "   JOIN guacamole_user_group g ON g.user_group_id = a.user_group_id"
-               + "   JOIN guacamole_entity e ON e.entity_id = g.entity_id"
-               + "   WHERE NOT g.disabled"
-               + "   AND (g.entity_id IN (SELECT entity_id FROM member_of) OR e.name = ANY (?))"
-               + " )"
-               // Connections and connection groups listed by those granting
-               // the permission
-               + " SELECT c.attribute_name, c.attribute_value FROM grants c"
-               + " WHERE c.attribute_name IN (?, ?) AND EXISTS (SELECT 1 FROM grants f"
-               + "   WHERE f.entity_id = c.entity_id AND f.attribute_name = ? AND f.attribute_value = 'true')")) {
+        try (Connection connection = database.getConnection()) {
 
-            statement.setString(1, username);
-            statement.setString(2, username);
-            statement.setArray(3, connection.createArrayOf("varchar", reportedGroups.toArray()));
-            statement.setString(4, PamAttributes.APPROVER_CONNECTIONS);
-            statement.setString(5, PamAttributes.APPROVER_CONNECTION_GROUPS);
-            statement.setString(6, PamAttributes.APPROVER);
+            List<Map<String, String>> grants = new ArrayList<>();
 
-            Set<String> groups = new HashSet<>();
-            try (ResultSet results = statement.executeQuery()) {
-                while (results.next()) {
-                    if (PamAttributes.APPROVER_CONNECTIONS.equals(results.getString(1)))
-                        connections.addAll(parseIdentifiers(results.getString(2)));
-                    else
-                        groups.addAll(parseIdentifiers(results.getString(2)));
+            // The user's own attributes, unless disabled...
+            Map<String, String> own = new HashMap<>();
+            Integer entity = null;
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT e.entity_id, u.disabled, a.attribute_name, a.attribute_value FROM guacamole_entity e"
+                  + " JOIN guacamole_user u ON u.entity_id = e.entity_id"
+                  + " LEFT JOIN guacamole_user_attribute a ON a.user_id = u.user_id"
+                  + "   AND a.attribute_name IN " + SqlDialect.parameters(APPROVAL_ATTRIBUTES.size())
+                  + " WHERE e.type = 'USER' AND e.name = ?")) {
+                int index = 1;
+                for (String name : APPROVAL_ATTRIBUTES)
+                    statement.setString(index++, name);
+                statement.setString(index, username);
+                try (ResultSet results = statement.executeQuery()) {
+                    while (results.next()) {
+                        entity = results.getInt(1);
+                        if (!results.getBoolean(2) && results.getString(3) != null)
+                            own.put(results.getString(3), results.getString(4));
+                    }
                 }
+            }
+            grants.add(own);
+
+            // ...and those of the groups the user belongs to
+            Set<Integer> memberOf = entity == null ? new HashSet<>() : getGroupsOf(connection, entity);
+            memberOf.addAll(getGroupsNamed(connection, reportedGroups));
+            grants.addAll(getGroupAttributes(connection, memberOf));
+
+            // Connections and connection groups listed by those granting the
+            // permission
+            for (Map<String, String> grant : grants) {
+                if (!"true".equals(grant.get(PamAttributes.APPROVER)))
+                    continue;
+                connections.addAll(parseIdentifiers(grant.get(PamAttributes.APPROVER_CONNECTIONS)));
+                groups.addAll(parseIdentifiers(grant.get(PamAttributes.APPROVER_CONNECTION_GROUPS)));
             }
 
             if (!groups.isEmpty())
@@ -154,44 +155,143 @@ public class ApprovalRepository {
     }
 
     /**
+     * Returns the entity ids of the enabled groups the given entity belongs
+     * to, directly or through nested groups. Followed level by level, so a
+     * group belonging to itself through others ends the search.
+     */
+    private Set<Integer> getGroupsOf(Connection connection, int entity) throws SQLException {
+
+        Set<Integer> found = new HashSet<>();
+        Set<Integer> level = Collections.singleton(entity);
+
+        while (!level.isEmpty()) {
+
+            Set<Integer> next = new HashSet<>();
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT g.entity_id FROM guacamole_user_group_member m"
+                  + " JOIN guacamole_user_group g ON g.user_group_id = m.user_group_id"
+                  + " WHERE m.member_entity_id IN " + SqlDialect.in(level)
+                  + " AND g.disabled = " + dialect.bool(false));
+                 ResultSet results = statement.executeQuery()) {
+                while (results.next()) {
+                    if (found.add(results.getInt(1)))
+                        next.add(results.getInt(1));
+                }
+            }
+            level = next;
+
+        }
+
+        return found;
+
+    }
+
+    /**
+     * Returns the entity ids of the enabled groups of the given names, such
+     * as those reported by the authenticating extension.
+     */
+    private Set<Integer> getGroupsNamed(Connection connection, Collection<String> names) throws SQLException {
+
+        Set<Integer> found = new HashSet<>();
+        if (names.isEmpty())
+            return found;
+
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT g.entity_id FROM guacamole_user_group g"
+              + " JOIN guacamole_entity e ON e.entity_id = g.entity_id"
+              + " WHERE e.type = 'USER_GROUP' AND e.name IN " + SqlDialect.parameters(names.size())
+              + " AND g.disabled = " + dialect.bool(false))) {
+            int index = 1;
+            for (String name : names)
+                statement.setString(index++, name);
+            try (ResultSet results = statement.executeQuery()) {
+                while (results.next())
+                    found.add(results.getInt(1));
+            }
+        }
+
+        return found;
+
+    }
+
+    /**
+     * Returns the approval attributes of each of the given groups.
+     */
+    private static Collection<Map<String, String>> getGroupAttributes(Connection connection, Set<Integer> groups)
+            throws SQLException {
+
+        Map<Integer, Map<String, String>> attributes = new HashMap<>();
+        if (groups.isEmpty())
+            return attributes.values();
+
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT g.entity_id, a.attribute_name, a.attribute_value FROM guacamole_user_group_attribute a"
+              + " JOIN guacamole_user_group g ON g.user_group_id = a.user_group_id"
+              + " WHERE g.entity_id IN " + SqlDialect.in(groups)
+              + " AND a.attribute_name IN " + SqlDialect.parameters(APPROVAL_ATTRIBUTES.size()))) {
+            int index = 1;
+            for (String name : APPROVAL_ATTRIBUTES)
+                statement.setString(index++, name);
+            try (ResultSet results = statement.executeQuery()) {
+                while (results.next())
+                    attributes.computeIfAbsent(results.getInt(1), id -> new HashMap<>())
+                            .put(results.getString(2), results.getString(3));
+            }
+        }
+
+        return attributes.values();
+
+    }
+
+    /**
      * Returns the identifiers of every connection within the given
      * connection groups, at any depth. "ROOT" stands for every connection.
      */
     private static Set<String> getConnectionsWithin(Connection connection, Set<String> groups)
             throws SQLException {
 
-        boolean root = groups.contains(ROOT_GROUP);
-
-        List<Integer> ids = new ArrayList<>();
-        for (String group : groups) {
-            try {
-                ids.add(Integer.valueOf(group));
-            }
-            catch (NumberFormatException e) {
-                // Only ROOT is not numeric
-            }
-        }
-
         Set<String> connections = new HashSet<>();
 
-        try (PreparedStatement statement = connection.prepareStatement(
-                "WITH RECURSIVE within (connection_group_id) AS ("
-              + "   SELECT connection_group_id FROM guacamole_connection_group WHERE connection_group_id = ANY (?)"
-              + " UNION"
-              + "   SELECT g.connection_group_id FROM guacamole_connection_group g"
-              + "   JOIN within w ON g.parent_id = w.connection_group_id"
-              + " )"
-              + " SELECT connection_id FROM guacamole_connection"
-              + " WHERE ? OR parent_id IN (SELECT connection_group_id FROM within)")) {
+        String where;
+        if (groups.contains(ROOT_GROUP))
+            where = "";
+        else {
 
-            statement.setArray(1, connection.createArrayOf("integer", ids.toArray()));
-            statement.setBoolean(2, root);
-
-            try (ResultSet results = statement.executeQuery()) {
-                while (results.next())
-                    connections.add(Integer.toString(results.getInt(1)));
+            Set<Integer> within = new HashSet<>();
+            for (String group : groups) {
+                try {
+                    within.add(Integer.valueOf(group));
+                }
+                catch (NumberFormatException e) {
+                    // Only ROOT is not numeric
+                }
             }
 
+            // Every group below, level by level
+            Set<Integer> level = new HashSet<>(within);
+            while (!level.isEmpty()) {
+                Set<Integer> next = new HashSet<>();
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT connection_group_id FROM guacamole_connection_group"
+                      + " WHERE parent_id IN " + SqlDialect.in(level));
+                     ResultSet results = statement.executeQuery()) {
+                    while (results.next()) {
+                        if (within.add(results.getInt(1)))
+                            next.add(results.getInt(1));
+                    }
+                }
+                level = next;
+            }
+
+            where = " WHERE parent_id IN " + SqlDialect.in(within);
+
+        }
+
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT connection_id FROM guacamole_connection" + where);
+             ResultSet results = statement.executeQuery()) {
+            while (results.next())
+                connections.add(Integer.toString(results.getInt(1)));
         }
 
         return connections;
@@ -229,28 +329,65 @@ public class ApprovalRepository {
         expireStale(true);
 
         int id;
-        try (Connection connection = database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                 "INSERT INTO pam_request (connection_id, connection_name, username, remote_host, reason,"
-               + " approvals_required) SELECT connection_id, connection_name, ?, ?, ?, ? FROM guacamole_connection"
-               + " WHERE connection_id = ? RETURNING request_id")) {
+        try (Connection connection = database.getConnection()) {
 
-            statement.setString(1, username);
-            statement.setString(2, remoteHost);
-            statement.setString(3, reason);
-            statement.setInt(4, approvalsRequired);
-            statement.setInt(5, connectionId);
+            connection.setAutoCommit(false);
+            try {
 
-            try (ResultSet results = statement.executeQuery()) {
-                if (!results.next())
-                    throw new GuacamoleResourceNotFoundException("The connection no longer exists.");
-                id = results.getInt(1);
+                // Serializes requests for this connection until commit, as
+                // checkouts are, so the check below cannot be raced
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT connection_id FROM " + dialect.lockingRead("guacamole_connection")
+                      + " WHERE connection_id = ?" + dialect.forUpdate())) {
+                    statement.setInt(1, connectionId);
+                    try (ResultSet results = statement.executeQuery()) {
+                        if (!results.next())
+                            throw new GuacamoleResourceNotFoundException("The connection no longer exists.");
+                    }
+                }
+
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT 1 FROM pam_request WHERE connection_id = ? AND username = ? AND status = 'PENDING'")) {
+                    statement.setInt(1, connectionId);
+                    statement.setString(2, username);
+                    try (ResultSet results = statement.executeQuery()) {
+                        if (results.next())
+                            throw new GuacamoleClientException(ALREADY_PENDING);
+                    }
+                }
+
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "INSERT INTO pam_request (connection_id, connection_name, username, remote_host, reason,"
+                      + " approvals_required) SELECT connection_id, connection_name, ?, ?, ?, ? FROM guacamole_connection"
+                      + " WHERE connection_id = ?", new String[] { "request_id" })) {
+
+                    statement.setString(1, username);
+                    statement.setString(2, remoteHost);
+                    statement.setString(3, reason);
+                    statement.setInt(4, approvalsRequired);
+                    statement.setInt(5, connectionId);
+
+                    statement.executeUpdate();
+                    try (ResultSet results = statement.getGeneratedKeys()) {
+                        if (!results.next())
+                            throw new GuacamoleResourceNotFoundException("The connection no longer exists.");
+                        id = results.getInt(1);
+                    }
+
+                }
+
+                connection.commit();
+
+            }
+            catch (SQLException | GuacamoleException e) {
+                connection.rollback();
+                throw e;
             }
 
         }
         catch (SQLException e) {
-            if (UNIQUE_VIOLATION.equals(e.getSQLState()))
-                throw new GuacamoleClientException("You already have a request for this password awaiting approval.");
+            if (dialect.isUniqueViolation(e))
+                throw new GuacamoleClientException(ALREADY_PENDING);
             throw new GuacamoleServerException("Unable to create the request.", e);
         }
 
@@ -278,8 +415,8 @@ public class ApprovalRepository {
      */
     public ApprovalRequest getLatest(int connectionId, String username) throws GuacamoleException {
         List<ApprovalRequest> requests = query(SELECT
-                + " WHERE r.connection_id = ? AND r.username = ? ORDER BY r.requested DESC LIMIT 1",
-                connectionId, username);
+                + " WHERE r.connection_id = ? AND r.username = ? ORDER BY r.requested DESC, r.request_id DESC"
+                + dialect.limit(), connectionId, username, 1);
         return requests.isEmpty() ? null : requests.get(0);
     }
 
@@ -297,9 +434,10 @@ public class ApprovalRepository {
      * connection id.
      */
     public Map<Integer, ApprovalRequest> listLatestOf(String username) throws GuacamoleException {
-        return byConnection(query(SELECT.replaceFirst("^SELECT ", "SELECT DISTINCT ON (r.connection_id) ")
-                + " WHERE r.username = ? AND r.connection_id IS NOT NULL ORDER BY r.connection_id, r.requested DESC",
-                username));
+        return byConnection(query(SELECT + " WHERE r.username = ? AND r.connection_id IS NOT NULL"
+                + " AND NOT EXISTS (SELECT 1 FROM pam_request n WHERE n.connection_id = r.connection_id"
+                + "   AND n.username = r.username AND (n.requested > r.requested"
+                + "   OR (n.requested = r.requested AND n.request_id > r.request_id)))", username));
     }
 
     private static Map<Integer, ApprovalRequest> byConnection(List<ApprovalRequest> requests) {
@@ -347,29 +485,28 @@ public class ApprovalRepository {
                     // Not a connection of this data source
                 }
             }
-            sql.append(" AND r.connection_id = ANY (?)");
-            parameters.add(ids);
+            sql.append(" AND r.connection_id IN ").append(SqlDialect.in(ids));
         }
 
         for (String term : terms) {
             if (term == null || term.trim().isEmpty())
                 continue;
-            sql.append(" AND (r.username ILIKE ? ESCAPE '\\'"
-                    + " OR coalesce(c.connection_name, r.connection_name) ILIKE ? ESCAPE '\\'"
-                    + " OR coalesce((SELECT parameter_value FROM guacamole_connection_parameter p"
+            sql.append(" AND (" + SearchPattern.matches("r.username")
+                    + " OR " + SearchPattern.matches("coalesce(c.connection_name, r.connection_name)")
+                    + " OR " + SearchPattern.matches("coalesce((SELECT parameter_value FROM guacamole_connection_parameter p"
                     + "   WHERE p.connection_id = r.connection_id AND p.parameter_name = '" + AccountProtocol.USERNAME
-                    + "'), '') ILIKE ? ESCAPE '\\'"
-                    + " OR r.reason ILIKE ? ESCAPE '\\' OR r.status ILIKE ? ESCAPE '\\'"
-                    + " OR coalesce(r.decided_by, '') ILIKE ? ESCAPE '\\'"
-                    + " OR coalesce(r.decision_reason, '') ILIKE ? ESCAPE '\\'"
+                    + "'), '')")
+                    + " OR " + SearchPattern.matches("r.reason") + " OR " + SearchPattern.matches("r.status")
+                    + " OR " + SearchPattern.matches("coalesce(r.decided_by, '')")
+                    + " OR " + SearchPattern.matches("coalesce(r.decision_reason, '')")
                     + " OR EXISTS (SELECT 1 FROM pam_request_approval a"
-                    + "   WHERE a.request_id = r.request_id AND a.approver ILIKE ? ESCAPE '\\'))");
+                    + "   WHERE a.request_id = r.request_id AND " + SearchPattern.matches("a.approver") + "))");
             String pattern = SearchPattern.contains(term);
             for (int i = 0; i < 8; i++)
                 parameters.add(pattern);
         }
 
-        sql.append(" ORDER BY coalesce(r.decided, r.requested) DESC LIMIT ?");
+        sql.append(" ORDER BY coalesce(r.decided, r.requested) DESC, r.request_id DESC").append(dialect.limit());
         parameters.add(limit);
 
         return query(sql.toString(), parameters.toArray());
@@ -395,11 +532,15 @@ public class ApprovalRepository {
 
                 requirePending(connection, requestId);
 
+                // The request is locked, so no other approval by the same
+                // approver can be added meanwhile
                 try (PreparedStatement statement = connection.prepareStatement(
-                        "INSERT INTO pam_request_approval (request_id, approver) VALUES (?, ?)"
-                      + " ON CONFLICT DO NOTHING")) {
+                        "INSERT INTO pam_request_approval (request_id, approver) SELECT ?, ?"
+                      + " WHERE NOT EXISTS (SELECT 1 FROM pam_request_approval WHERE request_id = ? AND approver = ?)")) {
                     statement.setInt(1, requestId);
                     statement.setString(2, approver);
+                    statement.setInt(3, requestId);
+                    statement.setString(4, approver);
                     if (statement.executeUpdate() == 0)
                         throw new GuacamoleClientException("You already approved this request.");
                 }
@@ -435,7 +576,7 @@ public class ApprovalRepository {
     public void markApproved(int requestId, int checkoutId, String approver) throws GuacamoleException {
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                 "UPDATE pam_request SET status = 'APPROVED', decided = CURRENT_TIMESTAMP, decided_by = ?,"
+                 "UPDATE pam_request SET status = 'APPROVED', decided = " + dialect.now() + ", decided_by = ?,"
                + " checkout_id = ? WHERE request_id = ? AND status = 'PENDING'")) {
             statement.setString(1, approver);
             statement.setInt(2, checkoutId);
@@ -471,7 +612,7 @@ public class ApprovalRepository {
 
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                 "UPDATE pam_request SET status = ?, decided = CURRENT_TIMESTAMP, decided_by = ?,"
+                 "UPDATE pam_request SET status = ?, decided = " + dialect.now() + ", decided_by = ?,"
                + " decision_reason = ? WHERE request_id = ? AND status = 'PENDING'")) {
 
             statement.setString(1, status);
@@ -501,9 +642,9 @@ public class ApprovalRepository {
 
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                 "UPDATE pam_request SET status = 'EXPIRED', decided = CURRENT_TIMESTAMP"
-               + " WHERE status = 'PENDING' AND requested < CURRENT_TIMESTAMP - make_interval(hours => ?)")) {
-            statement.setInt(1, PENDING_HOURS);
+                 "UPDATE pam_request SET status = 'EXPIRED', decided = " + dialect.now()
+               + " WHERE status = 'PENDING' AND requested < " + dialect.plusSeconds(dialect.now(), "?"))) {
+            statement.setInt(1, -PENDING_HOURS * 3600);
             statement.executeUpdate();
         }
         catch (SQLException e) {
@@ -514,11 +655,12 @@ public class ApprovalRepository {
 
     }
 
-    private static void requirePending(Connection connection, int requestId)
+    private void requirePending(Connection connection, int requestId)
             throws SQLException, GuacamoleException {
 
         try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT status FROM pam_request WHERE request_id = ? FOR UPDATE")) {
+                "SELECT status FROM " + dialect.lockingRead("pam_request") + " WHERE request_id = ?"
+              + dialect.forUpdate())) {
             statement.setInt(1, requestId);
             try (ResultSet results = statement.executeQuery()) {
                 if (!results.next())
@@ -543,8 +685,7 @@ public class ApprovalRepository {
     }
 
     /**
-     * Runs a query of requests. Parameters are integers, strings, or
-     * collections of integers (bound as an array, for "= ANY (?)").
+     * Runs a query of requests. Parameters are integers or strings.
      */
     private List<ApprovalRequest> query(String sql, Object... parameters) throws GuacamoleException {
 
@@ -554,10 +695,7 @@ public class ApprovalRepository {
              PreparedStatement statement = connection.prepareStatement(sql)) {
 
             for (int i = 0; i < parameters.length; i++) {
-                if (parameters[i] instanceof Collection)
-                    statement.setArray(i + 1, connection.createArrayOf("integer",
-                            ((Collection<?>) parameters[i]).toArray()));
-                else if (parameters[i] instanceof String)
+                if (parameters[i] instanceof String)
                     statement.setString(i + 1, (String) parameters[i]);
                 else
                     statement.setInt(i + 1, (Integer) parameters[i]);
@@ -573,22 +711,21 @@ public class ApprovalRepository {
                     request.setAccountName(results.getString(4));
                     request.setUsername(results.getString(5));
                     request.setReason(results.getString(6));
-                    request.setRequested(results.getTimestamp(7).getTime());
+                    request.setRequested(SqlDialect.getTimestamp(results, 7).getTime());
                     request.setApprovalsRequired(results.getInt(8));
                     request.setStatus(results.getString(9));
-                    Timestamp decided = results.getTimestamp(10);
+                    Timestamp decided = SqlDialect.getTimestamp(results, 10);
                     request.setDecided(decided == null ? null : decided.getTime());
                     request.setDecidedBy(results.getString(11));
                     int checkoutId = results.getInt(12);
                     request.setCheckoutId(results.wasNull() ? null : checkoutId);
-                    Array approvers = results.getArray(13);
-                    if (approvers != null)
-                        request.setApprovers(new ArrayList<>(Arrays.asList((String[]) approvers.getArray())));
-                    request.setDecisionReason(results.getString(14));
-                    request.setRemoteHost(results.getString(15));
+                    request.setDecisionReason(results.getString(13));
+                    request.setRemoteHost(results.getString(14));
                     requests.add(request);
                 }
             }
+
+            readApprovers(connection, requests);
 
         }
         catch (SQLException e) {
@@ -596,6 +733,27 @@ public class ApprovalRepository {
         }
 
         return requests;
+
+    }
+
+    /**
+     * Adds who approved each request, in the order they approved.
+     */
+    private static void readApprovers(Connection connection, List<ApprovalRequest> requests) throws SQLException {
+
+        Map<Integer, ApprovalRequest> byId = new HashMap<>();
+        for (ApprovalRequest request : requests)
+            byId.put(request.getId(), request);
+        if (byId.isEmpty())
+            return;
+
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT request_id, approver FROM pam_request_approval WHERE request_id IN " + SqlDialect.in(byId.keySet())
+              + " ORDER BY approved, approver");
+             ResultSet results = statement.executeQuery()) {
+            while (results.next())
+                byId.get(results.getInt(1)).getApprovers().add(results.getString(2));
+        }
 
     }
 

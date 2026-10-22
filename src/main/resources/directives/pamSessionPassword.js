@@ -25,11 +25,6 @@ angular.module('guacPam').directive('pamSessionPassword', [function pamSessionPa
             var pamService        = $injector.get('pamService');
 
             /**
-             * Data source whose connections can need a request.
-             */
-            var DATA_SOURCE = 'postgresql';
-
-            /**
              * Delay before "Copied" disappears, in milliseconds.
              */
             var COPIED_DURATION = 2000;
@@ -52,7 +47,7 @@ angular.module('guacPam').directive('pamSessionPassword', [function pamSessionPa
                 try {
                     var identifier = ClientIdentifier.fromString($scope.client.id);
                     return identifier.type === ClientIdentifier.Types.CONNECTION
-                        && identifier.dataSource === DATA_SOURCE ? identifier.id : null;
+                        && identifier.dataSource === pamRequestService.getDataSource() ? identifier.id : null;
                 }
                 catch (e) {
                     return null;

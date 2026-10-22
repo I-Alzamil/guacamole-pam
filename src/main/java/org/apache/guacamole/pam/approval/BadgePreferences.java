@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -11,6 +12,7 @@ import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.pam.db.PamDatabase;
+import org.apache.guacamole.pam.db.SqlDialect;
 
 /**
  * Which notification badges each user wants, stored in
@@ -81,10 +83,14 @@ public class BadgePreferences {
         if (column == null)
             throw new GuacamoleClientException("No such badge.");
 
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("username", "?");
+        values.put(column, "?");
+
+        SqlDialect dialect = database.getDialect();
         try (Connection connection = database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                 "INSERT INTO pam_user_preference (username, " + column + ") VALUES (?, ?)"
-               + " ON CONFLICT (username) DO UPDATE SET " + column + " = EXCLUDED." + column)) {
+             PreparedStatement statement = connection.prepareStatement(dialect.upsert("pam_user_preference",
+                 Collections.singletonList("username"), values, column + " = EXCLUDED." + column))) {
             statement.setString(1, username);
             statement.setBoolean(2, shown);
             statement.executeUpdate();

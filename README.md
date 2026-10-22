@@ -23,13 +23,41 @@ Privileged access management for [Apache Guacamole](https://guacamole.apache.org
 
 ## Requirements
 
-- Guacamole 1.6 with **PostgreSQL authentication** (`guacamole-auth-jdbc-postgresql`)
-  installed and working. The extension manages the connections stored there,
-  and reuses its `postgresql-*` settings and its JDBC driver. Nothing else needs
-  configuring.
+- Guacamole 1.6 with one of its **database authentications** installed and
+  working: PostgreSQL (`guacamole-auth-jdbc-postgresql`), MySQL or MariaDB
+  (`guacamole-auth-jdbc-mysql`), or SQL Server (`guacamole-auth-jdbc-sqlserver`).
+  The extension manages the connections stored there, and reuses its settings
+  (`postgresql-*`, `mysql-*` or `sqlserver-*`, SSL settings included) and its
+  JDBC driver. Nothing else needs configuring.
 - Java 11 or later, as for Guacamole.
 
-Without PostgreSQL authentication (for example with only LDAP, MySQL or
+Supported databases: PostgreSQL 13 or later, MySQL 8.0 or later, MariaDB 10.6
+or later, and SQL Server 2017 or later, with Microsoft's driver (the default
+`sqlserver-driver`, `microsoft2005`). The extension connects as Guacamole's
+own authentication does, with the same SSL mode, certificates and driver:
+MySQL's `mysql-driver` choosing between the MySQL and MariaDB drivers is
+followed too.
+
+Two problems of Guacamole 1.6.0 itself, not of this extension, affect
+these databases:
+
+- **SQL Server**: Guacamole's SQL Server authentication doesn't start, as two
+  of its MyBatis mappers aren't valid XML (`UserGroupPermissionMapper.xml`
+  has `<test>` where `<otherwise>` belongs, and `ConnectionRecordMapper.xml`
+  `<hen` for `<when`). It needs those two lines fixed in its jar
+  (`podman/database.sh` shows how) until a Guacamole release fixes them.
+- **MySQL and MariaDB**: Guacamole can't delete user groups (its statement
+  lacks an `AND`).
+
+If several database authentications are configured, set which one's
+connections the extension manages in `guacamole.properties` (or
+`PAM_DATABASE` in the Docker image):
+
+```
+pam-database: mysql
+```
+
+Without a database authentication (for example with only LDAP or
 `user-mapping.xml`), the extension stays inactive. It logs one warning saying
 why, and Guacamole works exactly as without it.
 
@@ -45,30 +73,47 @@ skips extensions built for another release. To build for another release, set
 2. Restart Guacamole.
 
 The first time the extension uses the database, it creates its tables (all
-named `pam_*`) and adds three default SSH platforms, "Unix", "macOS"
-and "Windows". Later starts find the tables and leave them alone.
+named `pam_*`, from `schema/postgresql.sql`, `schema/mysql.sql` or
+`schema/sqlserver.sql` in the jar) and adds three default SSH platforms,
+"Unix", "macOS" and "Windows". Later starts find the tables and leave them
+alone. On MySQL and SQL Server, the extension stores its times in UTC.
 
 ### If Guacamole's database user may not create tables
 
 Guacamole's installation guide grants its database user only
-`SELECT, INSERT, UPDATE, DELETE` on the tables, and such a user can't create
-the extension's tables. The log then explains this once, naming the user. Until
-the tables exist, connections stored in the database can't be opened, because
-their access can't be checked.
+`SELECT, INSERT, UPDATE, DELETE` on the tables (on SQL Server, the roles
+`db_datareader` and `db_datawriter`), and such a user can't create the
+extension's tables. The log then explains this once, naming the user and what
+to run. Until the tables exist, connections stored in the database can't be
+opened, because their access can't be checked.
 
-To fix it, create the tables once as the database owner and grant them to
-Guacamole's user, as for Guacamole's own tables. No restart is needed.
+To fix it, create the tables once as the database owner. No restart is needed.
 
-```sh
-unzip -p guacamole-pam-<version>.jar schema/postgresql.sql | psql -U <owner> -d <guacamole database>
-```
+- **PostgreSQL**: create them, then grant them to Guacamole's user, as for
+  Guacamole's own tables:
 
-```sql
-GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO guacamole_user;
-GRANT SELECT,USAGE ON ALL SEQUENCES IN SCHEMA public TO guacamole_user;
-```
+  ```sh
+  unzip -p guacamole-pam-<version>.jar schema/postgresql.sql | psql -U <owner> -d <guacamole database>
+  ```
 
-Tables created this way start without the two default platforms: add them
+  ```sql
+  GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO guacamole_user;
+  GRANT SELECT,USAGE ON ALL SEQUENCES IN SCHEMA public TO guacamole_user;
+  ```
+- **MySQL or MariaDB**: the grants of Guacamole's guide cover the whole
+  database, so new tables need none:
+
+  ```sh
+  unzip -p guacamole-pam-<version>.jar schema/mysql.sql | mysql -u <owner> -p <guacamole database>
+  ```
+- **SQL Server**: the roles of Guacamole's guide cover new tables too:
+
+  ```sh
+  unzip -p guacamole-pam-<version>.jar schema/sqlserver.sql > pam.sql
+  sqlcmd -S <server> -U <owner> -d <guacamole database> -i pam.sql
+  ```
+
+Tables created this way start without the three default platforms: add them
 with **Restore defaults** on the **Platforms** tab.
 
 Do the same after upgrading to a version that changes the tables: until then,
@@ -96,7 +141,8 @@ With encrypted secrets, every server needs the same keys.
 Each server keeps its own pool of up to 10 database connections, besides
 Guacamole's own, plus one for each rotation running. Change the limit with
 `pam-database-max-connections` in `guacamole.properties`, keeping the total
-across servers within PostgreSQL's `max_connections`.
+across servers within the database's own limit (`max_connections` on
+PostgreSQL and MySQL).
 
 ### Encrypting stored secrets
 

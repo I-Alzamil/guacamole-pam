@@ -73,9 +73,27 @@ public class PamREST {
         this.user = user;
     }
 
+    /**
+     * The current user's username in the managed data source (see
+     * {@link PamAuthenticationProvider#getUsername}).
+     */
+    private String username() throws GuacamoleException {
+        return provider.getUsername(user);
+    }
+
     private void requireAdministrator() throws GuacamoleException {
         if (!provider.isAdministrator(user))
             throw new GuacamoleSecurityException("Permission denied.");
+    }
+
+    /**
+     * Identifier of the data source whose connections are managed
+     * ("identifier"), such as "mysql".
+     */
+    @GET
+    @Path("data-source")
+    public Map<String, String> getDataSource() {
+        return Collections.singletonMap("identifier", provider.getManagedDataSource());
     }
 
     /**
@@ -89,7 +107,7 @@ public class PamREST {
         Map<String, Object> access = new LinkedHashMap<>();
         access.put("administrator", provider.isAdministrator(user));
         access.put("approver", provider.getApprover(user).isApprover());
-        access.put("badges", provider.getBadgePreferences().get(user.getIdentifier()));
+        access.put("badges", provider.getBadgePreferences().get(username()));
         return access;
     }
 
@@ -101,7 +119,7 @@ public class PamREST {
     @Path("preferences/badges/{badge}")
     public void setBadgeShown(@PathParam("badge") String badge, Map<String, Boolean> body)
             throws GuacamoleException {
-        provider.getBadgePreferences().set(user.getIdentifier(), badge,
+        provider.getBadgePreferences().set(username(), badge,
                 body == null || !Boolean.FALSE.equals(body.get("shown")));
     }
 
@@ -233,7 +251,7 @@ public class PamREST {
             throw new GuacamoleClientException("Platforms of this type cannot be tested.");
 
         PlatformTestResult result = type.test(prepared);
-        logger.info("User \"{}\" tested platform \"{}\": {}.", user.getIdentifier(), Values.forLog(prepared.getName()),
+        logger.info("User \"{}\" tested platform \"{}\": {}.", username(), Values.forLog(prepared.getName()),
                 result.isSuccess() ? "passed" : "failed");
         return result;
 
@@ -320,14 +338,14 @@ public class PamREST {
     @GET
     @Path("requests")
     public List<PasswordRequest> listRequests() throws GuacamoleException {
-        return provider.getCheckoutService().listRequests(provider.getDataSourceContext(user), user.getIdentifier(),
+        return provider.getCheckoutService().listRequests(provider.getDataSourceContext(user), username(),
                 provider.isAdministrator(user));
     }
 
     @GET
     @Path("requests/{id}")
     public PasswordRequest getRequest(@PathParam("id") String id) throws GuacamoleException {
-        return provider.getCheckoutService().getRequest(provider.getDataSourceContext(user), user.getIdentifier(), id,
+        return provider.getCheckoutService().getRequest(provider.getDataSourceContext(user), username(), id,
                 provider.isAdministrator(user));
     }
 
@@ -341,7 +359,7 @@ public class PamREST {
             throws GuacamoleException {
 
         RequestOutcome outcome = provider.getCheckoutService().request(provider.getDataSourceContext(user),
-                user.getIdentifier(), remoteHost(), id, body == null ? null : body.get("reason"),
+                username(), remoteHost(), id, body == null ? null : body.get("reason"),
                 provider.isAdministrator(user));
 
         // Awaiting approval: no password yet
@@ -360,7 +378,7 @@ public class PamREST {
     @Path("requests/{id}/password")
     public Response revealPassword(@PathParam("id") String id) throws GuacamoleException {
         return uncached(provider.getCheckoutService().revealPassword(provider.getDataSourceContext(user),
-                user.getIdentifier(), id));
+                username(), id));
     }
 
     /**
@@ -388,13 +406,13 @@ public class PamREST {
     @DELETE
     @Path("requests/{id}/pending")
     public void cancelRequest(@PathParam("id") String id) throws GuacamoleException {
-        provider.getCheckoutService().cancelRequest(provider.getDataSourceContext(user), user.getIdentifier(), id);
+        provider.getCheckoutService().cancelRequest(provider.getDataSourceContext(user), username(), id);
     }
 
     @POST
     @Path("requests/{id}/release")
     public void releasePassword(@PathParam("id") String id) throws GuacamoleException {
-        provider.getCheckoutService().release(provider.getDataSourceContext(user), user.getIdentifier(), id);
+        provider.getCheckoutService().release(provider.getDataSourceContext(user), username(), id);
     }
 
     @GET
@@ -421,7 +439,7 @@ public class PamREST {
     @Path("checkouts/{id}/revoke")
     public void revokeCheckout(@PathParam("id") String id) throws GuacamoleException {
         requireAdministrator();
-        provider.getCheckoutService().revoke(parseId(id), user.getIdentifier());
+        provider.getCheckoutService().revoke(parseId(id), username());
     }
 
     private static int parseId(String id) throws GuacamoleResourceNotFoundException {

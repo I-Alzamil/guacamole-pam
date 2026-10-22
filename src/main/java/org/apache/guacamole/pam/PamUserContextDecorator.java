@@ -34,9 +34,10 @@ import org.apache.guacamole.protocol.GuacamoleClientInformation;
 import org.apache.guacamole.protocol.GuacamoleConfiguration;
 
 /**
- * Decorates the PostgreSQL UserContext: adds password management to the
- * connection editor and tracks connection usage for after-use rotation, and
- * adds the approval permission to users and user groups. Only
+ * Decorates the UserContext of the managed data source (PostgreSQL, MySQL or
+ * SQL Server): adds password management to the connection editor and tracks
+ * connection usage for after-use rotation, and adds the approval permission
+ * to users and user groups. Only
  * administrators may change either: users allowed to create or edit
  * connections, users or groups keep doing so, but cannot change how
  * passwords are managed, who must request access, or who approves, nor the

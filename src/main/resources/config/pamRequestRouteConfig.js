@@ -22,11 +22,6 @@ angular.module('guacPam').run(['$injector', function pamRequestRouteConfig($inje
     var pamRequestService     = $injector.get('pamRequestService');
 
     /**
-     * Data source whose connections can need a request.
-     */
-    var DATA_SOURCE = 'postgresql';
-
-    /**
      * Returns the connections of the managed data source a client route
      * opens, as { client: client identifier, id: connection identifier }.
      * A route may open several clients side by side, such as when one is
@@ -44,11 +39,13 @@ angular.module('guacPam').run(['$injector', function pamRequestRouteConfig($inje
 
     /**
      * The connections of the managed data source among the clients of a
-     * client route's identifier (several joined by ".").
+     * client route's identifier (several joined by "."). Until it is known,
+     * the connections of every data source.
      */
     var getConnectionsOfClients = function getConnectionsOfClients(clients) {
 
         var connections = [];
+        var dataSource = pamRequestService.getDataSource();
         angular.forEach(ManagedClientGroup.getClientIdentifiers(clients), function addClient(client) {
 
             var clientIdentifier;
@@ -60,7 +57,7 @@ angular.module('guacPam').run(['$injector', function pamRequestRouteConfig($inje
             }
 
             if (clientIdentifier.type === ClientIdentifier.Types.CONNECTION
-                    && clientIdentifier.dataSource === DATA_SOURCE)
+                    && (dataSource === null || clientIdentifier.dataSource === dataSource))
                 connections.push({ client : client, id : clientIdentifier.id });
 
         });
@@ -162,7 +159,8 @@ angular.module('guacPam').run(['$injector', function pamRequestRouteConfig($inje
         var url = $location.url();
         event.preventDefault();
         pamRequestService.refresh().then(function requestsLoaded() {
-            var mustRequest = findMustRequest(connections);
+            // Only those of the managed data source, now known
+            var mustRequest = findMustRequest(getRequestedConnections(next));
             if (mustRequest)
                 refuse(mustRequest);
             else

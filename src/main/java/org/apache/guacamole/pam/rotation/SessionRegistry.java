@@ -6,8 +6,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -20,6 +22,7 @@ import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.net.GuacamoleTunnel;
 import org.apache.guacamole.pam.Values;
 import org.apache.guacamole.pam.db.PamDatabase;
+import org.apache.guacamole.pam.db.SqlDialect;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,9 +43,14 @@ class SessionRegistry {
      */
     static final int STALE_SECONDS = 180;
 
-    private static final String FRESH = " heartbeat > CURRENT_TIMESTAMP - make_interval(secs => " + STALE_SECONDS + ")";
-
     private final PamDatabase database;
+
+    private final SqlDialect dialect;
+
+    /**
+     * The condition that a row is not stale.
+     */
+    private final String fresh;
 
     /**
      * Identifies this server's rows: its host name, made unique per start.
@@ -101,6 +109,8 @@ class SessionRegistry {
 
     SessionRegistry(PamDatabase database) {
         this.database = database;
+        this.dialect = database.getDialect();
+        this.fresh = " heartbeat > " + dialect.plusSeconds(dialect.now(), Integer.toString(-STALE_SECONDS));
     }
 
     private static String hostName() {
@@ -136,22 +146,36 @@ class SessionRegistry {
      * when it was first recorded, even if its row was removed since.
      */
     private void record(Connection connection, Session session) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(
-                "INSERT INTO pam_session (session_id, connection_id, username, server)"
-              + " VALUES (?, ?, ?, ?)"
-              + " ON CONFLICT (session_id) DO UPDATE SET heartbeat = CURRENT_TIMESTAMP"
-              + " RETURNING started")) {
+
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("session_id", "?");
+        values.put("connection_id", "?");
+        values.put("username", "?");
+        values.put("server", "?");
+
+        try (PreparedStatement statement = connection.prepareStatement(dialect.upsert("pam_session",
+                Collections.singletonList("session_id"), values, "heartbeat = " + dialect.now()))) {
             statement.setString(1, session.id);
             statement.setInt(2, Values.parseId(session.identifier));
             statement.setString(3, session.username);
             statement.setString(4, server);
+            statement.executeUpdate();
+        }
+
+        if (session.recorded)
+            return;
+
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT started FROM pam_session WHERE session_id = ?")) {
+            statement.setString(1, session.id);
             try (ResultSet results = statement.executeQuery()) {
-                if (results.next() && !session.recorded) {
-                    session.started = results.getTimestamp(1).getTime();
+                if (results.next()) {
+                    session.started = SqlDialect.getTimestamp(results, 1).getTime();
                     session.recorded = true;
                 }
             }
         }
+
     }
 
     /**
@@ -223,7 +247,7 @@ class SessionRegistry {
 
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                 "SELECT connection_id, count(*) FROM pam_session WHERE" + FRESH + " GROUP BY connection_id");
+                 "SELECT connection_id, count(*) FROM pam_session WHERE" + fresh + " GROUP BY connection_id");
              ResultSet results = statement.executeQuery()) {
             while (results.next())
                 counts.put(results.getInt(1), results.getInt(2));
@@ -255,14 +279,26 @@ class SessionRegistry {
                     record(connection, session);
             }
 
+            List<String[]> stale = new ArrayList<>();
             try (PreparedStatement statement = connection.prepareStatement(
-                    "DELETE FROM pam_session WHERE NOT" + FRESH + " RETURNING connection_id, username, server");
+                    "SELECT session_id, connection_id, username, server FROM pam_session WHERE NOT" + fresh);
                  ResultSet results = statement.executeQuery()) {
-                while (results.next()) {
-                    abandoned.add(results.getInt(1));
+                while (results.next())
+                    stale.add(new String[] { results.getString(1), results.getString(2), results.getString(3),
+                            results.getString(4) });
+            }
+
+            // Each removed once, here or by another server, unless
+            // refreshed meanwhile
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "DELETE FROM pam_session WHERE session_id = ? AND NOT" + fresh)) {
+                for (String[] row : stale) {
+                    statement.setString(1, row[0]);
+                    if (statement.executeUpdate() == 0)
+                        continue;
+                    abandoned.add(Integer.valueOf(row[1]));
                     logger.info("Removed the stale session of \"{}\" on connection {}, recorded by server"
-                            + " \"{}\", which stopped refreshing it.", results.getString(2), results.getInt(1),
-                            results.getString(3));
+                            + " \"{}\", which stopped refreshing it.", row[2], row[1], row[3]);
                 }
             }
 

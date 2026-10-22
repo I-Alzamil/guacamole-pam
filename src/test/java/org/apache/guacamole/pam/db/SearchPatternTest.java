@@ -7,13 +7,13 @@ import org.junit.Test;
 public class SearchPatternTest {
 
     @Test
-    public void matchesTheTermAnywhere() {
-        assertEquals("%bob%", SearchPattern.contains(" bob "));
+    public void matchesTheTermAnywhereIgnoringCase() {
+        assertEquals("%bob%", SearchPattern.contains(" Bob "));
     }
 
     @Test
     public void escapesWildcardsAndTheEscapeCharacter() {
-        assertEquals("%100\\%\\_off\\\\%", SearchPattern.contains("100%_off\\"));
+        assertEquals("%100!%!_off![x]!!\\%", SearchPattern.contains("100%_off[x]!\\"));
     }
 
 }

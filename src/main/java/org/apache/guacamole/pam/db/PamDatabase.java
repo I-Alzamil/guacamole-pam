@@ -5,7 +5,6 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.Driver;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -23,9 +22,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Access to the Guacamole PostgreSQL database. Reuses the "postgresql-*"
- * properties (see {@link DatabaseSettings}, SSL settings included) and the
- * driver of Guacamole's PostgreSQL authentication, and
+ * Access to the database of Guacamole's authentication whose connections are
+ * managed (see {@link DatabaseSettings}): PostgreSQL, MySQL (or MariaDB) or
+ * SQL Server. Reuses that authentication's properties and driver, and
  * creates this extension's own tables on first use, then runs what a fresh
  * install starts with ({@link #onFreshInstall}). The driver is loaded by
  * name, so this class loads (and {@link #getUnavailableReason} can tell why
@@ -34,7 +33,7 @@ import org.slf4j.LoggerFactory;
  * Connections come from a pool, opened on first use and holding at most
  * "pam-database-max-connections" (10 by default). Code holding a pooled
  * connection never asks for another, so a busy pool cannot deadlock.
- * Session-level advisory locks, released by closing their connection, use a
+ * Session-level locks, released by closing their connection, use a
  * dedicated connection instead ({@link #getDedicatedConnection}).
  */
 public class PamDatabase {
@@ -59,23 +58,21 @@ public class PamDatabase {
     private static final long CONNECTION_TIMEOUT_MS = 30000;
 
     /**
-     * Classpath resource holding the schema of this extension's tables.
-     */
-    private static final String SCHEMA_RESOURCE = "/schema/postgresql.sql";
-
-    /**
      * Version the schema script records once it has run, which must match
      * the latest version it inserts into "pam_schema_version". A database
      * without it runs the script, creating or upgrading the tables.
      */
     private static final int SCHEMA_VERSION = 1;
 
-    /**
-     * SQL state of PostgreSQL's "insufficient_privilege".
-     */
-    private static final String INSUFFICIENT_PRIVILEGE = "42501";
-
     private final DatabaseSettings settings;
+
+    private final SqlDialect dialect;
+
+    /**
+     * Classpath resource holding the schema of this extension's tables, for
+     * the database used.
+     */
+    private final String schemaResource;
 
     private final Driver driver;
 
@@ -117,9 +114,8 @@ public class PamDatabase {
     }
 
     /**
-     * Returns why this extension cannot use the Guacamole database here, or
-     * null if it can: Guacamole's PostgreSQL authentication must be set up,
-     * as the extension manages its connections.
+     * Returns why this extension cannot use a Guacamole database here, or
+     * null if it can (see {@link DatabaseSettings#getUnavailableReason}).
      */
     public static String getUnavailableReason(Environment environment) throws GuacamoleException {
         return DatabaseSettings.getUnavailableReason(environment);
@@ -128,17 +124,27 @@ public class PamDatabase {
     public PamDatabase(Environment environment) throws GuacamoleException {
 
         settings = DatabaseSettings.fromEnvironment(environment);
+        dialect = settings.getDialect();
+        schemaResource = "/schema/" + dialect.getName() + ".sql";
 
         try {
             driver = (Driver) Class.forName(settings.getDriverClass(), true, PamDatabase.class.getClassLoader())
                     .getDeclaredConstructor().newInstance();
         }
         catch (ReflectiveOperationException | LinkageError e) {
-            throw new GuacamoleServerException("Unable to load the PostgreSQL JDBC driver.", e);
+            throw new GuacamoleServerException("Unable to load the " + dialect.getDisplayName()
+                    + " JDBC driver.", e);
         }
 
         maxConnections = Math.max(2, environment.getProperty(MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS));
 
+    }
+
+    /**
+     * The SQL of the database used.
+     */
+    public SqlDialect getDialect() {
+        return dialect;
     }
 
     private synchronized HikariDataSource pool() throws GuacamoleServerException {
@@ -152,6 +158,8 @@ public class PamDatabase {
             config.setDriverClassName(settings.getDriverClass());
             config.setJdbcUrl(settings.getUrl());
             config.setDataSourceProperties(settings.getProperties());
+            if (settings.getSessionSetup() != null)
+                config.setConnectionInitSql(settings.getSessionSetup());
             config.setMaximumPoolSize(maxConnections);
             config.setMinimumIdle(Math.min(MIN_IDLE_CONNECTIONS, maxConnections));
             config.setConnectionTimeout(CONNECTION_TIMEOUT_MS);
@@ -181,18 +189,37 @@ public class PamDatabase {
 
     /**
      * Opens a database connection of its own, outside the pool, for
-     * session-level advisory locks: closing it ends the database session,
-     * releasing them.
+     * session-level locks: closing it ends the database session, releasing
+     * them.
      */
     public Connection getDedicatedConnection() throws GuacamoleException {
         Connection connection;
         try {
             connection = driver.connect(settings.getUrl(), settings.getProperties());
+            if (connection == null)
+                throw new SQLException("The driver does not accept " + settings.getUrl());
         }
         catch (SQLException e) {
             throw new GuacamoleServerException("Unable to connect to the PAM database.", e);
         }
+        if (settings.getSessionSetup() != null) {
+            try (Statement statement = connection.createStatement()) {
+                statement.execute(settings.getSessionSetup());
+            }
+            catch (SQLException e) {
+                close(connection);
+                throw new GuacamoleServerException("Unable to set up the PAM database session.", e);
+            }
+        }
         return withSchema(connection);
+    }
+
+    private static void close(Connection connection) {
+        try {
+            connection.close();
+        }
+        catch (SQLException ignored) {
+        }
     }
 
     /**
@@ -213,11 +240,7 @@ public class PamDatabase {
             }
             catch (SQLException e) {
                 logSchemaFailure(e);
-                try {
-                    connection.close();
-                }
-                catch (SQLException ignored) {
-                }
+                close(connection);
                 throw new SchemaUnavailableException("Unable to create the PAM database tables.", e);
             }
         }
@@ -232,11 +255,11 @@ public class PamDatabase {
             return;
 
         String schema;
-        try (InputStream in = PamDatabase.class.getResourceAsStream(SCHEMA_RESOURCE)) {
+        try (InputStream in = PamDatabase.class.getResourceAsStream(schemaResource)) {
             schema = new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
         catch (IOException | NullPointerException e) {
-            throw new SQLException("Unable to read " + SCHEMA_RESOURCE, e);
+            throw new SQLException("Unable to read " + schemaResource, e);
         }
 
         // Already there: nothing to run, which also lets a database user
@@ -276,8 +299,8 @@ public class PamDatabase {
      * Whether the tables of the given version of the schema exist: the
      * schema script records its versions last, once every statement ran.
      */
-    private static boolean hasVersion(Connection connection, int version) throws SQLException {
-        if (!hasTable(connection, "pam_schema_version"))
+    private boolean hasVersion(Connection connection, int version) throws SQLException {
+        if (!dialect.hasTable(connection, "pam_schema_version"))
             return false;
         try (Statement statement = connection.createStatement();
              ResultSet results = statement.executeQuery(
@@ -290,32 +313,13 @@ public class PamDatabase {
      * Whether any version of the schema was installed, so it is not a fresh
      * install.
      */
-    private static boolean hasAnyVersion(Connection connection) throws SQLException {
-        if (!hasTable(connection, "pam_schema_version"))
+    private boolean hasAnyVersion(Connection connection) throws SQLException {
+        if (!dialect.hasTable(connection, "pam_schema_version"))
             return false;
         try (Statement statement = connection.createStatement();
-             ResultSet results = statement.executeQuery("SELECT 1 FROM pam_schema_version LIMIT 1")) {
-            return results.next();
+             ResultSet results = statement.executeQuery("SELECT COUNT(*) FROM pam_schema_version")) {
+            return results.next() && results.getInt(1) > 0;
         }
-    }
-
-    private static boolean hasTable(Connection connection, String table) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement("SELECT to_regclass(?) IS NOT NULL")) {
-            statement.setString(1, table);
-            try (ResultSet results = statement.executeQuery()) {
-                return results.next() && results.getBoolean(1);
-            }
-        }
-    }
-
-    /**
-     * PostgreSQL adds the position of an error on further lines.
-     */
-    private static String firstLine(String message) {
-        if (message == null)
-            return "";
-        int end = message.indexOf('\n');
-        return end < 0 ? message : message.substring(0, end);
     }
 
     /**
@@ -325,8 +329,8 @@ public class PamDatabase {
      */
     private void logSchemaFailure(SQLException e) {
 
-        if (!INSUFFICIENT_PRIVILEGE.equals(e.getSQLState())) {
-            logger.error("Unable to create the PAM database tables: {}", firstLine(e.getMessage()));
+        if (!dialect.isPermissionDenied(e)) {
+            logger.error("Unable to create the PAM database tables: {}", SqlDialect.firstLine(e.getMessage()));
             return;
         }
 
@@ -336,14 +340,10 @@ public class PamDatabase {
         }
 
         instructionsLogged = true;
-        logger.error("The database user \"{}\" may not create the PAM extension's tables ({}). Create them"
-                + " once as the database owner, by running schema/postgresql.sql from the extension's jar"
-                + " (\"unzip -p guacamole-pam-*.jar schema/postgresql.sql | psql ...\"), then grant them to"
-                + " Guacamole's user as for Guacamole's own tables:"
-                + " GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO \"{}\";"
-                + " GRANT SELECT,USAGE ON ALL SEQUENCES IN SCHEMA public TO \"{}\";"
-                + " Until then, connections stored in the database cannot be opened: their access cannot be checked.",
-                settings.getUsername(), firstLine(e.getMessage()), settings.getUsername(), settings.getUsername());
+        logger.error("The database user \"{}\" may not create the PAM extension's tables ({}). {} Until then,"
+                + " connections stored in the database cannot be opened: their access cannot be checked.",
+                settings.getUsername(), SqlDialect.firstLine(e.getMessage()),
+                dialect.getManualSchemaInstructions(settings.getUsername()));
 
     }
 

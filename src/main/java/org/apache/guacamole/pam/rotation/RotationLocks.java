@@ -1,10 +1,9 @@
 package org.apache.guacamole.pam.rotation;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.HashSet;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Set;
 
 import org.apache.guacamole.GuacamoleException;
@@ -12,25 +11,20 @@ import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.pam.db.PamDatabase;
 
 /**
- * Claims of connections being rotated, as PostgreSQL advisory locks, so
- * Guacamole servers sharing the database never rotate the same connection
- * at once. A claim holds a database connection of its own, outside the pool,
- * for the rotation's duration; closing it, or its dropping, releases the
- * lock.
+ * Claims of connections being rotated, as database locks held by a session
+ * (see {@link org.apache.guacamole.pam.db.SqlDialect#tryLock}), so Guacamole
+ * servers sharing the database never rotate the same connection at once. A
+ * claim holds a database connection of its own, outside the pool, for the
+ * rotation's duration; closing it, or its dropping, releases the lock.
  *
- * Locks use the two-key form, keyed by {@link #NAMESPACE} and the connection
- * id, which never collides with the one-key locks of checkouts.
+ * Locks are keyed by {@link #NAMESPACE} and the connection id.
  */
 class RotationLocks {
 
     /**
-     * First key of every rotation lock ("pamr").
+     * Namespace of every rotation lock ("pamr").
      */
     private static final int NAMESPACE = 0x70616d72;
-
-    private static final String HELD = "SELECT objid FROM pg_locks WHERE locktype = 'advisory'"
-            + " AND objsubid = 2 AND classid = ?::oid AND granted"
-            + " AND database = (SELECT oid FROM pg_database WHERE datname = current_database())";
 
     private final PamDatabase database;
 
@@ -52,7 +46,7 @@ class RotationLocks {
         @Override
         public void close() {
             try {
-                // Closing the session releases its advisory locks
+                // Closing the session releases its locks
                 connection.close();
             }
             catch (SQLException ignored) {
@@ -68,15 +62,9 @@ class RotationLocks {
     Claim tryClaim(int connectionId) throws GuacamoleException {
 
         Connection connection = database.getDedicatedConnection();
-        try (PreparedStatement statement = connection.prepareStatement("SELECT pg_try_advisory_lock(?, ?)")) {
-
-            statement.setInt(1, NAMESPACE);
-            statement.setInt(2, connectionId);
-            try (ResultSet results = statement.executeQuery()) {
-                if (results.next() && results.getBoolean(1))
-                    return new Claim(connection);
-            }
-
+        try {
+            if (database.getDialect().tryLock(connection, NAMESPACE, connectionId))
+                return new Claim(connection);
         }
         catch (SQLException e) {
             new Claim(connection).close();
@@ -93,39 +81,19 @@ class RotationLocks {
      * server.
      */
     boolean isClaimed(int connectionId) throws GuacamoleException {
-        return getClaimed(" AND objid = ?::oid", connectionId).contains(connectionId);
+        return getClaimed(Collections.singleton(connectionId)).contains(connectionId);
     }
 
     /**
-     * Ids of every connection being rotated right now.
+     * Ids of the given connections being rotated right now.
      */
-    Set<Integer> getClaimed() throws GuacamoleException {
-        return getClaimed("");
-    }
-
-    private Set<Integer> getClaimed(String condition, int... parameters) throws GuacamoleException {
-
-        Set<Integer> claimed = new HashSet<>();
-
-        try (Connection connection = database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(HELD + condition)) {
-
-            statement.setInt(1, NAMESPACE);
-            for (int i = 0; i < parameters.length; i++)
-                statement.setInt(i + 2, parameters[i]);
-
-            try (ResultSet results = statement.executeQuery()) {
-                while (results.next())
-                    claimed.add((int) results.getLong(1));
-            }
-
+    Set<Integer> getClaimed(Collection<Integer> connectionIds) throws GuacamoleException {
+        try (Connection connection = database.getConnection()) {
+            return database.getDialect().getLocked(connection, NAMESPACE, connectionIds);
         }
         catch (SQLException e) {
             throw new GuacamoleServerException("Unable to read which connections are being rotated.", e);
         }
-
-        return claimed;
-
     }
 
 }

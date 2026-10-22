@@ -32,8 +32,6 @@ public class PlatformImport {
     public static final String SKIPPED = "SKIPPED";
     public static final String INVALID = "INVALID";
 
-    private static final String UNIQUE_VIOLATION = "23505";
-
     /**
      * Most platforms one import takes.
      */
@@ -267,7 +265,7 @@ public class PlatformImport {
 
         }
         catch (SQLException e) {
-            if (UNIQUE_VIOLATION.equals(e.getSQLState()))
+            if (repository.isUniqueViolation(e))
                 throw new GuacamoleClientException("A platform was saved meanwhile under one of these names."
                         + " Import again.");
             throw new GuacamoleServerException("Unable to import the platforms.", e);

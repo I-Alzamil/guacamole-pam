@@ -1,12 +1,13 @@
 package org.apache.guacamole.pam.db;
 
-import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,14 +40,36 @@ public class ConnectionRepository {
 
     private final PamDatabase database;
 
+    private final SqlDialect dialect;
+
     private final Secrets secrets;
 
     private final ConnectionSecrets connectionSecrets;
 
     public ConnectionRepository(PamDatabase database, Secrets secrets, ConnectionSecrets connectionSecrets) {
         this.database = database;
+        this.dialect = database.getDialect();
         this.secrets = secrets;
         this.connectionSecrets = connectionSecrets;
+    }
+
+    /**
+     * Sets a parameter of a connection, within the caller's transaction.
+     */
+    static void setParameter(SqlDialect dialect, Connection connection, int connectionId, String parameter,
+            String value) throws SQLException {
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("connection_id", "?");
+        values.put("parameter_name", "?");
+        values.put("parameter_value", "?");
+        try (PreparedStatement statement = connection.prepareStatement(dialect.upsert(
+                "guacamole_connection_parameter", Arrays.asList("connection_id", "parameter_name"), values,
+                "parameter_value = EXCLUDED.parameter_value"))) {
+            statement.setInt(1, connectionId);
+            statement.setString(2, parameter);
+            statement.setString(3, value);
+            statement.executeUpdate();
+        }
     }
 
     /**
@@ -278,44 +301,53 @@ public class ConnectionRepository {
 
         Map<Integer, Target> targets = new LinkedHashMap<>();
 
+        // Connections are read by this condition, rather than by listing
+        // their ids, which could be more than a statement may hold
+        String candidates = "SELECT connection_id FROM guacamole_connection"
+                + " WHERE protocol = ? OR connection_id NOT IN (SELECT connection_id FROM guacamole_connection_attribute"
+                + "   WHERE attribute_name = ? AND attribute_value = 'true')"
+                + " OR connection_id IN (SELECT connection_id FROM guacamole_connection_attribute"
+                + "   WHERE attribute_name = ? AND attribute_value NOT IN ('', '0'))";
+
         try (Connection connection = database.getConnection()) {
 
             try (PreparedStatement statement = connection.prepareStatement(
                     "SELECT connection_id, connection_name, protocol FROM guacamole_connection"
-                  + " WHERE protocol = ? OR connection_id NOT IN (SELECT connection_id FROM guacamole_connection_attribute"
-                  + "   WHERE attribute_name = ? AND attribute_value = 'true')"
-                  + " OR connection_id IN (SELECT connection_id FROM guacamole_connection_attribute"
-                  + "   WHERE attribute_name = ? AND attribute_value NOT IN ('', '0'))"
+                  + " WHERE connection_id IN (" + candidates + ")"
                   + " ORDER BY lower(connection_name), connection_id")) {
-                statement.setString(1, accountProtocol);
-                statement.setString(2, PamAttributes.REQUEST_EXEMPT);
-                statement.setString(3, PamAttributes.APPROVALS_REQUIRED);
+                setCandidateParameters(statement, 1, accountProtocol);
                 try (ResultSet results = statement.executeQuery()) {
                     while (results.next())
                         targets.put(results.getInt(1), new Target(results.getInt(1), results.getString(2), results.getString(3)));
                 }
             }
 
-            Array ids = connection.createArrayOf("integer", targets.keySet().toArray());
-
-            try (PreparedStatement statement = connection.prepareStatement(
-                    "SELECT connection_id, parameter_name, parameter_value FROM guacamole_connection_parameter"
-                  + " WHERE connection_id = ANY (?) AND parameter_name = ANY (?)")) {
-                statement.setArray(1, ids);
-                statement.setArray(2, connection.createArrayOf("varchar", parameterNames.toArray()));
-                try (ResultSet results = statement.executeQuery()) {
-                    while (results.next())
-                        targets.get(results.getInt(1)).parameters.put(results.getString(2), results.getString(3));
+            if (!parameterNames.isEmpty()) {
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT connection_id, parameter_name, parameter_value FROM guacamole_connection_parameter"
+                      + " WHERE connection_id IN (" + candidates + ")"
+                      + " AND parameter_name IN " + SqlDialect.parameters(parameterNames.size()))) {
+                    int index = setCandidateParameters(statement, 1, accountProtocol);
+                    for (String name : parameterNames)
+                        statement.setString(index++, name);
+                    try (ResultSet results = statement.executeQuery()) {
+                        while (results.next())
+                            addTo(targets, results);
+                    }
                 }
             }
 
             try (PreparedStatement statement = connection.prepareStatement(
                     "SELECT connection_id, attribute_name, attribute_value FROM guacamole_connection_attribute"
-                  + " WHERE connection_id = ANY (?) AND attribute_name LIKE 'pam-%'")) {
-                statement.setArray(1, ids);
+                  + " WHERE connection_id IN (" + candidates + ") AND attribute_name LIKE 'pam-%'")) {
+                setCandidateParameters(statement, 1, accountProtocol);
                 try (ResultSet results = statement.executeQuery()) {
-                    while (results.next())
-                        targets.get(results.getInt(1)).attributes.put(results.getString(2), results.getString(3));
+                    while (results.next()) {
+                        Target target = targets.get(results.getInt(1));
+                        // Added since the connections were listed
+                        if (target != null)
+                            target.attributes.put(results.getString(2), results.getString(3));
+                    }
                 }
             }
 
@@ -329,18 +361,44 @@ public class ConnectionRepository {
     }
 
     /**
+     * Sets the parameters of the condition selecting request candidates,
+     * from the given index, returning the index of the next parameter.
+     */
+    private static int setCandidateParameters(PreparedStatement statement, int index, String accountProtocol)
+            throws SQLException {
+        statement.setString(index++, accountProtocol);
+        statement.setString(index++, PamAttributes.REQUEST_EXEMPT);
+        statement.setString(index++, PamAttributes.APPROVALS_REQUIRED);
+        return index;
+    }
+
+    /**
+     * Adds a parameter read as (connection id, name, value) to its target,
+     * unless the connection was added since the targets were listed.
+     */
+    private static void addTo(Map<Integer, Target> targets, ResultSet results) throws SQLException {
+        Target target = targets.get(results.getInt(1));
+        if (target != null)
+            target.parameters.put(results.getString(2), results.getString(3));
+    }
+
+    /**
      * Marks a rotation as started, storing the password about to be set so
      * it survives a crash mid-rotation.
      */
     public void recordStart(int connectionId, String pendingPassword) throws GuacamoleException {
 
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("connection_id", "?");
+        values.put("last_attempt", dialect.now());
+        values.put("last_status", "'RUNNING'");
+        values.put("pending_password", "?");
+
         try (Connection connection = database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                 "INSERT INTO pam_rotation_state (connection_id, last_attempt, last_status, last_message, pending_password)"
-               + " VALUES (?, CURRENT_TIMESTAMP, 'RUNNING', NULL, ?)"
-               + " ON CONFLICT (connection_id) DO UPDATE SET last_attempt = EXCLUDED.last_attempt,"
-               + " last_status = EXCLUDED.last_status, last_message = NULL,"
-               + " pending_password = EXCLUDED.pending_password")) {
+             PreparedStatement statement = connection.prepareStatement(dialect.upsert("pam_rotation_state",
+                 Collections.singletonList("connection_id"), values,
+                 "last_attempt = EXCLUDED.last_attempt, last_status = EXCLUDED.last_status, last_message = NULL,"
+               + " pending_password = EXCLUDED.pending_password"))) {
 
             statement.setInt(1, connectionId);
             statement.setString(2, secrets.protect(Secrets.PENDING_PASSWORD, pendingPassword));
@@ -375,18 +433,10 @@ public class ConnectionRepository {
                     parameter = newPassword;
                 }
 
-                try (PreparedStatement statement = connection.prepareStatement(
-                        "INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, parameter_value)"
-                      + " VALUES (?, ?, ?) ON CONFLICT (connection_id, parameter_name)"
-                      + " DO UPDATE SET parameter_value = EXCLUDED.parameter_value")) {
-                    statement.setInt(1, connectionId);
-                    statement.setString(2, PASSWORD_PARAMETER);
-                    statement.setString(3, parameter);
-                    statement.executeUpdate();
-                }
+                setParameter(dialect, connection, connectionId, PASSWORD_PARAMETER, parameter);
 
                 try (PreparedStatement statement = connection.prepareStatement(
-                        "UPDATE pam_rotation_state SET last_success = CURRENT_TIMESTAMP, last_status = 'SUCCESS',"
+                        "UPDATE pam_rotation_state SET last_success = " + dialect.now() + ", last_status = 'SUCCESS',"
                       // The key passed the host key check, so it is trusted
                       + " last_message = ?, host_key = coalesce(?, host_key), pending_password = NULL"
                       + " WHERE connection_id = ?")) {
@@ -418,23 +468,29 @@ public class ConnectionRepository {
     public void recordFailure(int connectionId, String status, String message, String hostKey,
             boolean keepPendingPassword) throws GuacamoleException {
 
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("connection_id", "?");
+        values.put("last_attempt", dialect.now());
+        values.put("last_status", "?");
+        values.put("last_message", "?");
+        values.put("host_key", "?");
+
         try (Connection connection = database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                 "INSERT INTO pam_rotation_state (connection_id, last_attempt, last_status, last_message, host_key)"
-               + " VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?)"
-               + " ON CONFLICT (connection_id) DO UPDATE SET last_attempt = EXCLUDED.last_attempt,"
+             PreparedStatement statement = connection.prepareStatement(dialect.upsert("pam_rotation_state",
+                 Collections.singletonList("connection_id"), values,
+                 "last_attempt = EXCLUDED.last_attempt,"
                + " last_status = EXCLUDED.last_status, last_message = EXCLUDED.last_message,"
                // The first key seen is trusted from then on (SSH); a failure
                // never replaces it, so a host presenting another key cannot
                // become trusted by failing
                + " host_key = coalesce(pam_rotation_state.host_key, EXCLUDED.host_key),"
-               + " pending_password = CASE WHEN ? THEN pam_rotation_state.pending_password ELSE NULL END")) {
+               + " pending_password = CASE WHEN ? = 1 THEN pam_rotation_state.pending_password ELSE NULL END"))) {
 
             statement.setInt(1, connectionId);
             statement.setString(2, status);
             statement.setString(3, message);
             statement.setString(4, hostKey);
-            statement.setBoolean(5, keepPendingPassword);
+            statement.setInt(5, keepPendingPassword ? 1 : 0);
             statement.executeUpdate();
 
         }
@@ -549,7 +605,7 @@ public class ConnectionRepository {
 
         try (PreparedStatement statement = connection.prepareStatement(
                 "SELECT connection_id, last_attempt, last_success, last_status, last_message, host_key,"
-              + " pending_password IS NOT NULL FROM pam_rotation_state"
+              + " CASE WHEN pending_password IS NULL THEN 0 ELSE 1 END FROM pam_rotation_state"
               + (connectionId == null ? "" : " WHERE connection_id = ?"))) {
 
             if (connectionId != null)
@@ -558,8 +614,8 @@ public class ConnectionRepository {
             try (ResultSet results = statement.executeQuery()) {
                 while (results.next()) {
                     State state = new State();
-                    state.lastAttempt = results.getTimestamp(2);
-                    state.lastSuccess = results.getTimestamp(3);
+                    state.lastAttempt = SqlDialect.getTimestamp(results, 2);
+                    state.lastSuccess = SqlDialect.getTimestamp(results, 3);
                     state.status = results.getString(4);
                     state.message = results.getString(5);
                     state.hostKey = results.getString(6);

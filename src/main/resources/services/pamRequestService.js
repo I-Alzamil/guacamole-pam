@@ -15,12 +15,13 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
     // Required types
     var ClientIdentifier = $injector.get('ClientIdentifier');
 
-    /**
-     * Data source whose connections can need a request.
-     */
-    var DATA_SOURCE = 'postgresql';
-
     var service = {};
+
+    /**
+     * Identifier of the data source whose connections can need a request
+     * (the one whose connections are managed), or null until loaded.
+     */
+    var dataSource = null;
 
     /**
      * Connections needing a request that the user may request, by
@@ -78,7 +79,12 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
         if (refreshing)
             return refreshing;
 
-        refreshing = pamService.getRequests().then(function requestsRetrieved(requests) {
+        var loadDataSource = dataSource !== null ? $q.resolve({ identifier : dataSource })
+                : pamService.getDataSource();
+
+        refreshing = $q.all([loadDataSource, pamService.getRequests()]).then(function requestsRetrieved(results) {
+            dataSource = results[0].identifier;
+            var requests = results[1];
             var identifiers = {};
             angular.forEach(requests, function addRequest(request) {
                 identifiers[request.identifier] = {
@@ -102,6 +108,14 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
 
         return refreshing;
 
+    };
+
+    /**
+     * Identifier of the data source whose connections can need a request,
+     * or null until loaded.
+     */
+    service.getDataSource = function getDataSource() {
+        return dataSource;
     };
 
     /**
@@ -146,7 +160,7 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
         if (requestable && requestable[identifier])
             requestable[identifier].mine = true;
         $location.url('/client/' + ClientIdentifier.toString({
-            dataSource : DATA_SOURCE,
+            dataSource : dataSource,
             type       : ClientIdentifier.Types.CONNECTION,
             id         : identifier
         }));
@@ -163,6 +177,7 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
         $timeout.cancel(nextRefresh);
         nextRefresh = null;
         requestable = null;
+        dataSource = null;
     };
 
     /**

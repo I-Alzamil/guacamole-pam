@@ -10,11 +10,6 @@
  */
 angular.module('guacPam').directive('pamApprovalPermissions', [function pamApprovalPermissions() {
 
-    /**
-     * Data source whose users and groups can approve.
-     */
-    var DATA_SOURCE = 'postgresql';
-
     return {
         restrict    : 'E',
         scope       : {
@@ -81,11 +76,13 @@ angular.module('guacPam').directive('pamApprovalPermissions', [function pamAppro
         controller  : ['$scope', '$injector', function pamApprovalPermissionsController($scope, $injector) {
 
             var pamApprovalSelection = $injector.get('pamApprovalSelection');
+            var pamRequestService    = $injector.get('pamRequestService');
 
             $scope.selection = pamApprovalSelection;
 
             $scope.isApplicable = function isApplicable() {
-                return $scope.dataSource === DATA_SOURCE && !!$scope.attributes;
+                // Users and groups of the managed data source can approve
+                return $scope.dataSource === pamRequestService.getDataSource() && !!$scope.attributes;
             };
 
             /**
@@ -97,8 +94,10 @@ angular.module('guacPam').directive('pamApprovalPermissions', [function pamAppro
                 return pamApprovalSelection.isApprover();
             };
 
-            // The user or group is loaded after the editor appears
-            $scope.$watchGroup(['attributes', 'editable', 'dataSource'], function bindSelection() {
+            // The user or group is loaded after the editor appears, and the
+            // managed data source may become known after it too
+            $scope.$watchGroup(['attributes', 'editable', 'dataSource', pamRequestService.getDataSource],
+                    function bindSelection() {
                 if ($scope.isApplicable())
                     pamApprovalSelection.bind($scope.attributes, $scope.editable);
                 else

@@ -19,7 +19,8 @@ import org.apache.guacamole.protocols.ProtocolInfo;
 import org.junit.Test;
 
 /**
- * That the driver gets the settings Guacamole gives its own, SSL included.
+ * Which database is used, and that its driver gets the settings Guacamole
+ * gives its own, SSL included.
  */
 public class DatabaseSettingsTest {
 
@@ -92,11 +93,27 @@ public class DatabaseSettingsTest {
     }
 
     @Test
-    public void passesPostgreSqlSettings() throws GuacamoleException {
-        DatabaseSettings settings = DatabaseSettings.fromEnvironment(new TestEnvironment().database("postgresql")
-                .with("postgresql-hostname", "db"));
-        assertEquals("jdbc:postgresql://db:5432/guacamole", settings.getUrl());
+    public void usesTheOnlyDatabaseConfigured() throws GuacamoleException {
+        DatabaseSettings settings = DatabaseSettings.fromEnvironment(new TestEnvironment().database("mysql")
+                .with("mysql-hostname", "db").with("mysql-driver", "mysql"));
+        assertEquals("mysql", settings.getDialect().getName());
+        assertEquals("jdbc:mysql://db:3306/guacamole", settings.getUrl());
         assertEquals("guac", settings.getProperties().getProperty("user"));
+        assertEquals("SET time_zone = '+00:00'", settings.getSessionSetup());
+    }
+
+    @Test
+    public void refusesSeveralDatabasesUnlessOneIsChosen() throws GuacamoleException {
+        TestEnvironment environment = new TestEnvironment().database("postgresql").database("sqlserver");
+        assertTrue(unavailable(environment).contains("pam-database"));
+        environment.with("pam-database", "sqlserver");
+        assertEquals("sqlserver", DatabaseSettings.fromEnvironment(environment).getDialect().getName());
+    }
+
+    @Test
+    public void refusesNoDatabase() throws GuacamoleException {
+        assertTrue(unavailable(new TestEnvironment()).contains("none"));
+        assertTrue(unavailable(new TestEnvironment().with("pam-database", "mysql")).contains("not configured"));
     }
 
     @Test
@@ -113,12 +130,29 @@ public class DatabaseSettingsTest {
     public void defaultsToPreferredSsl() throws GuacamoleException {
         assertEquals("prefer", DatabaseSettings.fromEnvironment(new TestEnvironment().database("postgresql"))
                 .getProperties().getProperty("sslmode"));
+        Properties mysql = DatabaseSettings.fromEnvironment(new TestEnvironment().database("mysql")
+                .with("mysql-ssl-mode", "disabled")).getProperties();
+        assertEquals("disabled", mysql.getProperty("sslMode"));
+        assertEquals("false", mysql.getProperty("useSSL"));
     }
 
     @Test
     public void refusesAnUnknownSslMode() throws GuacamoleException {
         assertTrue(unavailable(new TestEnvironment().database("postgresql")
                 .with("postgresql-ssl-mode", "sometimes")).contains("postgresql-ssl-mode"));
+    }
+
+    @Test
+    public void passesSqlServerSettings() throws GuacamoleException {
+        DatabaseSettings settings = DatabaseSettings.fromEnvironment(new TestEnvironment().database("sqlserver")
+                .with("sqlserver-instance", "PAM").with("sqlserver-trust-all-server-certificates", "true"));
+        assertEquals("jdbc:sqlserver://localhost:1433", settings.getUrl());
+        assertEquals("guacamole", settings.getProperties().getProperty("databaseName"));
+        assertEquals("PAM", settings.getProperties().getProperty("instanceName"));
+        assertEquals("true", settings.getProperties().getProperty("trustServerCertificate"));
+        assertNull(settings.getSessionSetup());
+        assertTrue(unavailable(new TestEnvironment().database("sqlserver").with("sqlserver-driver", "jtds"))
+                .contains("microsoft2005"));
     }
 
 }

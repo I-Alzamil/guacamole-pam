@@ -1,8 +1,6 @@
 package org.apache.guacamole.pam.crypto;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -32,7 +30,7 @@ public class SecretMigration {
     private static final Logger logger = LoggerFactory.getLogger(SecretMigration.class);
 
     /**
-     * Key of the migration's advisory lock ("pams").
+     * Namespace of the migration's lock ("pams"), whose only key is 0.
      */
     private static final int LOCK = 0x70616d73;
 
@@ -77,13 +75,8 @@ public class SecretMigration {
         // Its own connection: closing it releases the lock
         try (Connection lock = database.getDedicatedConnection()) {
 
-            try (PreparedStatement statement = lock.prepareStatement("SELECT pg_try_advisory_lock(?)")) {
-                statement.setInt(1, LOCK);
-                try (ResultSet results = statement.executeQuery()) {
-                    if (!results.next() || !results.getBoolean(1))
-                        return null;
-                }
-            }
+            if (!database.getDialect().tryLock(lock, LOCK, 0))
+                return null;
 
             MigrationReport report = new MigrationReport();
             platforms.migrateSecrets(report);
