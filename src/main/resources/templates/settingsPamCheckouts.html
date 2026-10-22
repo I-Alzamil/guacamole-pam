@@ -25,7 +25,7 @@
                         title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ checkout.reason }}</a></td>
                     <td><span title="{{ checkout.checkedOut | pamUtc }}">{{ checkout.checkedOut | date:'medium' }} {{ checkout.checkedOut | pamZone }}</span></td>
                     <td><span title="{{ checkout.expires | pamUtc }}">{{ checkout.expires | date:'medium' }} {{ checkout.expires | pamZone }}</span></td>
-                    <td><button class="danger" ng-click="revokeCheckout(checkout)">{{ 'PAM.ACTION_REVOKE' | translate }}</button></td>
+                    <td class="pam-row-actions"><button class="danger" ng-click="revokeCheckout(checkout)">{{ 'PAM.ACTION_REVOKE' | translate }}</button></td>
                 </tr>
                 <tr ng-show="activeCheckouts && !activeCheckouts.length">
                     <td colspan="7" class="pam-empty">{{ 'PAM.INFO_NO_ACTIVE_CHECKOUTS' | translate }}</td>

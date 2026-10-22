@@ -57,15 +57,13 @@
                         <span class="pam-status-badge {{ connection.status | lowercase }}" ng-show="connection.status">
                             {{ 'PAM.STATUS_' + connection.status | translate }}
                         </span>
-                        <details ng-if="connection.message">
-                            <summary>{{ 'PAM.ACTION_SHOW_DETAILS' | translate }}</summary>
-                            <pre>{{ connection.message }}</pre>
-                        </details>
+                        <a href="" class="pam-reason-link pam-status-details" ng-if="connection.message"
+                           ng-click="showMessage(connection)">{{ 'PAM.ACTION_SHOW_DETAILS' | translate }}</a>
                         <div class="pam-host-key" ng-show="connection.hostKey" title="{{ 'PAM.HELP_HOST_KEY' | translate }}">
                             {{ connection.hostKey }}
                         </div>
                     </td>
-                    <td>
+                    <td class="pam-row-actions">
                         <button ng-click="rotate(connection)" ng-disabled="connection.rotating">
                             {{ 'PAM.ACTION_ROTATE_NOW' | translate }}
                         </button>
@@ -79,6 +77,28 @@
                 </tr>
             </tbody>
         </table>
+    </div>
+
+    <!-- The outcome of a connection's last rotation, in full. In a dialog,
+         so opening it never resizes the table, which refreshes meanwhile -->
+    <div class="pam-request-overlay" ng-if="messageShown" ng-click="closeMessage($event)">
+        <div class="pam-request-dialog pam-rotation-dialog" role="dialog" aria-modal="true" aria-labelledby="pam-rotation-message-title">
+
+            <button class="pam-dialog-close" ng-click="closeMessage()" title="{{ 'PAM.ACTION_CLOSE' | translate }}"
+                    aria-label="{{ 'PAM.ACTION_CLOSE' | translate }}">&times;</button>
+
+            <h2 id="pam-rotation-message-title">{{ messageShown.name }}</h2>
+            <p class="pam-request-hint">
+                <span class="pam-status-badge {{ messageShown.status | lowercase }}" ng-show="messageShown.status">
+                    {{ 'PAM.STATUS_' + messageShown.status | translate }}
+                </span>
+                <span ng-if="messageShown.lastAttempt" title="{{ messageShown.lastAttempt | pamUtc }}">
+                    {{ messageShown.lastAttempt | date:'medium' }} {{ messageShown.lastAttempt | pamZone }}
+                </span>
+            </p>
+            <pre class="pam-rotation-message">{{ messageShown.message }}</pre>
+
+        </div>
     </div>
 
 </div>

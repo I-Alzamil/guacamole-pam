@@ -29,7 +29,7 @@
                         {{ request.approvers.length }} / {{ request.approvalsRequired }}
                         <div class="pam-approvers" ng-show="request.approvers.length">{{ request.approvers.join(', ') }}</div>
                     </td>
-                    <td class="pam-approval-actions">
+                    <td class="pam-approval-actions pam-row-actions">
                         <span ng-if="isOwn(request)" class="pam-empty">{{ 'PAM_APPROVALS.INFO_OWN_REQUEST' | translate }}</span>
                         <span ng-if="!isOwn(request) && !canDecide(request)" class="pam-empty">{{ 'PAM_APPROVALS.INFO_APPROVED_BY_YOU' | translate }}</span>
                         <button class="save" ng-if="canDecide(request)" ng-click="approve(request)" ng-disabled="busy[request.id]">

@@ -348,6 +348,14 @@
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
+/* A row's buttons: last, against the table's right edge, and only as wide
+   as they need */
+.pam-connection-table td.pam-row-actions {
+    text-align: right;
+    white-space: nowrap;
+    width: 1%;
+}
+
 /* Active checkouts and requests awaiting approval: rows centered on their
    buttons */
 .pam-checkouts .pam-connection-table td,
@@ -380,13 +388,18 @@
 .pam-status-badge.unknown { background: #f8e3b5; color: #7a4b00; }
 .pam-status-badge.running { background: #d6e4f6; color: #1c4a8a; }
 
-.pam-status details {
+.pam-status-details {
+    display: block;
     margin-top: 0.4em;
 }
 
-.pam-status pre {
-    max-width: 40em;
-    max-height: 16em;
+/* The outcome of a rotation, in full */
+.pam-rotation-dialog {
+    max-width: 50em;
+}
+
+.pam-rotation-message {
+    max-height: 60vh;
     overflow: auto;
     white-space: pre-wrap;
     font-size: 0.85em;
@@ -586,8 +599,8 @@
     white-space: nowrap;
 }
 
-.pam-approval-actions button {
-    margin-right: 0.4em;
+.pam-approval-actions button + button {
+    margin-left: 0.4em;
 }
 
 .pam-status-badge.approved  { background: #d6f0d6; color: #1e5e1e; }

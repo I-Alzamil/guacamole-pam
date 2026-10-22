@@ -12,6 +12,7 @@ angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSet
         controller  : ['$scope', '$injector', function settingsPamRotationController($scope, $injector) {
 
             // Required services
+            var $document        = $injector.get('$document');
             var $interval        = $injector.get('$interval');
             var $translate       = $injector.get('$translate');
             var guacNotification = $injector.get('guacNotification');
@@ -184,6 +185,35 @@ angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSet
             };
 
             /**
+             * The connection whose last rotation's outcome is shown in full,
+             * as it was when opened, or null.
+             */
+            $scope.messageShown = null;
+
+            $scope.showMessage = function showMessage(connection) {
+                $scope.messageShown = connection;
+            };
+
+            /**
+             * Closes the outcome; when given a click, only one on the
+             * backdrop itself.
+             */
+            $scope.closeMessage = function closeMessage($event) {
+                if ($event && $event.target !== $event.currentTarget)
+                    return;
+                $scope.messageShown = null;
+            };
+
+            var closeOnEscape = function closeOnEscape(e) {
+                if (e.key === 'Escape' && $scope.messageShown)
+                    $scope.$apply(function closeMessage() {
+                        $scope.messageShown = null;
+                    });
+            };
+
+            $document.on('keydown', closeOnEscape);
+
+            /**
              * Translation key of the label of a rotation mode.
              */
             $scope.modeKey = function modeKey(mode) {
@@ -199,6 +229,7 @@ angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSet
 
             $scope.$on('$destroy', function settingsPamRotationDestroyed() {
                 $interval.cancel(refresh);
+                $document.off('keydown', closeOnEscape);
             });
 
         }]
