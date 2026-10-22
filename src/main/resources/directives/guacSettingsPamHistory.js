@@ -43,7 +43,6 @@ angular.module('guacPam').directive('guacSettingsPamHistory', [function guacSett
             $scope.order = new SortOrder([
                 '-entry.checkedOut',
                 'entry.username',
-                'entry.remoteHost',
                 'entry.connectionName',
                 '-duration',
                 'ended',
@@ -98,6 +97,15 @@ angular.module('guacPam').directive('guacSettingsPamHistory', [function guacSett
                 $scope.$emit('pamShowCheckoutReason', checkout);
             };
 
+            /**
+             * Shows details of a checkout ("holder", "approvals", "extensions"
+             * or "ended"),
+             * in the dialog of the Checkouts tab this history is part of.
+             */
+            $scope.showDetails = function showDetails(checkout, details) {
+                $scope.$emit('pamShowCheckoutDetails', checkout, details);
+            };
+
             $scope.endKey = function endKey(checkout) {
                 return checkout.released ? 'PAM.RELEASE_' + checkout.releaseReason : 'PAM.INFO_ACTIVE';
             };
@@ -142,10 +150,13 @@ angular.module('guacPam').directive('guacSettingsPamHistory', [function guacSett
                     'PAM.TABLE_HEADER_ENDED',
                     'PAM_HISTORY.TABLE_HEADER_ENDED_HOW',
                     'PAM_HISTORY.TABLE_HEADER_ENDED_BY',
+                    'PAM_HISTORY.TABLE_HEADER_ENDED_FROM',
                     'PAM_HISTORY.TABLE_HEADER_DURATION_SECONDS',
                     'PAM.TABLE_HEADER_VIEWS',
+                    'PAM_HISTORY.TABLE_HEADER_EXTENSIONS',
                     'PAM_HISTORY.TABLE_HEADER_EXCLUSIVE',
                     'PAM_HISTORY.TABLE_HEADER_APPROVED_BY',
+                    'PAM_HISTORY.TABLE_HEADER_APPROVED_FROM',
                     'PAM_HISTORY.FILENAME_CSV'
                 ];
 
@@ -168,10 +179,15 @@ angular.module('guacPam').directive('guacSettingsPamHistory', [function guacSett
                             $filter('pamLocalIso')(checkout.released),
                             checkout.releaseReason || '',
                             checkout.releasedBy || '',
+                            checkout.releasedHost || '',
                             Math.round(wrapper.duration / 1000),
                             checkout.revealCount,
+                            checkout.extensions,
                             checkout.exclusive,
-                            (checkout.approvedBy || []).join(', ')
+                            (checkout.approvedBy || []).join(', '),
+                            (checkout.approvals || []).map(function approvalFrom(approval) {
+                                return approval.approver + ' (' + (approval.remoteHost || '?') + ')';
+                            }).join(', ')
                         ]);
                     });
 

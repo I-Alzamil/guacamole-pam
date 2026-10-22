@@ -605,13 +605,51 @@
 
 .pam-status-badge.approved  { background: #d6f0d6; color: #1e5e1e; }
 .pam-status-badge.denied    { background: #f6d6d6; color: #8a1c1c; }
-.pam-status-badge.expired,
+.pam-status-badge.expired   { background: #f8e3b5; color: #7a4b00; }
 .pam-status-badge.cancelled { background: rgba(0, 0, 0, 0.08); color: inherit; }
 
 .pam-request-pending {
     padding: 0.5em 0.75em;
     background: #d6e4f6;
     border-left: 3px solid #1c4a8a;
+}
+
+/* Now, or ahead of time */
+.pam-request-when {
+    border: none;
+    margin: 0.5em 0;
+    padding: 0;
+}
+
+.pam-request-when legend {
+    padding: 0;
+    margin-bottom: 0.25em;
+}
+
+.pam-request-when > label {
+    display: block;
+    margin: 0.15em 0;
+}
+
+/* Several time limits at once, spaced as "When" is */
+.pam-request-duration {
+    margin: 0.5em 0 0.75em;
+}
+
+.pam-request-duration select {
+    min-width: 8em;
+}
+
+.pam-request-duration .pam-request-hint {
+    margin: 0.25em 0 0;
+}
+
+.pam-request-start {
+    margin: 0.25em 0 0 1.6em;
+}
+
+.pam-request-zone {
+    margin-left: 0.5em;
 }
 
 /* Approver groups checklist */
@@ -714,6 +752,7 @@
 
 .pam-connection-status.held    { background: #d6f0d6; color: #1e5e1e; }
 .pam-connection-status.pending { background: #d6e4f6; color: #1c4a8a; }
+.pam-connection-status.reserved { background: #f3ead2; color: #6b4e0e; }
 
 .pam-connection-status:hover,
 .pam-connection-status:focus {

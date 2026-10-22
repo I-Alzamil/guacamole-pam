@@ -6,7 +6,10 @@ import java.util.List;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
- * A request awaiting, or having received, approval. Times are
+ * A request awaiting, or having received, approval: for access from its
+ * final approval on, or, made ahead of time, for a given time (a
+ * reservation, once approved, until its holder uses it), or to extend a
+ * checkout. Times are
  * milliseconds since the epoch.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -32,7 +35,45 @@ public class ApprovalRequest {
     private String decidedBy;
     private String decisionReason;
     private Integer checkoutId;
+    private Long starts;
+    private Long ends;
+    private int periods = 1;
+    private Integer extendsCheckout;
+    private Integer extensionMinutes;
+    private String decidedHost;
     private List<String> approvers = new ArrayList<>();
+    private List<Approval> approvals = new ArrayList<>();
+
+    /**
+     * An approval given to the request: by whom, when (milliseconds since
+     * the epoch), and from where (or null if unknown).
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class Approval {
+
+        private final String approver;
+        private final long approved;
+        private final String remoteHost;
+
+        public Approval(String approver, long approved, String remoteHost) {
+            this.approver = approver;
+            this.approved = approved;
+            this.remoteHost = remoteHost;
+        }
+
+        public String getApprover() {
+            return approver;
+        }
+
+        public long getApproved() {
+            return approved;
+        }
+
+        public String getRemoteHost() {
+            return remoteHost;
+        }
+
+    }
 
     public int getId() {
         return id;
@@ -160,6 +201,65 @@ public class ApprovalRequest {
     }
 
     /**
+     * When the access asked for starts, for a request made ahead of time,
+     * or null for access from the final approval on.
+     */
+    public Long getStarts() {
+        return starts;
+    }
+
+    void setStarts(Long starts) {
+        this.starts = starts;
+    }
+
+    /**
+     * When the access asked for ahead of time ends, or null.
+     */
+    public Long getEnds() {
+        return ends;
+    }
+
+    void setEnds(Long ends) {
+        this.ends = ends;
+    }
+
+    /**
+     * How many times the connection's time limit the access asked for
+     * lasts: 1 unless more were asked for at once.
+     */
+    public int getPeriods() {
+        return periods;
+    }
+
+    void setPeriods(int periods) {
+        this.periods = periods;
+    }
+
+    /**
+     * For a request to extend a checkout: the checkout's id, otherwise null.
+     * Once approved, its checkout id is that same checkout.
+     */
+    public Integer getExtendsCheckout() {
+        return extendsCheckout;
+    }
+
+    void setExtendsCheckout(Integer extendsCheckout) {
+        this.extendsCheckout = extendsCheckout;
+    }
+
+    /**
+     * By how many minutes an extension extends its checkout, or null for
+     * any other request.
+     */
+    public Integer getExtensionMinutes() {
+        return extensionMinutes;
+    }
+
+    void setExtensionMinutes(Integer extensionMinutes) {
+        this.extensionMinutes = extensionMinutes;
+    }
+
+    /**
      * Why the request was denied, as given by the approver, or null.
      */
     public String getDecisionReason() {
@@ -168,6 +268,24 @@ public class ApprovalRequest {
 
     void setDecisionReason(String decisionReason) {
         this.decisionReason = decisionReason;
+    }
+
+    /**
+     * Where who denied or cancelled the request did so from, or null.
+     */
+    public String getDecidedHost() {
+        return decidedHost;
+    }
+
+    void setDecidedHost(String decidedHost) {
+        this.decidedHost = decidedHost;
+    }
+
+    /**
+     * The approvals given so far, in order.
+     */
+    public List<Approval> getApprovals() {
+        return approvals;
     }
 
     /**

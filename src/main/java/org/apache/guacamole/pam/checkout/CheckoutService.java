@@ -1,5 +1,6 @@
 package org.apache.guacamole.pam.checkout;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -40,7 +41,11 @@ import org.slf4j.LoggerFactory;
  * allow a single holder, which managed connections use by default, as ending a
  * checkout may rotate the password. Connections may require approval: requests
  * then wait for enough distinct approvers, and the checkout starts at the final
- * approval.
+ * approval. Those can also be requested ahead of time, for a given start: once
+ * approved, the request reserves the connection from then until its time
+ * limit, and the requester checks out with it during that time. Reservations
+ * of a connection checked out alone never overlap, and keep others from
+ * checking it out during them.
  */
 public class CheckoutService {
 
@@ -50,7 +55,29 @@ public class CheckoutService {
 
     public static final int MAX_MINUTES = 7 * 24 * 60;
 
+    /**
+     * How many times a checkout may be extended, unless "pam-max-extensions"
+     * or a connection says otherwise.
+     */
+    public static final int DEFAULT_MAX_EXTENSIONS = 2;
+
+    /**
+     * Upper bound of the extensions a connection can allow.
+     */
+    private static final int MAX_EXTENSIONS = 20;
+
     private static final int MAX_REASON_LENGTH = 500;
+
+    /**
+     * How far ahead access can be requested, in days.
+     */
+    public static final int MAX_DAYS_AHEAD = 30;
+
+    /**
+     * How long before now a start of access requested ahead of time may be,
+     * in milliseconds, so a start picked in the current minute is accepted.
+     */
+    private static final long START_TOLERANCE_MS = 60000;
 
     /**
      * Reason recorded for checkouts of Accounts allowing access without a
@@ -93,10 +120,24 @@ public class CheckoutService {
      */
     private final boolean adminBypass;
 
+    /**
+     * Whether holders may extend checkouts, unless a connection says
+     * otherwise ("pam-extensions-enabled").
+     */
+    private final boolean extensionsEnabled;
+
+    /**
+     * How many times a checkout may be extended, unless a connection says
+     * otherwise ("pam-max-extensions").
+     */
+    private final int defaultMaxExtensions;
+
     public CheckoutService(ConnectionRepository connections, CheckoutRepository checkouts,
             PlatformRepository platforms, ApprovalRepository approvals, RotationService rotationService,
-            boolean adminBypass) {
+            boolean adminBypass, boolean extensionsEnabled, int defaultMaxExtensions) {
         this.adminBypass = adminBypass;
+        this.extensionsEnabled = extensionsEnabled;
+        this.defaultMaxExtensions = defaultMaxExtensions;
         this.connections = connections;
         this.approvals = approvals;
         this.platforms = platforms;
@@ -122,6 +163,7 @@ public class CheckoutService {
         }
         Map<Integer, ApprovalRequest> pending = approvals.listPendingOf(username);
         Map<Integer, ApprovalRequest> latest = approvals.listLatestOf(username);
+        Map<Integer, List<ApprovalRequest>> reservations = approvals.listReservations();
 
         List<PasswordRequest> requests = new ArrayList<>();
         for (Target target : connections.listRequestCandidates(AccountProtocol.NAME, PUBLIC_PARAMETERS)) {
@@ -129,7 +171,8 @@ public class CheckoutService {
             if (isRequestable(target) && readable.contains(Integer.toString(id)))
                 requests.add(toRequest(target, all.get(target.getAttribute(PamAttributes.PLATFORM)), username,
                         administrator, active.getOrDefault(id, Collections.<Checkout>emptyList()),
-                        pending.get(id), latest.get(id)));
+                        pending.get(id), latest.get(id),
+                        reservations.getOrDefault(id, Collections.<ApprovalRequest>emptyList())));
         }
 
         return requests;
@@ -149,21 +192,36 @@ public class CheckoutService {
      * the connection needs approval, a new request instead awaits approval
      * (or the user's pending request is returned), unless the user is an
      * administrator: administrators bypass approval, and also the reason
-     * when they bypass requests.
+     * when they bypass requests. During the user's own reservation, its
+     * checkout starts instead, until the reservation ends.
      *
      * @param remoteHost
      *     Where the user requests from, kept with the request and the
      *     checkout, or null if unknown.
      *
+     * @param starts
+     *     When the access starts, for a request made ahead of time, or null
+     *     for access as soon as possible.
+     *
+     * @param periods
+     *     How many times the connection's time limit the access lasts: 1, or
+     *     up to one more than the extensions it allows, which this uses up.
+     *
      * @throws GuacamoleClientException
-     *     If the reason is missing, or the connection cannot be held now.
+     *     If the reason is missing, the start or periods are not allowed, or
+     *     the connection cannot be held now (or then).
      */
     public RequestOutcome request(UserContext context, String username, String remoteHost, String identifier,
-            String reason, boolean administrator) throws GuacamoleException {
+            String reason, Long starts, int periods, boolean administrator) throws GuacamoleException {
 
         Target target = requireRequestable(context, identifier);
         int id = target.getId();
         boolean account = isAccount(target);
+
+        if (periods < 1 || periods > getMaxPeriods(target))
+            throw new GuacamoleClientException(getMaxPeriods(target) == 1
+                    ? "This access cannot be asked for longer than its time limit."
+                    : "This access can be asked for up to " + getMaxPeriods(target) + " times its time limit.");
 
         // Expired checkouts not ended yet would refuse the request
         rotationService.expireCheckouts();
@@ -185,7 +243,20 @@ public class CheckoutService {
             return RequestOutcome.granted(toGrant(checkout, target));
         }
 
+        // The user's reservation, once it started
+        ApprovalRequest reservation = starts == null ? approvals.getReservation(id, username) : null;
+        if (reservation != null && reservation.getStarts() <= System.currentTimeMillis()) {
+            checkout = startCheckout(target, username, remoteHost, reservation.getReason(), account ? 1 : 0,
+                    reservation.getEnds(), reservation.getPeriods());
+            approvals.markUsed(reservation.getId(), checkout.getId());
+            logger.info("User \"{}\" used request {} for \"{}\" (checkout {}).", username, reservation.getId(),
+                    Values.forLog(target.getName()), checkout.getId());
+            return RequestOutcome.granted(toGrant(checkout, connections.load(id)));
+        }
+
         int approvalsRequired = administrator ? 0 : getApprovalsRequired(target);
+        if (starts != null && approvalsRequired == 0)
+            throw new GuacamoleClientException("Only access needing approval is requested ahead of time.");
         if (administrator && getApprovalsRequired(target) > 0)
             logger.info("Administrator \"{}\" bypasses the approval of \"{}\".", username,
                     Values.forLog(target.getName()));
@@ -193,12 +264,20 @@ public class CheckoutService {
         if (approvalsRequired > 0 && approvals.getPending(id, username) == null) {
 
             String trimmed = validateReason(reason);
-            requireAvailable(target);
+            Long ends = null;
+            if (starts == null)
+                requireAvailable(target, username);
+            else {
+                validateStart(starts);
+                ends = starts + getDuration(target) * 60000L * periods;
+            }
 
-            ApprovalRequest pending = approvals.create(id, username, remoteHost, trimmed, approvalsRequired);
-            logger.info("User \"{}\" requested \"{}\" (request {}, {} approvals needed). Reason: {}",
+            ApprovalRequest pending = approvals.create(id, username, remoteHost, trimmed, approvalsRequired,
+                    starts, ends, isExclusive(target), periods);
+            logger.info("User \"{}\" requested \"{}\" (request {}, {} approvals needed{}{}). Reason: {}",
                     username, Values.forLog(target.getName()), pending.getId(), approvalsRequired,
-                    Values.forLog(trimmed));
+                    starts == null ? "" : ", from " + Instant.ofEpochMilli(starts) + " to " + Instant.ofEpochMilli(ends),
+                    periods == 1 ? "" : ", " + periods + " times its time limit", Values.forLog(trimmed));
 
         }
 
@@ -217,7 +296,7 @@ public class CheckoutService {
             checkoutReason = validateReason(reason);
 
 
-        checkout = startCheckout(target, username, remoteHost, checkoutReason, account ? 1 : 0);
+        checkout = startCheckout(target, username, remoteHost, checkoutReason, account ? 1 : 0, null, periods);
         return RequestOutcome.granted(toGrant(checkout, connections.load(id)));
 
     }
@@ -326,28 +405,180 @@ public class CheckoutService {
         if (target == null)
             throw new GuacamoleResourceNotFoundException("The connection no longer exists.");
         rotationService.expireCheckouts();
-        return startCheckout(target, request.getUsername(), request.getRemoteHost(), request.getReason(), 0);
+        return startCheckout(target, request.getUsername(), request.getRemoteHost(), request.getReason(), 0, null,
+                request.getPeriods());
+    }
+
+    /**
+     * Approves a request made ahead of time: it then reserves the
+     * connection, for its requester to check out during its time. Others'
+     * pending requests that overlap it, on a connection checked out alone,
+     * are rejected.
+     *
+     * @throws GuacamoleClientException
+     *     If its time is no longer free, as the connection is checked out
+     *     alone and someone else holds or reserved it then.
+     */
+    public void reserve(ApprovalRequest request, String approver) throws GuacamoleException {
+        Integer id = Values.parseId(request.getConnectionIdentifier());
+        Target target = id == null ? null : connections.load(id);
+        if (target == null)
+            throw new GuacamoleResourceNotFoundException("The connection no longer exists.");
+        rotationService.expireCheckouts();
+        for (Integer rejected : approvals.markReserved(request, approver, isExclusive(target)))
+            logger.info("Request {} for \"{}\" was rejected: it overlaps request {} of \"{}\", approved by \"{}\".",
+                    rejected, Values.forLog(target.getName()), request.getId(), request.getUsername(), approver);
+    }
+
+    /**
+     * Extends the user's checkout of a connection allowing it, by the
+     * connection's extension length, with a reason (unless the connection
+     * needs no request). If the connection needs approval, a request to
+     * extend it instead awaits approval, by as many approvers as a request
+     * (administrators skip it). Extensions end no later than someone else's
+     * next reservation of a connection held alone.
+     *
+     * @param remoteHost
+     *     Where the user asks from, or null if unknown.
+     *
+     * @return
+     *     The connection as now shown to the user.
+     *
+     * @throws GuacamoleClientException
+     *     If the user holds no checkout of it, the checkout cannot be
+     *     extended any more, the reason is missing, or the extension cannot
+     *     be granted.
+     */
+    public PasswordRequest extend(UserContext context, String username, String remoteHost, String identifier,
+            String reason, boolean administrator) throws GuacamoleException {
+
+        Target target = requireRequestable(context, identifier);
+        if (!allowsExtensions(target))
+            throw new GuacamoleClientException("This access cannot be extended.");
+
+        rotationService.expireCheckouts();
+        Checkout checkout = checkouts.getActive(target.getId(), username);
+        if (checkout == null)
+            throw new GuacamoleClientException("You do not hold this connection.");
+        if (checkout.getExtensions() >= checkout.getMaxExtensions())
+            throw new GuacamoleClientException("This checkout cannot be extended any more.");
+
+        // A reason, as for the checkout itself
+        String trimmed;
+        if (reason != null && !reason.trim().isEmpty())
+            trimmed = validateReason(reason);
+        else if (!requiresRequest(target))
+            trimmed = NO_REQUEST_REASON;
+        else if (bypassesRequests(administrator))
+            trimmed = ADMIN_BYPASS_REASON;
+        else
+            trimmed = validateReason(reason);
+        int approvalsRequired = administrator ? 0 : getApprovalsRequired(target);
+        int minutes = getExtensionMinutes(target);
+
+        ApprovalRequest request = approvals.createExtension(checkout, username, remoteHost, trimmed,
+                approvalsRequired, minutes);
+        logger.info("User \"{}\" asked to extend checkout {} of \"{}\" by {} minutes (request {}, {} approvals"
+                + " needed). Reason: {}", username, checkout.getId(), Values.forLog(target.getName()), minutes,
+                request.getId(), approvalsRequired, Values.forLog(trimmed));
+
+        if (approvalsRequired == 0) {
+            try {
+                grantExtension(request, username);
+            }
+            catch (GuacamoleClientException e) {
+                approvals.decide(request.getId(), ApprovalRequest.CANCELLED, username, remoteHost);
+                throw e;
+            }
+            approvals.markApproved(request.getId(), checkout.getId(), username);
+        }
+
+        return toRequest(target, platformOf(target), username, administrator);
+
+    }
+
+    /**
+     * Grants an extension once approved, extending its checkout.
+     *
+     * @throws GuacamoleClientException
+     *     If the checkout ended, cannot be extended any more, or someone
+     *     else's reservation starts as it ends.
+     */
+    public Checkout grantExtension(ApprovalRequest request, String approver) throws GuacamoleException {
+        rotationService.expireCheckouts();
+        Checkout checkout = checkouts.extend(request.getExtendsCheckout(), request.getExtensionMinutes());
+        logger.info("Checkout {} of \"{}\" by user \"{}\" was extended by {} minutes, until {} (request {},"
+                + " approved by \"{}\").", checkout.getId(), Values.forLog(checkout.getConnectionName()),
+                checkout.getUsername(), request.getExtensionMinutes(), Instant.ofEpochMilli(checkout.getExpires()),
+                request.getId(), approver);
+        return checkout;
+    }
+
+    /**
+     * Cancels the user's request to extend their checkout, awaiting
+     * approval.
+     *
+     * @param remoteHost
+     *     Where the user cancels from, or null if unknown.
+     */
+    public void cancelExtension(UserContext context, String username, String remoteHost, String identifier)
+            throws GuacamoleException {
+
+        Target target = requireRequestable(context, identifier);
+        Checkout checkout = checkouts.getActive(target.getId(), username);
+        ApprovalRequest extension = checkout == null ? null : approvals.getLatestExtension(checkout.getId());
+        if (extension == null || !ApprovalRequest.PENDING.equals(extension.getStatus()))
+            throw new GuacamoleClientException("No extension of your checkout awaits approval.");
+
+        approvals.decide(extension.getId(), ApprovalRequest.CANCELLED, username, remoteHost);
+        logger.info("User \"{}\" cancelled request {} to extend checkout {}.", username, extension.getId(),
+                checkout.getId());
+
     }
 
     /**
      * Cancels the user's own request awaiting approval.
+     *
+     * @param remoteHost
+     *     Where the user cancels from, or null if unknown.
      */
-    public void cancelRequest(UserContext context, String username, String identifier) throws GuacamoleException {
+    public void cancelRequest(UserContext context, String username, String remoteHost, String identifier)
+            throws GuacamoleException {
 
         Target target = requireRequestable(context, identifier);
         ApprovalRequest pending = approvals.getPending(target.getId(), username);
         if (pending == null)
             throw new GuacamoleClientException("You have no request for this connection awaiting approval.");
 
-        approvals.decide(pending.getId(), ApprovalRequest.CANCELLED, username);
+        approvals.decide(pending.getId(), ApprovalRequest.CANCELLED, username, remoteHost);
         logger.info("User \"{}\" cancelled request {} for \"{}\".", username, pending.getId(),
                 Values.forLog(target.getName()));
 
     }
 
     /**
+     * Cancels the user's own next reservation, approved but not used yet.
+     *
+     * @param remoteHost
+     *     Where the user cancels from, or null if unknown.
+     */
+    public void cancelReservation(UserContext context, String username, String remoteHost, String identifier)
+            throws GuacamoleException {
+
+        Target target = requireRequestable(context, identifier);
+        ApprovalRequest reservation = approvals.getReservation(target.getId(), username);
+        if (reservation == null)
+            throw new GuacamoleClientException("You have no approved access to this ahead.");
+
+        approvals.cancelReservation(reservation.getId(), username, remoteHost);
+        logger.info("User \"{}\" cancelled their reservation {} of \"{}\".", username, reservation.getId(),
+                Values.forLog(target.getName()));
+
+    }
+
+    /**
      * What deleting a connection ends: its active checkouts, and the
-     * requests awaiting approval for it. Read before the deletion, as their
+     * requests awaiting approval for it, or reserving it. Read before the deletion, as their
      * rows then no longer name the connection, and ended once it succeeded.
      */
     public final class Deletion {
@@ -356,9 +587,12 @@ public class CheckoutService {
 
         private final List<ApprovalRequest> pending;
 
-        private Deletion(List<Checkout> active, List<ApprovalRequest> pending) {
+        private final List<ApprovalRequest> reservations;
+
+        private Deletion(List<Checkout> active, List<ApprovalRequest> pending, List<ApprovalRequest> reservations) {
             this.active = active;
             this.pending = pending;
+            this.reservations = reservations;
         }
 
         /**
@@ -367,13 +601,21 @@ public class CheckoutService {
          */
         public void complete(String username) throws GuacamoleException {
             for (Checkout checkout : active)
-                end(checkout, Checkout.DELETED, username);
+                end(checkout, Checkout.DELETED, username, null);
             for (ApprovalRequest request : pending) {
                 try {
-                    approvals.decide(request.getId(), ApprovalRequest.CANCELLED, username);
+                    approvals.decide(request.getId(), ApprovalRequest.CANCELLED, username, null);
                 }
                 catch (GuacamoleClientException e) {
                     // Decided meanwhile
+                }
+            }
+            for (ApprovalRequest request : reservations) {
+                try {
+                    approvals.cancelReservation(request.getId(), username, null);
+                }
+                catch (GuacamoleClientException e) {
+                    // Used or over meanwhile
                 }
             }
         }
@@ -386,16 +628,22 @@ public class CheckoutService {
     public Deletion prepareDeletion(String identifier) throws GuacamoleException {
         Integer id = Values.parseId(identifier);
         if (id == null)
-            return new Deletion(Collections.<Checkout>emptyList(), Collections.<ApprovalRequest>emptyList());
-        return new Deletion(checkouts.listActive(id), approvals.listPending(id));
+            return new Deletion(Collections.<Checkout>emptyList(), Collections.<ApprovalRequest>emptyList(),
+                    Collections.<ApprovalRequest>emptyList());
+        return new Deletion(checkouts.listActive(id), approvals.listPending(id), approvals.listReservations(id));
     }
 
+    /**
+     * Starts a checkout, for the given number of times the connection's time
+     * limit, or until the given time (that of a reservation) if not null.
+     * Periods beyond the first use up extensions.
+     */
     private Checkout startCheckout(Target target, String username, String remoteHost, String reason,
-            int revealCount) throws GuacamoleException {
+            int revealCount, Long until, int periods) throws GuacamoleException {
 
         int id = target.getId();
-        Checkout checkout = checkouts.create(id, username, remoteHost, reason, getDuration(target),
-                isExclusive(target), revealCount);
+        Checkout checkout = checkouts.create(id, username, remoteHost, reason, getDuration(target) * periods, until,
+                isExclusive(target), revealCount, Math.max(0, getMaxExtensions(target) - (periods - 1)));
         holderCounts = null;
 
         // A rotation claims the connection before checking for checkouts,
@@ -444,11 +692,31 @@ public class CheckoutService {
     }
 
     /**
+     * Refuses a start of access requested ahead of time that is past, or too
+     * far ahead.
+     */
+    private static void validateStart(long starts) throws GuacamoleClientException {
+        long now = System.currentTimeMillis();
+        if (starts < now - START_TOLERANCE_MS)
+            throw new GuacamoleClientException("Please choose a start in the future.");
+        if (starts > now + MAX_DAYS_AHEAD * 24L * 3600000L)
+            throw new GuacamoleClientException("Access can be requested up to " + MAX_DAYS_AHEAD + " days ahead.");
+    }
+
+    /**
      * Refuses a request that could not be granted anyway because someone
      * holds the connection exclusively, or an exclusive checkout is wanted
-     * while anyone holds it.
+     * while anyone holds it, or while someone else's reservation lasts.
      */
-    private void requireAvailable(Target target) throws GuacamoleException {
+    private void requireAvailable(Target target, String username) throws GuacamoleException {
+        if (isExclusive(target)) {
+            long now = System.currentTimeMillis();
+            for (ApprovalRequest reservation : approvals.listReservations(target.getId())) {
+                if (!reservation.getUsername().equals(username) && reservation.getStarts() <= now)
+                    throw new GuacamoleClientException("This is reserved by \"" + reservation.getUsername()
+                            + "\" now.");
+            }
+        }
         for (Checkout active : checkouts.listActive(target.getId())) {
             if (active.isExclusive())
                 throw new GuacamoleClientException("This is checked out by \""
@@ -461,22 +729,29 @@ public class CheckoutService {
 
     /**
      * Releases the user's own checkout, before its time limit.
+     *
+     * @param remoteHost
+     *     Where the user releases it from, or null if unknown.
      */
-    public void release(UserContext context, String username, String identifier) throws GuacamoleException {
+    public void release(UserContext context, String username, String remoteHost, String identifier)
+            throws GuacamoleException {
 
         Target target = requireRequestable(context, identifier);
         Checkout checkout = checkouts.getActive(target.getId(), username);
         if (checkout == null)
             throw new GuacamoleClientException("You do not hold this connection.");
 
-        end(checkout, Checkout.RELEASED, username);
+        end(checkout, Checkout.RELEASED, username, remoteHost);
 
     }
 
     /**
      * Ends any active checkout, on request of an administrator.
+     *
+     * @param remoteHost
+     *     Where the administrator revokes it from, or null if unknown.
      */
-    public void revoke(int checkoutId, String administrator) throws GuacamoleException {
+    public void revoke(int checkoutId, String administrator, String remoteHost) throws GuacamoleException {
 
         Checkout checkout = checkouts.get(checkoutId);
         if (checkout == null)
@@ -484,7 +759,7 @@ public class CheckoutService {
         if (checkout.getReleased() != null)
             throw new GuacamoleClientException("This checkout has already ended.");
 
-        end(checkout, Checkout.REVOKED, administrator);
+        end(checkout, Checkout.REVOKED, administrator, remoteHost);
 
     }
 
@@ -534,9 +809,13 @@ public class CheckoutService {
         return checkouts.search(terms, limit);
     }
 
-    private void end(Checkout checkout, String releaseReason, String releasedBy) throws GuacamoleException {
+    /**
+     * Ends a checkout, recording why, by whom, and from where (or null).
+     */
+    private void end(Checkout checkout, String releaseReason, String releasedBy, String releasedHost)
+            throws GuacamoleException {
         holderCounts = null;
-        if (checkouts.release(checkout.getId(), releaseReason, releasedBy)) {
+        if (checkouts.release(checkout.getId(), releaseReason, releasedBy, releasedHost)) {
             logger.info("Checkout {} of \"{}\" by user \"{}\" ended: {} by \"{}\".", checkout.getId(),
                     Values.forLog(checkout.getConnectionName()), checkout.getUsername(), releaseReason, releasedBy);
             rotationService.checkoutEnded(checkout);
@@ -568,18 +847,26 @@ public class CheckoutService {
         boolean approval = !administrator && getApprovalsRequired(target) > 0;
         return toRequest(target, platform, username, administrator, checkouts.listActive(id),
                 approval ? approvals.getPending(id, username) : null,
-                approval ? approvals.getLatest(id, username) : null);
+                approval ? approvals.getLatest(id, username) : null, approvals.listReservations(id));
     }
 
     /**
-     * The connection as shown to the user, given its active checkouts, and
-     * the user's pending and latest requests for it (or null).
+     * The connection as shown to the user, given its active checkouts, the
+     * user's pending and latest requests for it (or null), and its
+     * reservations.
      */
     private PasswordRequest toRequest(Target target, Platform platform, String username, boolean administrator,
-            List<Checkout> active, ApprovalRequest pending, ApprovalRequest latest) throws GuacamoleException {
+            List<Checkout> active, ApprovalRequest pending, ApprovalRequest latest,
+            List<ApprovalRequest> reservations) throws GuacamoleException {
 
         int approvalsRequired = administrator ? 0 : getApprovalsRequired(target);
         boolean account = isAccount(target);
+
+        Checkout own = null;
+        for (Checkout checkout : active) {
+            if (checkout.getUsername().equals(username))
+                own = checkout;
+        }
 
         return new PasswordRequest(Integer.toString(target.getId()), target.getName(),
                 account ? accountName(target) : null,
@@ -592,7 +879,10 @@ public class CheckoutService {
             .withBypass(bypassesRequests(administrator))
             .withNoRequest(!requiresRequest(target) || bypassesRequests(administrator))
             .withApproval(approvalsRequired, approvalsRequired > 0 ? pending : null,
-                approvalsRequired > 0 ? latest : null);
+                approvalsRequired > 0 ? latest : null)
+            .withReservations(reservations, username)
+            .withExtensions(getMaxPeriods(target), getExtensionMinutes(target), own,
+                own == null ? null : approvals.getLatestExtension(own.getId()));
 
     }
 
@@ -687,6 +977,55 @@ public class CheckoutService {
 
     private static String accountName(Target target) {
         return target.getParameters().get(AccountProtocol.USERNAME);
+    }
+
+    /**
+     * Whether holders may extend their checkouts of the connection: as it
+     * says, or as "pam-extensions-enabled" says.
+     */
+    private boolean allowsExtensions(Target target) {
+        String value = target.getAttribute(PamAttributes.EXTENSIONS);
+        if (PamAttributes.EXTENSIONS_YES.equals(value))
+            return true;
+        if (PamAttributes.EXTENSIONS_NO.equals(value))
+            return false;
+        return extensionsEnabled;
+    }
+
+    /**
+     * How many times a checkout of the connection may be extended in all: 0
+     * if it allows no extensions.
+     */
+    private int getMaxExtensions(Target target) {
+        if (!allowsExtensions(target))
+            return 0;
+        try {
+            return Math.max(0, Math.min(MAX_EXTENSIONS, Integer.parseInt(target.getAttribute(PamAttributes.MAX_EXTENSIONS))));
+        }
+        catch (NumberFormatException | NullPointerException e) {
+            return Math.min(MAX_EXTENSIONS, defaultMaxExtensions);
+        }
+    }
+
+    /**
+     * How many times its time limit a request for the connection may ask
+     * for at once: one more than the extensions it allows.
+     */
+    private int getMaxPeriods(Target target) {
+        return 1 + getMaxExtensions(target);
+    }
+
+    /**
+     * By how many minutes an extension extends a checkout of the connection.
+     */
+    private static int getExtensionMinutes(Target target) {
+        try {
+            int minutes = Integer.parseInt(target.getAttribute(PamAttributes.EXTENSION_DURATION));
+            return Math.max(1, Math.min(MAX_MINUTES, minutes));
+        }
+        catch (NumberFormatException | NullPointerException e) {
+            return getDuration(target);
+        }
     }
 
     private static int getDuration(Target target) {

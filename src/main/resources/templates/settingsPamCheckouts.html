@@ -9,7 +9,6 @@
                 <tr>
                     <th>{{ 'PAM.TABLE_HEADER_CONNECTION' | translate }}</th>
                     <th>{{ 'PAM.TABLE_HEADER_USER' | translate }}</th>
-                    <th>{{ 'SETTINGS_CONNECTION_HISTORY.TABLE_HEADER_SESSION_REMOTEHOST' | translate }}</th>
                     <th>{{ 'PAM.TABLE_HEADER_REASON' | translate }}</th>
                     <th>{{ 'PAM.TABLE_HEADER_CHECKED_OUT' | translate }}</th>
                     <th>{{ 'PAM.TABLE_HEADER_EXPIRES' | translate }}</th>
@@ -19,8 +18,8 @@
             <tbody>
                 <tr ng-repeat="checkout in activeCheckouts">
                     <td>{{ checkout.connectionName }}</td>
-                    <td>{{ checkout.username }}</td>
-                    <td>{{ checkout.remoteHost }}</td>
+                    <td><a href="" class="pam-reason-link" ng-click="showDetails(checkout, 'holder')"
+                        title="{{ 'PAM_HISTORY.HELP_SHOW_HOLDER' | translate }}">{{ checkout.username }}</a></td>
                     <td class="pam-truncate"><a href="" class="pam-reason-link" ng-click="showReason(checkout)"
                         title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ checkout.reason }}</a></td>
                     <td><span title="{{ checkout.checkedOut | pamUtc }}">{{ checkout.checkedOut | date:'medium' }} {{ checkout.checkedOut | pamZone }}</span></td>
@@ -28,7 +27,7 @@
                     <td class="pam-row-actions"><button class="danger" ng-click="revokeCheckout(checkout)">{{ 'PAM.ACTION_REVOKE' | translate }}</button></td>
                 </tr>
                 <tr ng-show="activeCheckouts && !activeCheckouts.length">
-                    <td colspan="7" class="pam-empty">{{ 'PAM.INFO_NO_ACTIVE_CHECKOUTS' | translate }}</td>
+                    <td colspan="6" class="pam-empty">{{ 'PAM.INFO_NO_ACTIVE_CHECKOUTS' | translate }}</td>
                 </tr>
             </tbody>
         </table>
@@ -38,6 +37,103 @@
     <!-- Every checkout, active or ended -->
     <h2 class="header">{{ 'PAM.SECTION_HEADER_CHECKOUT_HISTORY' | translate }}</h2>
     <guac-settings-pam-history></guac-settings-pam-history>
+
+    <!-- Details of a checkout, active or in the history: who holds it, who
+         approved it, or who ended it, with where they did so from -->
+    <div class="pam-request-overlay" ng-if="detailsShown" ng-click="closeDetails($event)">
+        <div class="pam-request-dialog" role="dialog" aria-modal="true" aria-labelledby="pam-checkout-details-title">
+
+            <button class="pam-dialog-close" ng-click="closeDetails()" title="{{ 'PAM.ACTION_CLOSE' | translate }}"
+                    aria-label="{{ 'PAM.ACTION_CLOSE' | translate }}">&times;</button>
+
+            <h2 id="pam-checkout-details-title">{{ 'PAM_HISTORY.DIALOG_HEADER_' + (detailsShown.details | uppercase) | translate }}</h2>
+            <p class="pam-request-hint">{{ detailsShown.checkout.connectionName }}</p>
+
+            <!-- Who checked it out -->
+            <table class="pam-request-account" ng-if="detailsShown.details === 'holder'">
+                <tr>
+                    <th>{{ 'PAM_APPROVALS.FIELD_USER' | translate }}</th>
+                    <td>{{ detailsShown.checkout.username }}</td>
+                </tr>
+                <tr>
+                    <th>{{ 'PAM.TABLE_HEADER_CHECKED_OUT' | translate }}</th>
+                    <td><span title="{{ detailsShown.checkout.checkedOut | pamUtc }}">{{ detailsShown.checkout.checkedOut | date:'medium' }} {{ detailsShown.checkout.checkedOut | pamZone }}</span></td>
+                </tr>
+                <tr>
+                    <th>{{ 'PAM_APPROVALS.FIELD_ADDRESS' | translate }}</th>
+                    <td>{{ detailsShown.checkout.remoteHost || ('PAM_APPROVALS.INFO_UNKNOWN' | translate) }}</td>
+                </tr>
+            </table>
+
+            <!-- Who approved the request that started it -->
+            <table class="pam-connection-table" ng-if="detailsShown.details === 'approvals'">
+                <thead>
+                    <tr>
+                        <th>{{ 'PAM_APPROVALS.TABLE_HEADER_APPROVED_BY' | translate }}</th>
+                        <th>{{ 'PAM_APPROVALS.TABLE_HEADER_APPROVED' | translate }}</th>
+                        <th>{{ 'PAM_APPROVALS.FIELD_ADDRESS' | translate }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr ng-repeat="approval in detailsShown.checkout.approvals">
+                        <td>{{ approval.approver }}</td>
+                        <td><span title="{{ approval.approved | pamUtc }}">{{ approval.approved | date:'medium' }} {{ approval.approved | pamZone }}</span></td>
+                        <td>{{ approval.remoteHost || ('PAM_APPROVALS.INFO_UNKNOWN' | translate) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- Its extensions, in order -->
+            <div ng-if="detailsShown.details === 'extensions'">
+                <table class="pam-connection-table">
+                    <thead>
+                        <tr>
+                            <th>{{ 'PAM_HISTORY.TABLE_HEADER_EXTENDED' | translate }}</th>
+                            <th>{{ 'PAM_HISTORY.TABLE_HEADER_EXTENDED_BY' | translate }}</th>
+                            <th>{{ 'PAM.TABLE_HEADER_REASON' | translate }}</th>
+                            <th>{{ 'PAM_HISTORY.TABLE_HEADER_APPROVED_BY' | translate }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr ng-repeat="extension in detailsShown.checkout.extensionHistory">
+                            <td><span title="{{ extension.granted | pamUtc }}">{{ extension.granted | date:'medium' }} {{ extension.granted | pamZone }}</span></td>
+                            <td>{{ 'PAM_APPROVALS.TEXT_MINUTES' | translate:{ MINUTES: extension.minutes } }}</td>
+                            <td class="pam-reason-full">{{ extension.reason }}</td>
+                            <td>
+                                <div ng-repeat="approval in extension.approvals">
+                                    {{ approval.approver }}
+                                    <span class="pam-request-hint">({{ approval.remoteHost || ('PAM_APPROVALS.INFO_UNKNOWN' | translate) }})</span>
+                                </div>
+                                <span ng-if="!extension.approvals.length" class="pam-empty">{{ 'PAM_HISTORY.INFO_NO_APPROVAL' | translate }}</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p class="pam-request-hint">{{ 'PAM_HISTORY.TEXT_EXTENSIONS_LEFT' | translate:{ USED: detailsShown.checkout.extensions, MAX: detailsShown.checkout.maxExtensions } }}</p>
+            </div>
+
+            <!-- Who ended it -->
+            <table class="pam-request-account" ng-if="detailsShown.details === 'ended'">
+                <tr>
+                    <th>{{ 'PAM_HISTORY.TABLE_HEADER_ENDED_HOW' | translate }}</th>
+                    <td>{{ 'PAM.RELEASE_' + detailsShown.checkout.releaseReason | translate }}</td>
+                </tr>
+                <tr>
+                    <th>{{ 'PAM_HISTORY.TABLE_HEADER_ENDED_BY' | translate }}</th>
+                    <td>{{ detailsShown.checkout.releasedBy }}</td>
+                </tr>
+                <tr>
+                    <th>{{ 'PAM.TABLE_HEADER_ENDED' | translate }}</th>
+                    <td><span title="{{ detailsShown.checkout.released | pamUtc }}">{{ detailsShown.checkout.released | date:'medium' }} {{ detailsShown.checkout.released | pamZone }}</span></td>
+                </tr>
+                <tr>
+                    <th>{{ 'PAM_APPROVALS.FIELD_ADDRESS' | translate }}</th>
+                    <td>{{ detailsShown.checkout.releasedHost || ('PAM_APPROVALS.INFO_UNKNOWN' | translate) }}</td>
+                </tr>
+            </table>
+
+        </div>
+    </div>
 
     <!-- Full reason of a checkout, active or in the history -->
     <div class="pam-request-overlay" ng-if="reasonShown" ng-click="closeReason($event)">

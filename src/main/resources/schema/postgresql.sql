@@ -81,10 +81,17 @@ CREATE TABLE IF NOT EXISTS pam_checkout (
   released        timestamptz,
   release_reason  varchar(16),
   released_by     varchar(128),
+
+  -- Where who released or revoked the checkout did so from
+  released_host   varchar(256),
   reveal_count    integer       NOT NULL DEFAULT 1,
 
   -- Whether the checkout excluded every other holder
   exclusive       boolean       NOT NULL DEFAULT TRUE,
+
+  -- How many times it was extended, and may be in all
+  extensions      integer       NOT NULL DEFAULT 0,
+  max_extensions  integer       NOT NULL DEFAULT 0,
 
   PRIMARY KEY (checkout_id),
   CONSTRAINT pam_checkout_connection
@@ -131,10 +138,25 @@ CREATE TABLE IF NOT EXISTS pam_request (
   status             varchar(16)   NOT NULL DEFAULT 'PENDING',
   decided            timestamptz,
   decided_by         varchar(128),
+
+  -- Where who denied or cancelled the request did so from
+  decided_host       varchar(256),
   checkout_id        integer,
 
   -- Why the approver who decided denied the request
   decision_reason    varchar(500),
+
+  -- When the access asked for starts and ends, for a request made ahead of
+  -- time; null for access from the final approval on
+  starts             timestamptz,
+  ends               timestamptz,
+
+  -- How many times the connection's time limit the access asked for lasts
+  periods            integer       NOT NULL DEFAULT 1,
+
+  -- For an extension: the checkout it extends, and by how many minutes
+  extends_checkout   integer,
+  extension_minutes  integer,
 
   PRIMARY KEY (request_id),
   CONSTRAINT pam_request_connection
@@ -142,13 +164,16 @@ CREATE TABLE IF NOT EXISTS pam_request (
     REFERENCES guacamole_connection (connection_id) ON DELETE SET NULL,
   CONSTRAINT pam_request_checkout
     FOREIGN KEY (checkout_id)
+    REFERENCES pam_checkout (checkout_id) ON DELETE SET NULL,
+  CONSTRAINT pam_request_extends
+    FOREIGN KEY (extends_checkout)
     REFERENCES pam_checkout (checkout_id) ON DELETE SET NULL
 
 );
 
--- At most one pending request per user and connection
+-- At most one pending request per user and connection, besides extensions
 CREATE UNIQUE INDEX IF NOT EXISTS pam_request_pending
-  ON pam_request (connection_id, username) WHERE status = 'PENDING';
+  ON pam_request (connection_id, username) WHERE status = 'PENDING' AND extends_checkout IS NULL;
 
 -- Approvals given to requests, one per approver
 CREATE TABLE IF NOT EXISTS pam_request_approval (
@@ -156,6 +181,9 @@ CREATE TABLE IF NOT EXISTS pam_request_approval (
   request_id integer       NOT NULL,
   approver   varchar(128)  NOT NULL,
   approved   timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  -- Where the approver approved from
+  remote_host varchar(256),
 
   PRIMARY KEY (request_id, approver),
   CONSTRAINT pam_request_approval_request

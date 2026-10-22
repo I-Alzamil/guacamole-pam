@@ -18,12 +18,38 @@ Privileged access management for [Apache Guacamole](https://guacamole.apache.org
   their sessions are closed when it ends. Connections can require approval by
   one or more distinct approvers. A connection can also let the holder see its
   password, which is then rotated once they're done.
+- **Requests ahead of time.** Where approval is needed, users choose between
+  access as soon as it's approved, or from a date and time they pick (up to
+  30 days ahead, in their browser's time zone), so it can be approved in
+  advance. Once approved, the connection is reserved for them from then for
+  its time limit; they open it during that time to check out, without asking
+  again. Reservations of a connection checked out by one user at a time never
+  overlap: someone else's checkout ends when a reservation starts, and no one
+  else can check it out during it. Approving one rejects the others awaiting
+  approval for an overlapping time, with the reason shown to their
+  requesters. A request ahead of time that is still
+  awaiting approval expires once its time is over (others after 24 hours).
+  Requesters can cancel an approved reservation they haven't used.
+- **Extensions.** Holders can extend a checkout at any time, giving a reason,
+  by the connection's extension length (its time limit unless set). Where the
+  connection needs approval, an extension needs as many approvals as a
+  request; it's granted at once otherwise. An extension still awaiting
+  approval when the checkout ends expires. A checkout may be extended twice
+  by default; requests can also ask for several time limits at once, up to
+  one more than the extensions allowed, which uses those extensions up. On a
+  connection held by one user at a time, an extension ends no later than
+  someone else's next reservation. The checkout history shows how often each
+  checkout was extended, and each extension's reason and approvers.
 - **Audit.** The checkout and approval histories are searchable and can be
   exported as CSV. Times are stored as absolute times (in UTC where the
   database's type has no time zone), shown in the browser's time zone with
   its name (the UTC time on hover), and exported in ISO 8601 in that time
   zone with its offset from UTC, such as `2026-10-22T16:18:20.372+03:00`,
-  which every reader and tool takes for the same moment.
+  which every reader and tool takes for the same moment. Every step records
+  the address it came from: requests, each approval, denials and
+  cancellations, checkouts, and their release or revocation. In both
+  histories, click a user, an approver or who ended a checkout for when and
+  from where they acted, or a scheduled request for its start and end.
 
 ## Requirements
 
@@ -244,6 +270,16 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   ```
   pam-admin-bypass-requests: true
   ```
+- **Extensions are allowed by default**, twice per checkout. Each
+  connection's *Access requests* section can allow or refuse them, and set
+  how many and how long. To change the default for every connection, set
+  these in `guacamole.properties` (or `PAM_EXTENSIONS_ENABLED` and
+  `PAM_MAX_EXTENSIONS` in the Docker image):
+
+  ```
+  pam-extensions-enabled: false
+  pam-max-extensions: 3
+  ```
 - Only administrators can change a connection's *Password management* and
   *Access requests* sections, platforms, or who may approve. Nor can anyone
   else change, on a connection whose password is managed:
@@ -277,7 +313,7 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
 - **Deleting a connection keeps its history.** Its checkouts and requests
   stay in the history under the name it had. Deleting it ends its active
   checkouts ("connection deleted"), closing their sessions, and cancels its
-  requests awaiting approval.
+  requests awaiting approval and its reservations.
 - **Revoking access ends open sessions.** Within 15 seconds of a user losing
   the permission to read a connection, or of its deletion, their sessions of
   it close (Guacamole alone lets them run until they end). Removing a user's

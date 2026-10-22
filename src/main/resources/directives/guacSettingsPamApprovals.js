@@ -39,8 +39,8 @@ angular.module('guacPam').directive('guacSettingsPamApprovals', [function guacSe
             $scope.pending = null;
 
             /**
-             * Matching decided requests, each as {entry, decided, decidedBy},
-             * or null while loading.
+             * Matching decided requests, each as {entry, decided, decidedBy,
+             * accessType}, or null while loading.
              */
             $scope.history = null;
 
@@ -61,6 +61,9 @@ angular.module('guacPam').directive('guacSettingsPamApprovals', [function guacSe
                 'entry.username',
                 'entry.connectionName',
                 '-entry.requested',
+                'accessType',
+                'entry.starts',
+                'entry.ends',
                 'entry.status',
                 'decidedBy'
             ]);
@@ -88,6 +91,18 @@ angular.module('guacPam').directive('guacSettingsPamApprovals', [function guacSe
             };
 
             /**
+             * Where who decided did so from: each approver's address, for an
+             * approved request, otherwise that of who denied or cancelled it.
+             */
+            var decidedFrom = function decidedFrom(request) {
+                if (request.status === 'APPROVED')
+                    return request.approvals.map(function approvalFrom(approval) {
+                        return approval.approver + ' (' + (approval.remoteHost || '?') + ')';
+                    }).join(', ');
+                return request.decidedHost || '';
+            };
+
+            /**
              * Searches the history. As for the checkout history, the search
              * string is split into terms, quoted phrases staying whole, and
              * every term must match.
@@ -103,7 +118,8 @@ angular.module('guacPam').directive('guacSettingsPamApprovals', [function guacSe
                         return {
                             entry     : request,
                             decided   : request.decided || request.requested,
-                            decidedBy : getDecidedBy(request)
+                            decidedBy : getDecidedBy(request),
+                            accessType : $scope.accessType(request)
                         };
                     });
                 }, guacNotification.SHOW_REQUEST_ERROR);
@@ -123,15 +139,24 @@ angular.module('guacPam').directive('guacSettingsPamApprovals', [function guacSe
                     'PAM_APPROVALS.TABLE_HEADER_ACCOUNT',
                     'PAM.TABLE_HEADER_REASON',
                     'PAM_APPROVALS.TABLE_HEADER_REQUESTED',
+                    'PAM_APPROVALS.TABLE_HEADER_REQUESTED_FROM',
+                    'PAM_APPROVALS.TABLE_HEADER_ACCESS_TYPE',
+                    'PAM_APPROVALS.TABLE_HEADER_ACCESS_FROM',
+                    'PAM_APPROVALS.TABLE_HEADER_ACCESS_TO',
+                    'PAM_APPROVALS.TABLE_HEADER_PERIODS',
+                    'PAM_APPROVALS.TABLE_HEADER_EXTENDS_BY_MINUTES',
                     'PAM_APPROVALS.TABLE_HEADER_APPROVALS_REQUIRED',
                     'PAM_APPROVALS.TABLE_HEADER_DECISION',
                     'PAM_APPROVALS.TABLE_HEADER_DECIDED',
                     'PAM_APPROVALS.TABLE_HEADER_DECIDED_BY',
+                    'PAM_APPROVALS.TABLE_HEADER_DECIDED_FROM',
                     'PAM_APPROVALS.TABLE_HEADER_DENIAL_REASON',
                     'PAM_APPROVALS.FILENAME_CSV'
                 ];
 
-                $translate(headers).then(function headersTranslated(translations) {
+                $translate(headers.concat(['PAM_APPROVALS.ACCESS_TYPE_IMMEDIATE', 'PAM_APPROVALS.ACCESS_TYPE_SCHEDULED',
+                        'PAM_APPROVALS.ACCESS_TYPE_EXTENSION']))
+                .then(function headersTranslated(translations) {
 
                     var records = [headers.slice(0, -1).map(function translate(key) {
                         return translations[key];
@@ -146,10 +171,17 @@ angular.module('guacPam').directive('guacSettingsPamApprovals', [function guacSe
                             request.accountName || '',
                             request.reason,
                             $filter('pamLocalIso')(request.requested),
+                            request.remoteHost || '',
+                            translations['PAM_APPROVALS.ACCESS_TYPE_' + $scope.accessType(request)],
+                            $filter('pamLocalIso')(request.starts),
+                            $filter('pamLocalIso')(request.ends),
+                            request.periods,
+                            request.extensionMinutes || '',
                             request.approvalsRequired,
                             request.status,
                             $filter('pamLocalIso')(request.decided),
                             wrapper.decidedBy,
+                            decidedFrom(request),
                             request.decisionReason || ''
                         ]);
                     });
@@ -183,18 +215,54 @@ angular.module('guacPam').directive('guacSettingsPamApprovals', [function guacSe
                     && request.approvers.indexOf(currentUser) === -1;
             };
 
+            /**
+             * What a request asks for: "IMMEDIATE" access, "SCHEDULED"
+             * access, or an "EXTENSION" of a checkout.
+             */
+            $scope.accessType = function accessType(request) {
+                if (request.extendsCheckout)
+                    return 'EXTENSION';
+                return request.starts ? 'SCHEDULED' : 'IMMEDIATE';
+            };
+
+            /**
+             * Whether the access a request asks for has details beyond its
+             * type: its time, its duration, or the extension.
+             */
+            $scope.hasAccessDetails = function hasAccessDetails(request) {
+                return !!request.starts || request.periods > 1 || !!request.extendsCheckout;
+            };
+
             $scope.isOwn = function isOwn(request) {
                 return request.username === currentUser;
             };
 
             /**
-             * The request shown in the dialog, as {request, deny, reason},
-             * or null when closed.
+             * Whether the request, approved ahead of time, ended without its
+             * requester checking out with it.
+             */
+            $scope.isUnused = function isUnused(request) {
+                return request.status === 'APPROVED' && !!request.starts && !request.checkoutId
+                    && request.ends <= Date.now();
+            };
+
+            /**
+             * The request shown in the dialog, as {request, deny, reason}, or
+             * {request, details} for its details, or null when closed.
              */
             $scope.dialog = null;
 
             $scope.showReason = function showReason(request) {
                 $scope.dialog = { request : request, deny : false };
+            };
+
+            /**
+             * Shows details of a request: "access" (its scheduled access),
+             * "requester", or "decision" (who approved, denied or cancelled
+             * it), with where they did so from.
+             */
+            $scope.showDetails = function showDetails(request, details) {
+                $scope.dialog = { request : request, details : details };
             };
 
             /**

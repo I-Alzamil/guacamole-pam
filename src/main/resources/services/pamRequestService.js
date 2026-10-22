@@ -41,6 +41,12 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
     var PENDING_POLL_INTERVAL = 15000;
 
     /**
+     * Longest wait before an automatic refresh, in milliseconds (timers
+     * cannot wait more than about 24 days).
+     */
+    var MAX_REFRESH_DELAY = 3600000;
+
+    /**
      * Timer of the next automatic refresh, or null.
      */
     var nextRefresh = null;
@@ -61,6 +67,11 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
                 wait = Math.max(0, entry.expires - Date.now()) + 1000;
             else if (entry.pending)
                 wait = PENDING_POLL_INTERVAL;
+            else if (entry.reservation)
+                wait = Math.max(0, (entry.reservation.starts > Date.now() ? entry.reservation.starts
+                        : entry.reservation.ends) - Date.now()) + 1000;
+            if (wait !== null)
+                wait = Math.min(wait, MAX_REFRESH_DELAY);
             if (wait !== null && (delay === null || wait < delay))
                 delay = wait;
         });
@@ -94,6 +105,8 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
                     bypass  : request.bypass,
                     expires : request.mine ? request.expires : null,
                     pending : !!request.pending,
+                    reservation : request.reservation && !request.mine
+                            ? { starts : request.reservation.starts, ends : request.reservation.ends } : null,
                     holders : (request.holders ? request.holders.length : 0) + (request.mine ? 1 : 0),
                     passwordShown : !!request.passwordShown
                 };
@@ -138,7 +151,7 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
 
     /**
      * What is known of a connection needing a request ({account, mine,
-     * bypass, expires, pending, holders}), or null.
+     * bypass, expires, pending, reservation, holders}), or null.
      */
     service.getEntry = function getEntry(identifier) {
         return (requestable && requestable[identifier]) || null;

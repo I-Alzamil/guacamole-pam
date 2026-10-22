@@ -11,6 +11,7 @@
                     <th>{{ 'PAM_APPROVALS.TABLE_HEADER_REQUESTED_BY' | translate }}</th>
                     <th>{{ 'PAM.TABLE_HEADER_REASON' | translate }}</th>
                     <th>{{ 'PAM_APPROVALS.TABLE_HEADER_REQUESTED' | translate }}</th>
+                    <th>{{ 'PAM_APPROVALS.TABLE_HEADER_ACCESS_TYPE' | translate }}</th>
                     <th>{{ 'PAM_APPROVALS.TABLE_HEADER_APPROVALS' | translate }}</th>
                     <th></th>
                 </tr>
@@ -21,13 +22,22 @@
                         {{ request.connectionName }}
                         <span class="pam-protocol" ng-show="request.accountName">{{ request.accountName }}</span>
                     </td>
-                    <td>{{ request.username }}</td>
+                    <td><a href="" class="pam-reason-link" ng-click="showDetails(request, 'requester')"
+                        title="{{ 'PAM_APPROVALS.HELP_SHOW_REQUESTER' | translate }}">{{ request.username }}</a></td>
                     <td class="pam-truncate"><a href="" class="pam-reason-link" ng-click="showReason(request)"
                         title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ request.reason }}</a></td>
                     <td><span title="{{ request.requested | pamUtc }}">{{ request.requested | date:'medium' }} {{ request.requested | pamZone }}</span></td>
                     <td>
+                        <a href="" class="pam-reason-link" ng-if="hasAccessDetails(request)" ng-click="showDetails(request, 'access')"
+                           title="{{ 'PAM_APPROVALS.HELP_SHOW_ACCESS' | translate }}">{{ 'PAM_APPROVALS.ACCESS_TYPE_' + accessType(request) | translate }}</a>
+                        <span ng-if="!hasAccessDetails(request)">{{ 'PAM_APPROVALS.ACCESS_TYPE_' + accessType(request) | translate }}</span>
+                    </td>
+                    <td>
                         {{ request.approvers.length }} / {{ request.approvalsRequired }}
-                        <div class="pam-approvers" ng-show="request.approvers.length">{{ request.approvers.join(', ') }}</div>
+                        <div class="pam-approvers" ng-show="request.approvers.length">
+                            <a href="" class="pam-reason-link" ng-click="showDetails(request, 'decision')"
+                               title="{{ 'PAM_APPROVALS.HELP_SHOW_DECISION' | translate }}">{{ request.approvers.join(', ') }}</a>
+                        </div>
                     </td>
                     <td class="pam-approval-actions pam-row-actions">
                         <span ng-if="isOwn(request)" class="pam-empty">{{ 'PAM_APPROVALS.INFO_OWN_REQUEST' | translate }}</span>
@@ -41,7 +51,7 @@
                     </td>
                 </tr>
                 <tr ng-show="pending && !pending.length">
-                    <td colspan="6" class="pam-empty">{{ 'PAM_APPROVALS.INFO_NO_PENDING' | translate }}</td>
+                    <td colspan="7" class="pam-empty">{{ 'PAM_APPROVALS.INFO_NO_PENDING' | translate }}</td>
                 </tr>
             </tbody>
         </table>
@@ -76,6 +86,9 @@
                         <th guac-sort-order="order" guac-sort-property="'entry.requested'">
                             {{ 'PAM_APPROVALS.TABLE_HEADER_REQUESTED' | translate }}
                         </th>
+                        <th guac-sort-order="order" guac-sort-property="'accessType'">
+                            {{ 'PAM_APPROVALS.TABLE_HEADER_ACCESS_TYPE' | translate }}
+                        </th>
                         <th guac-sort-order="order" guac-sort-property="'entry.status'">
                             {{ 'PAM_APPROVALS.TABLE_HEADER_DECISION' | translate }}
                         </th>
@@ -90,7 +103,10 @@
                 </thead>
                 <tbody ng-class="{loading: !isLoaded()}">
                     <tr ng-repeat="decision in page" class="history">
-                        <td><guac-user-item username="decision.entry.username"></guac-user-item></td>
+                        <td>
+                            <a href="" class="pam-reason-link" ng-click="showDetails(decision.entry, 'requester')"
+                               title="{{ 'PAM_APPROVALS.HELP_SHOW_REQUESTER' | translate }}"><guac-user-item username="decision.entry.username"></guac-user-item></a>
+                        </td>
                         <td class="pam-history-truncate" title="{{ decision.entry.connectionName }}">
                             {{ decision.entry.connectionName }}
                         </td>
@@ -99,9 +115,21 @@
                                title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ decision.entry.reason }}</a>
                         </td>
                         <td><span title="{{ decision.entry.requested | pamUtc }}">{{ decision.entry.requested | date : dateFormat }} {{ decision.entry.requested | pamZone }}</span></td>
-                        <td><span class="pam-status-badge {{ decision.entry.status | lowercase }}">{{ 'PAM_APPROVALS.STATUS_' + decision.entry.status | translate }}</span></td>
+                        <td>
+                            <a href="" class="pam-reason-link" ng-if="hasAccessDetails(decision.entry)" ng-click="showDetails(decision.entry, 'access')"
+                               title="{{ 'PAM_APPROVALS.HELP_SHOW_ACCESS' | translate }}">{{ 'PAM_APPROVALS.ACCESS_TYPE_' + accessType(decision.entry) | translate }}</a>
+                            <span ng-if="!hasAccessDetails(decision.entry)">{{ 'PAM_APPROVALS.ACCESS_TYPE_' + accessType(decision.entry) | translate }}</span>
+                        </td>
+                        <td>
+                            <span class="pam-status-badge {{ decision.entry.status | lowercase }}">{{ 'PAM_APPROVALS.STATUS_' + decision.entry.status | translate }}</span>
+                            <span class="pam-empty" ng-if="isUnused(decision.entry)">{{ 'PAM_APPROVALS.INFO_NOT_USED' | translate }}</span>
+                        </td>
                         <td><span title="{{ decision.entry.decided | pamUtc }}">{{ decision.entry.decided | date : dateFormat }} {{ decision.entry.decided | pamZone }}</span></td>
-                        <td class="pam-history-truncate" title="{{ decision.decidedBy }}">{{ decision.decidedBy }}</td>
+                        <td class="pam-history-truncate" title="{{ decision.decidedBy }}">
+                            <a href="" class="pam-reason-link" ng-if="decision.decidedBy" ng-click="showDetails(decision.entry, 'decision')"
+                               title="{{ 'PAM_APPROVALS.HELP_SHOW_DECISION' | translate }}">{{ decision.decidedBy }}</a>
+                            <span ng-if="!decision.decidedBy && decision.entry.status === 'DENIED'" class="pam-empty">{{ 'PAM_APPROVALS.INFO_SYSTEM' | translate }}</span>
+                        </td>
                         <td class="pam-history-truncate">
                             <a href="" class="pam-reason-link" ng-if="decision.entry.decisionReason" ng-click="showReason(decision.entry)"
                                title="{{ 'PAM.HELP_READ_FULL' | translate }}">{{ decision.entry.decisionReason }}</a>
@@ -122,8 +150,102 @@
 
     </div>
 
+    <!-- Details of a request: its scheduled access, its requester, or who
+         decided it, with where they did so from -->
+    <div class="pam-request-overlay" ng-if="dialog.details" ng-click="closeDialog($event)">
+        <div class="pam-request-dialog" role="dialog" aria-modal="true" aria-labelledby="pam-approval-details-title">
+
+            <button class="pam-dialog-close" ng-click="closeDialog()" title="{{ 'PAM.ACTION_CLOSE' | translate }}"
+                    aria-label="{{ 'PAM.ACTION_CLOSE' | translate }}">&times;</button>
+
+            <h2 id="pam-approval-details-title">{{ 'PAM_APPROVALS.DIALOG_HEADER_' + (dialog.details | uppercase) | translate }}</h2>
+            <p class="pam-request-hint">
+                {{ 'PAM_APPROVALS.TEXT_REQUEST_BY' | translate:{ USER: dialog.request.username, NAME: dialog.request.connectionName } }}
+            </p>
+
+            <!-- The access asked for -->
+            <table class="pam-request-account" ng-if="dialog.details === 'access'">
+                <tr>
+                    <th>{{ 'PAM_APPROVALS.TABLE_HEADER_ACCESS_TYPE' | translate }}</th>
+                    <td>{{ 'PAM_APPROVALS.ACCESS_TYPE_' + accessType(dialog.request) | translate }}</td>
+                </tr>
+                <tr ng-if="dialog.request.extendsCheckout">
+                    <th>{{ 'PAM_APPROVALS.TABLE_HEADER_EXTENDS_BY' | translate }}</th>
+                    <td>{{ 'PAM_APPROVALS.TEXT_MINUTES' | translate:{ MINUTES: dialog.request.extensionMinutes } }}</td>
+                </tr>
+                <tr ng-if="dialog.request.periods > 1">
+                    <th>{{ 'PAM_APPROVALS.TABLE_HEADER_PERIODS' | translate }}</th>
+                    <td>{{ 'PAM_APPROVALS.TEXT_PERIODS' | translate:{ PERIODS: dialog.request.periods } }}</td>
+                </tr>
+                <tr ng-if="dialog.request.starts">
+                    <th>{{ 'PAM_APPROVALS.TABLE_HEADER_ACCESS_FROM' | translate }}</th>
+                    <td><span title="{{ dialog.request.starts | pamUtc }}">{{ dialog.request.starts | date:'medium' }} {{ dialog.request.starts | pamZone }}</span></td>
+                </tr>
+                <tr ng-if="dialog.request.ends">
+                    <th>{{ 'PAM_APPROVALS.TABLE_HEADER_ACCESS_TO' | translate }}</th>
+                    <td><span title="{{ dialog.request.ends | pamUtc }}">{{ dialog.request.ends | date:'medium' }} {{ dialog.request.ends | pamZone }}</span></td>
+                </tr>
+            </table>
+
+            <!-- The requester -->
+            <table class="pam-request-account" ng-if="dialog.details === 'requester'">
+                <tr>
+                    <th>{{ 'PAM_APPROVALS.FIELD_USER' | translate }}</th>
+                    <td>{{ dialog.request.username }}</td>
+                </tr>
+                <tr>
+                    <th>{{ 'PAM_APPROVALS.TABLE_HEADER_REQUESTED' | translate }}</th>
+                    <td><span title="{{ dialog.request.requested | pamUtc }}">{{ dialog.request.requested | date:'medium' }} {{ dialog.request.requested | pamZone }}</span></td>
+                </tr>
+                <tr>
+                    <th>{{ 'PAM_APPROVALS.FIELD_ADDRESS' | translate }}</th>
+                    <td>{{ dialog.request.remoteHost || ('PAM_APPROVALS.INFO_UNKNOWN' | translate) }}</td>
+                </tr>
+            </table>
+
+            <!-- The approvals, in order -->
+            <table class="pam-connection-table" ng-if="dialog.details === 'decision' && dialog.request.approvals.length">
+                <thead>
+                    <tr>
+                        <th>{{ 'PAM_APPROVALS.TABLE_HEADER_APPROVED_BY' | translate }}</th>
+                        <th>{{ 'PAM_APPROVALS.TABLE_HEADER_APPROVED' | translate }}</th>
+                        <th>{{ 'PAM_APPROVALS.FIELD_ADDRESS' | translate }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr ng-repeat="approval in dialog.request.approvals">
+                        <td>{{ approval.approver }}</td>
+                        <td><span title="{{ approval.approved | pamUtc }}">{{ approval.approved | date:'medium' }} {{ approval.approved | pamZone }}</span></td>
+                        <td>{{ approval.remoteHost || ('PAM_APPROVALS.INFO_UNKNOWN' | translate) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- Who denied or cancelled it -->
+            <table class="pam-request-account" ng-if="dialog.details === 'decision' && dialog.request.status !== 'APPROVED' && dialog.request.decidedBy">
+                <tr>
+                    <th>{{ 'PAM_APPROVALS.TABLE_HEADER_DECISION' | translate }}</th>
+                    <td><span class="pam-status-badge {{ dialog.request.status | lowercase }}">{{ 'PAM_APPROVALS.STATUS_' + dialog.request.status | translate }}</span></td>
+                </tr>
+                <tr>
+                    <th>{{ 'PAM_APPROVALS.TABLE_HEADER_DECIDED_BY' | translate }}</th>
+                    <td>{{ dialog.request.decidedBy }}</td>
+                </tr>
+                <tr>
+                    <th>{{ 'PAM_APPROVALS.TABLE_HEADER_DECIDED' | translate }}</th>
+                    <td><span title="{{ dialog.request.decided | pamUtc }}">{{ dialog.request.decided | date:'medium' }} {{ dialog.request.decided | pamZone }}</span></td>
+                </tr>
+                <tr>
+                    <th>{{ 'PAM_APPROVALS.FIELD_ADDRESS' | translate }}</th>
+                    <td>{{ dialog.request.decidedHost || ('PAM_APPROVALS.INFO_UNKNOWN' | translate) }}</td>
+                </tr>
+            </table>
+
+        </div>
+    </div>
+
     <!-- Full reasons of a request, or the reason for denying it -->
-    <div class="pam-request-overlay" ng-if="dialog" ng-click="closeDialog($event)">
+    <div class="pam-request-overlay" ng-if="dialog && !dialog.details" ng-click="closeDialog($event)">
         <div class="pam-request-dialog" role="dialog" aria-modal="true" aria-labelledby="pam-approval-dialog-title">
 
             <button class="pam-dialog-close" ng-click="closeDialog()" title="{{ 'PAM.ACTION_CLOSE' | translate }}"
@@ -139,7 +261,7 @@
             <div class="pam-request-notes pam-reason-full">{{ dialog.request.reason }}</div>
 
             <div ng-if="dialog.request.decisionReason">
-                <label>{{ 'PAM_APPROVALS.FIELD_DENIAL_REASON' | translate:{ USER: dialog.request.decidedBy } }}</label>
+                <label>{{ (dialog.request.decidedBy ? 'PAM_APPROVALS.FIELD_DENIAL_REASON' : 'PAM_APPROVALS.FIELD_REJECTION_REASON') | translate:{ USER: dialog.request.decidedBy } }}</label>
                 <div class="pam-request-notes pam-reason-full pam-denial-reason">{{ dialog.request.decisionReason }}</div>
             </div>
 

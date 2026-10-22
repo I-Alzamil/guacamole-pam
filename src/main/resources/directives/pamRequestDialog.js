@@ -1,7 +1,8 @@
 /**
- * Dialog for requesting an Account's password or access to a connection,
- * showing the password while checked out (of a connection, only if it
- * allows it, and when asked), and releasing it. The password is only kept
+ * Dialog for requesting an Account's password or access to a connection
+ * (now, or, where approval is needed, ahead of time), showing the password
+ * while checked out (of a connection, only if it allows it, and when asked),
+ * and releasing it. The password is only kept
  * while the dialog shows it, and is never written to storage.
  */
 angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDialog() {
@@ -15,6 +16,7 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
 
             // Required services
             var $document         = $injector.get('$document');
+            var $filter           = $injector.get('$filter');
             var $interval         = $injector.get('$interval');
             var pamPasswordCopy   = $injector.get('pamPasswordCopy');
             var pamRequestService = $injector.get('pamRequestService');
@@ -40,7 +42,20 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
              */
             $scope.grant = null;
 
-            $scope.form = { reason : '' };
+            /**
+             * The reason, when access is wanted ("now", or "later" from the
+             * given start: a Date, picked to the minute in the browser's
+             * time zone), and for how many times the time limit. When
+             * extending a checkout, "extending" is true and the reason is
+             * that of the extension.
+             */
+            $scope.form = { reason : '', when : 'now', starts : null, periods : 1, extending : false };
+
+            /**
+             * How far ahead access can be requested, in days (as the server
+             * allows).
+             */
+            var MAX_DAYS_AHEAD = 30;
 
             $scope.busy = false;
             $scope.error = null;
@@ -55,6 +70,12 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
 
             var countdown = null;
             var copiedTimer = null;
+
+            /**
+             * Timer reloading the request when the user's reservation starts,
+             * or null.
+             */
+            var reservationTimer = null;
 
             /**
              * How often a request awaiting approval is checked, in
@@ -74,12 +95,13 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
              * open, so its approval shows up without reopening.
              */
             var pollWhilePending = function pollWhilePending() {
-                if ($scope.request && $scope.request.pending && !pendingPoll)
+                if (($scope.request && $scope.request.pending || $scope.extensionPending()) && !pendingPoll)
                     pendingPoll = $interval(function checkPending() {
                         pamService.getRequest($scope.identifier).then(function requestRetrieved(request) {
                             $scope.request = request;
-                            if (!request.pending) {
+                            if (!request.pending && !$scope.extensionPending()) {
                                 stopPolling();
+                                reloadWhenReserved();
                                 pamRequestService.refresh();
                             }
                             if (request.mine) {
@@ -88,16 +110,207 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                             }
                         });
                     }, PENDING_POLL_INTERVAL);
-                else if ($scope.request && !$scope.request.pending)
+                else if ($scope.request && !$scope.request.pending && !$scope.extensionPending())
                     stopPolling();
+            };
+
+            /**
+             * Whether the user's reservation (approved access requested ahead
+             * of time) has started, so they can check out with it.
+             */
+            $scope.reservationStarted = function reservationStarted() {
+                var reservation = $scope.request && $scope.request.reservation;
+                return !!reservation && reservation.starts <= Date.now();
+            };
+
+            /**
+             * Whether someone else's reservation of the connection lasts now.
+             */
+            $scope.reservedNow = function reservedNow() {
+                var request = $scope.request;
+                return !!request && !!request.reservedBy && request.reservedFrom <= Date.now();
+            };
+
+            /**
+             * Whether the user can make a request, for now or for later.
+             */
+            var canMakeRequest = function canMakeRequest() {
+                var request = $scope.request;
+                return !!request && !request.mine && !request.pending && !$scope.expired
+                    && !$scope.reservationStarted();
             };
 
             /**
              * Whether the user can request the password now.
              */
+            $scope.canRequestNow = function canRequestNow() {
+                return canMakeRequest() && !$scope.request.heldExclusively && !$scope.reservedNow();
+            };
+
+            /**
+             * Whether the user can request access ahead of time: only where
+             * it needs approval.
+             */
+            $scope.canRequestLater = function canRequestLater() {
+                return canMakeRequest() && $scope.request.approvalsRequired > 0;
+            };
+
             $scope.canRequest = function canRequest() {
+                return $scope.canRequestNow() || $scope.canRequestLater();
+            };
+
+            /**
+             * Whether the request being made is for later.
+             */
+            $scope.isLater = function isLater() {
+                return $scope.canRequestLater() && ($scope.form.when === 'later' || !$scope.canRequestNow());
+            };
+
+            /**
+             * A time as the dialog shows it: date, time to the minute, and
+             * the browser's time zone.
+             */
+            $scope.formatTime = function formatTime(time) {
+                return $filter('date')(time, 'mediumDate') + ' ' + $filter('date')(time, 'shortTime')
+                    + ' ' + $filter('pamZone')(time);
+            };
+
+            /**
+             * Bounds of the start, as the date and time input takes them.
+             */
+            $scope.startBounds = function startBounds() {
+                var format = function format(time) {
+                    return $filter('date')(time, 'yyyy-MM-ddTHH:mm');
+                };
+                var now = Date.now();
+                return { min : format(now), max : format(now + MAX_DAYS_AHEAD * 24 * 3600 * 1000) };
+            };
+
+            /**
+             * When access requested for the picked start would end, or null.
+             */
+            $scope.laterEnds = function laterEnds() {
+                var starts = $scope.form.starts;
+                return starts && $scope.request ? starts.getTime() + $scope.requestedMinutes() * 60000 : null;
+            };
+
+            /**
+             * How long the access being requested lasts, in minutes.
+             */
+            $scope.requestedMinutes = function requestedMinutes() {
+                return $scope.request ? $scope.request.durationMinutes * $scope.form.periods : 0;
+            };
+
+            /**
+             * The durations that can be asked for, as numbers of time limits.
+             */
+            $scope.periodChoices = function periodChoices() {
+                var choices = [];
+                for (var periods = 1; $scope.request && periods <= $scope.request.maxPeriods; periods++)
+                    choices.push(periods);
+                return choices;
+            };
+
+            /**
+             * A length of time as "45 min", "2 h" or "1 h 30 min".
+             */
+            $scope.formatMinutes = function formatMinutes(minutes) {
+                var hours = Math.floor(minutes / 60);
+                var rest = minutes % 60;
+                if (!hours)
+                    return rest + ' min';
+                return hours + ' h' + (rest ? ' ' + rest + ' min' : '');
+            };
+
+            /**
+             * Whether a request to extend the user's checkout awaits
+             * approval.
+             */
+            $scope.extensionPending = function extensionPending() {
                 var request = $scope.request;
-                return !!request && !request.mine && !request.heldExclusively && !request.pending && !$scope.expired;
+                return !!request && request.mine && !!request.extension && request.extension.status === 'PENDING';
+            };
+
+            /**
+             * Whether the user can extend their checkout now.
+             */
+            $scope.canExtend = function canExtend() {
+                var request = $scope.request;
+                return !!request && request.mine && !$scope.expired && request.extensionsLeft > 0
+                    && !$scope.extensionPending();
+            };
+
+            /**
+             * Extends the user's checkout, or asks for it to be extended,
+             * once a reason was given where needed.
+             */
+            $scope.extend = function extend() {
+
+                if (!$scope.form.extending && !$scope.request.noRequest) {
+                    $scope.form.extending = true;
+                    return;
+                }
+
+                $scope.busy = true;
+                $scope.error = null;
+
+                pamService.extend($scope.identifier, $scope.form.reason).then(function extended(request) {
+                    resetForm();
+                    $scope.request = request;
+                    if (request.mine)
+                        startCountdown(request.expires);
+                    pollWhilePending();
+                    pamRequestService.refresh();
+                }, function extendFailed(error) {
+                    showError(error);
+                    load();
+                })['finally'](function extendDone() {
+                    $scope.busy = false;
+                });
+
+            };
+
+            /**
+             * Cancels the user's request to extend their checkout.
+             */
+            $scope.cancelExtension = function cancelExtension() {
+
+                $scope.busy = true;
+                $scope.error = null;
+
+                pamService.cancelExtension($scope.identifier).then(function cancelled() {
+                    stopPolling();
+                    return load();
+                }, showError)['finally'](function cancelled() {
+                    $scope.busy = false;
+                });
+
+            };
+
+            /**
+             * Resets the form, picking the start of the next hour for later.
+             */
+            var resetForm = function resetForm() {
+                var next = new Date();
+                next.setHours(next.getHours() + 1, 0, 0, 0);
+                $scope.form.reason = '';
+                $scope.form.when = 'now';
+                $scope.form.starts = next;
+                $scope.form.periods = 1;
+                $scope.form.extending = false;
+            };
+
+            /**
+             * Reloads the request when the user's reservation starts, if
+             * within a day.
+             */
+            var reloadWhenReserved = function reloadWhenReserved() {
+                $interval.cancel(reservationTimer);
+                reservationTimer = null;
+                var reservation = $scope.request && $scope.request.reservation;
+                var wait = reservation ? reservation.starts - Date.now() : -1;
+                if (wait > 0 && wait < 24 * 3600 * 1000)
+                    reservationTimer = $interval(load, wait + 1000, 1);
             };
 
             var forgetPassword = function forgetPassword() {
@@ -135,7 +348,10 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                     $scope.request = request;
                     if (request.mine)
                         startCountdown(request.expires);
+                    if (!$scope.canRequestNow() && $scope.canRequestLater())
+                        $scope.form.when = 'later';
                     pollWhilePending();
+                    reloadWhenReserved();
                     return request;
                 }, showError)['finally'](function loaded() {
                     $scope.busy = false;
@@ -163,26 +379,32 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
             $scope.close = function close() {
                 stopCountdown();
                 stopPolling();
+                $interval.cancel(reservationTimer);
+                reservationTimer = null;
                 forgetPassword();
                 $scope.identifier = null;
                 $scope.request = null;
-                $scope.form.reason = '';
+                resetForm();
                 $scope.error = null;
                 $scope.expired = false;
             };
 
             /**
-             * Checks out the password, or shows it again if already held.
+             * Checks out the password, or shows it again if already held;
+             * during the user's reservation, checks out with it. Where
+             * approval is needed, requests it, for now or for later.
              */
             $scope.requestPassword = function requestPassword() {
 
                 $scope.busy = true;
                 $scope.error = null;
 
-                pamService.requestPassword($scope.identifier, $scope.form.reason)
+                var starts = $scope.isLater() && $scope.form.starts ? $scope.form.starts.getTime() : null;
+                var periods = $scope.canRequest() ? $scope.form.periods : 1;
+                pamService.requestPassword($scope.identifier, $scope.form.reason, starts, periods)
                 .then(function requested(result) {
 
-                    $scope.form.reason = '';
+                    resetForm();
 
                     // Awaiting approval: the result is the request status
                     if (!result.checkoutId) {
@@ -236,6 +458,23 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                     return load();
                 }, showError)['finally'](function cancelled() {
                     stopPolling();
+                    $scope.busy = false;
+                });
+
+            };
+
+            /**
+             * Cancels the user's reservation, not used yet.
+             */
+            $scope.cancelReservation = function cancelReservation() {
+
+                $scope.busy = true;
+                $scope.error = null;
+
+                pamService.cancelReservation($scope.identifier).then(function cancelled() {
+                    pamRequestService.refresh();
+                    return load();
+                }, showError)['finally'](function cancelled() {
                     $scope.busy = false;
                 });
 
@@ -333,7 +572,10 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                 stopCountdown();
                 stopPolling();
                 $interval.cancel(copiedTimer);
+                $interval.cancel(reservationTimer);
             });
+
+            resetForm();
 
         }]
     };

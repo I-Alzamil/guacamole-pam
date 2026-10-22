@@ -169,13 +169,14 @@ public class PamREST {
     @POST
     @Path("approvals/{id}/approve")
     public ApprovalRequest approve(@PathParam("id") String id) throws GuacamoleException {
-        return provider.getApprovalService().approve(parseId(id), approver());
+        return provider.getApprovalService().approve(parseId(id), approver(), remoteHost());
     }
 
     @POST
     @Path("approvals/{id}/deny")
     public void deny(@PathParam("id") String id, Map<String, String> body) throws GuacamoleException {
-        provider.getApprovalService().deny(parseId(id), approver(), body == null ? null : body.get("reason"));
+        provider.getApprovalService().deny(parseId(id), approver(), body == null ? null : body.get("reason"),
+                remoteHost());
     }
 
     /**
@@ -351,15 +352,39 @@ public class PamREST {
 
     /**
      * Checks out the password, or shows it again to its current holder. The
-     * response must never be cached.
+     * body gives the "reason", "starts" (milliseconds since the epoch) for
+     * access requested ahead of time, and "periods" for access lasting more
+     * than one time limit. The response must never be cached.
      */
     @POST
     @Path("requests/{id}")
     public Response requestPassword(@PathParam("id") String id, Map<String, String> body)
             throws GuacamoleException {
 
+        Long starts = null;
+        String start = body == null ? null : Values.trimToNull(body.get("starts"));
+        if (start != null) {
+            try {
+                starts = Long.valueOf(start);
+            }
+            catch (NumberFormatException e) {
+                throw new GuacamoleClientException("Invalid start.");
+            }
+        }
+
+        int periods = 1;
+        String period = body == null ? null : Values.trimToNull(body.get("periods"));
+        if (period != null) {
+            try {
+                periods = Integer.parseInt(period);
+            }
+            catch (NumberFormatException e) {
+                throw new GuacamoleClientException("Invalid duration.");
+            }
+        }
+
         RequestOutcome outcome = provider.getCheckoutService().request(provider.getDataSourceContext(user),
-                username(), remoteHost(), id, body == null ? null : body.get("reason"),
+                username(), remoteHost(), id, body == null ? null : body.get("reason"), starts, periods,
                 provider.isAdministrator(user));
 
         // Awaiting approval: no password yet
@@ -406,13 +431,44 @@ public class PamREST {
     @DELETE
     @Path("requests/{id}/pending")
     public void cancelRequest(@PathParam("id") String id) throws GuacamoleException {
-        provider.getCheckoutService().cancelRequest(provider.getDataSourceContext(user), username(), id);
+        provider.getCheckoutService().cancelRequest(provider.getDataSourceContext(user), username(), remoteHost(), id);
+    }
+
+    /**
+     * Cancels the user's own next reservation, approved but not used yet.
+     */
+    @DELETE
+    @Path("requests/{id}/reservation")
+    public void cancelReservation(@PathParam("id") String id) throws GuacamoleException {
+        provider.getCheckoutService().cancelReservation(provider.getDataSourceContext(user), username(),
+                remoteHost(), id);
+    }
+
+    /**
+     * Extends the user's checkout, or asks for it to be extended where
+     * approval is needed. The body gives the "reason".
+     */
+    @POST
+    @Path("requests/{id}/extension")
+    public PasswordRequest extend(@PathParam("id") String id, Map<String, String> body) throws GuacamoleException {
+        return provider.getCheckoutService().extend(provider.getDataSourceContext(user), username(), remoteHost(), id,
+                body == null ? null : body.get("reason"), provider.isAdministrator(user));
+    }
+
+    /**
+     * Cancels the user's request to extend their checkout, awaiting approval.
+     */
+    @DELETE
+    @Path("requests/{id}/extension")
+    public void cancelExtension(@PathParam("id") String id) throws GuacamoleException {
+        provider.getCheckoutService().cancelExtension(provider.getDataSourceContext(user), username(), remoteHost(),
+                id);
     }
 
     @POST
     @Path("requests/{id}/release")
     public void releasePassword(@PathParam("id") String id) throws GuacamoleException {
-        provider.getCheckoutService().release(provider.getDataSourceContext(user), username(), id);
+        provider.getCheckoutService().release(provider.getDataSourceContext(user), username(), remoteHost(), id);
     }
 
     @GET
@@ -439,7 +495,7 @@ public class PamREST {
     @Path("checkouts/{id}/revoke")
     public void revokeCheckout(@PathParam("id") String id) throws GuacamoleException {
         requireAdministrator();
-        provider.getCheckoutService().revoke(parseId(id), username());
+        provider.getCheckoutService().revoke(parseId(id), username(), remoteHost());
     }
 
     private static int parseId(String id) throws GuacamoleResourceNotFoundException {

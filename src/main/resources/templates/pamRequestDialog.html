@@ -36,7 +36,7 @@
 
             <!-- Outcome of the last request, if not acted on since -->
             <p ng-if="request.lastStatus === 'DENIED' && !request.pending" class="pam-request-error">
-                {{ 'PAM.REQUEST.TEXT_LAST_DENIED' | translate:{ USER: request.lastDecidedBy } }}
+                {{ (request.lastDecidedBy ? 'PAM.REQUEST.TEXT_LAST_DENIED' : 'PAM.REQUEST.TEXT_LAST_REJECTED') | translate:{ USER: request.lastDecidedBy } }}
             </p>
             <div ng-if="request.lastStatus === 'DENIED' && !request.pending && request.lastDecisionReason"
                  class="pam-request-notes pam-denial-reason">{{ request.lastDecisionReason }}</div>
@@ -47,16 +47,65 @@
             <!-- Awaiting approval -->
             <div ng-if="request.pending" class="pam-request-pending">
                 <p>{{ 'PAM.REQUEST.TEXT_PENDING' | translate:{ APPROVED: request.pending.approvers.length, REQUIRED: request.pending.approvalsRequired } }}</p>
+                <p ng-if="request.pending.starts">
+                    {{ 'PAM.REQUEST.TEXT_PENDING_LATER' | translate:{ STARTS: formatTime(request.pending.starts), ENDS: formatTime(request.pending.ends) } }}
+                </p>
                 <p class="pam-request-hint" ng-show="request.pending.approvers.length">
                     {{ 'PAM.INFO_APPROVED_BY' | translate:{ USERS: request.pending.approvers.join(', ') } }}
                 </p>
-                <p class="pam-request-hint">{{ textKey('HELP_PENDING') | translate:{ MINUTES: request.durationMinutes } }}</p>
+                <p class="pam-request-hint">{{ textKey(request.pending.starts ? 'HELP_PENDING_LATER' : 'HELP_PENDING') | translate:{ MINUTES: request.durationMinutes } }}</p>
+            </div>
+
+            <!-- Approved ahead of time -->
+            <div ng-if="request.reservation && !request.mine" class="pam-request-pending">
+                <p ng-if="!reservationStarted()">
+                    {{ textKey('TEXT_RESERVED') | translate:{ STARTS: formatTime(request.reservation.starts), ENDS: formatTime(request.reservation.ends) } }}
+                </p>
+                <p ng-if="reservationStarted()">
+                    {{ textKey('TEXT_RESERVATION_STARTED') | translate:{ ENDS: formatTime(request.reservation.ends) } }}
+                </p>
+                <p class="pam-request-hint" ng-if="!reservationStarted()">{{ textKey('HELP_RESERVED') | translate }}</p>
             </div>
 
             <!-- Available: ask for a reason -->
             <div ng-if="canRequest() && !request.noRequest">
-                <p ng-if="!request.approvalsRequired">{{ textKey(request.exclusive ? 'TEXT_AVAILABLE_EXCLUSIVE' : 'TEXT_AVAILABLE') | translate:{ MINUTES: request.durationMinutes } }}</p>
-                <p ng-if="request.approvalsRequired">{{ textKey('TEXT_NEEDS_APPROVAL') | translate:{ REQUIRED: request.approvalsRequired, MINUTES: request.durationMinutes } }}</p>
+                <p ng-if="!request.approvalsRequired">{{ textKey(request.exclusive ? 'TEXT_AVAILABLE_EXCLUSIVE' : 'TEXT_AVAILABLE') | translate:{ MINUTES: requestedMinutes() } }}</p>
+                <p ng-if="request.approvalsRequired">{{ textKey('TEXT_NEEDS_APPROVAL') | translate:{ REQUIRED: request.approvalsRequired, MINUTES: requestedMinutes() } }}</p>
+
+                <!-- Several time limits at once, where extensions are allowed -->
+                <div class="pam-request-duration" ng-if="request.maxPeriods > 1">
+                    <label for="pam-request-periods">{{ 'PAM.REQUEST.FIELD_DURATION' | translate }}</label>
+                    <select id="pam-request-periods" ng-model="form.periods" ng-disabled="busy"
+                            ng-options="periods as formatMinutes(request.durationMinutes * periods) for periods in periodChoices()"></select>
+                    <p class="pam-request-hint" ng-if="form.periods > 1">
+                        {{ 'PAM.REQUEST.HELP_DURATION' | translate:{ LEFT: request.maxPeriods - form.periods } }}
+                    </p>
+                </div>
+
+                <!-- Now, or ahead of time where approval is needed -->
+                <fieldset class="pam-request-when" ng-if="canRequestLater()">
+                    <legend>{{ 'PAM.REQUEST.FIELD_WHEN' | translate }}</legend>
+                    <label>
+                        <input type="radio" name="pam-request-when" ng-model="form.when" value="now"
+                               ng-disabled="busy || !canRequestNow()">
+                        {{ 'PAM.REQUEST.FIELD_WHEN_NOW' | translate }}
+                    </label>
+                    <label>
+                        <input type="radio" name="pam-request-when" ng-model="form.when" value="later" ng-disabled="busy">
+                        {{ 'PAM.REQUEST.FIELD_WHEN_LATER' | translate }}
+                    </label>
+                    <div class="pam-request-start" ng-if="isLater()">
+                        <input type="datetime-local" ng-model="form.starts" ng-disabled="busy"
+                               ng-model-options="{ timeSecondsFormat: '', timeStripZeroSeconds: true }"
+                               min="{{ startBounds().min }}" max="{{ startBounds().max }}"
+                               aria-label="{{ 'PAM.REQUEST.FIELD_STARTS' | translate }}">
+                        <span class="pam-request-zone">{{ form.starts | pamZone }}</span>
+                        <p class="pam-request-hint" ng-if="form.starts">
+                            {{ 'PAM.REQUEST.HELP_LATER' | translate:{ STARTS: formatTime(form.starts), ENDS: formatTime(laterEnds()) } }}
+                        </p>
+                    </div>
+                </fieldset>
+
                 <label for="pam-request-reason">{{ 'PAM.REQUEST.FIELD_REASON' | translate }}</label>
                 <textarea id="pam-request-reason" ng-model="form.reason" maxlength="500" rows="3"
                           ng-disabled="busy"></textarea>
@@ -65,6 +114,14 @@
             <!-- Held by someone else -->
             <p ng-if="request.heldExclusively" class="pam-request-held">
                 {{ 'PAM.REQUEST.TEXT_HELD_BY_OTHER' | translate:{ USER: request.holders.join(', '), EXPIRES: (request.expires | date:'medium') + ' ' + (request.expires | pamZone) } }}
+            </p>
+
+            <!-- Reserved by someone else, checked out alone -->
+            <p ng-if="request.reservedBy && reservedNow()" class="pam-request-held">
+                {{ 'PAM.REQUEST.TEXT_RESERVED_BY_OTHER' | translate:{ USER: request.reservedBy, ENDS: formatTime(request.reservedUntil) } }}
+            </p>
+            <p ng-if="request.reservedBy && !reservedNow() && !request.mine" class="pam-request-hint">
+                {{ 'PAM.REQUEST.INFO_RESERVED_BY_OTHER' | translate:{ USER: request.reservedBy, STARTS: formatTime(request.reservedFrom), ENDS: formatTime(request.reservedUntil) } }}
             </p>
 
             <!-- Others holding a shared password -->
@@ -92,17 +149,44 @@
                     <button ng-click="copyPassword()">{{ (copied ? 'PAM.REQUEST.INFO_COPIED' : 'PAM.REQUEST.ACTION_COPY') | translate }}</button>
                 </div>
                 <p class="pam-request-hint" ng-if="grant || !request.account">{{ textKey(request.managed ? 'HELP_RELEASE_MANAGED' : 'HELP_RELEASE') | translate }}</p>
+
+                <!-- Extending the checkout -->
+                <div class="pam-request-pending" ng-if="extensionPending()">
+                    <p>{{ 'PAM.REQUEST.TEXT_EXTENSION_PENDING' | translate:{ TOTAL: formatMinutes(request.extension.extensionMinutes), APPROVED: request.extension.approvers.length, REQUIRED: request.extension.approvalsRequired } }}</p>
+                </div>
+                <p ng-if="request.extension.status === 'DENIED'" class="pam-request-error">
+                    {{ 'PAM.REQUEST.TEXT_EXTENSION_DENIED' | translate:{ USER: request.extension.decidedBy } }}
+                </p>
+                <div ng-if="request.extension.status === 'DENIED' && request.extension.decisionReason"
+                     class="pam-request-notes pam-denial-reason">{{ request.extension.decisionReason }}</div>
+                <p class="pam-request-hint" ng-if="canExtend()">
+                    {{ 'PAM.REQUEST.HELP_EXTEND' | translate:{ TOTAL: formatMinutes(request.extensionMinutes), LEFT: request.extensionsLeft, REQUIRED: request.approvalsRequired } }}
+                </p>
+                <div ng-if="canExtend() && form.extending">
+                    <label for="pam-extension-reason">{{ 'PAM.REQUEST.FIELD_EXTENSION_REASON' | translate }}</label>
+                    <textarea id="pam-extension-reason" ng-model="form.reason" maxlength="500" rows="2"
+                              ng-disabled="busy"></textarea>
+                </div>
             </div>
 
             <p ng-if="expired">{{ textKey('TEXT_EXPIRED') | translate }}</p>
 
             <div class="pam-request-actions">
                 <button class="save" ng-if="canRequest()"
-                        ng-click="requestPassword()" ng-disabled="busy || (!request.noRequest && !form.reason.trim())">
+                        ng-click="requestPassword()"
+                        ng-disabled="busy || (!request.noRequest && !form.reason.trim()) || (isLater() && !form.starts)">
                     {{ (request.approvalsRequired ? 'PAM.REQUEST.ACTION_REQUEST_APPROVAL' : textKey('ACTION_REQUEST')) | translate }}
+                </button>
+                <button class="save" ng-if="reservationStarted() && !request.mine && !expired"
+                        ng-click="requestPassword()" ng-disabled="busy">
+                    {{ textKey('ACTION_USE_RESERVATION') | translate }}
                 </button>
                 <button class="danger" ng-if="request.pending" ng-click="cancelRequest()" ng-disabled="busy">
                     {{ 'PAM.REQUEST.ACTION_CANCEL_REQUEST' | translate }}
+                </button>
+                <button class="danger" ng-if="request.reservation && !request.mine" ng-click="cancelReservation()"
+                        ng-disabled="busy">
+                    {{ 'PAM.REQUEST.ACTION_CANCEL_RESERVATION' | translate }}
                 </button>
                 <button ng-if="request.account && request.mine && !grant && !expired" ng-click="requestPassword()" ng-disabled="busy">
                     {{ 'PAM.REQUEST.ACTION_SHOW_AGAIN' | translate }}
@@ -113,6 +197,13 @@
                 </button>
                 <button class="save" ng-if="!request.account && request.mine && !expired" ng-click="connect()">
                     {{ 'PAM.REQUEST.ACTION_CONNECT' | translate }}
+                </button>
+                <button ng-if="canExtend()" ng-click="extend()"
+                        ng-disabled="busy || (form.extending && !request.noRequest && !form.reason.trim())">
+                    {{ (form.extending && request.approvalsRequired ? 'PAM.REQUEST.ACTION_REQUEST_EXTENSION' : 'PAM.REQUEST.ACTION_EXTEND') | translate }}
+                </button>
+                <button class="danger" ng-if="extensionPending()" ng-click="cancelExtension()" ng-disabled="busy">
+                    {{ 'PAM.REQUEST.ACTION_CANCEL_EXTENSION' | translate }}
                 </button>
                 <button class="danger" ng-if="request.mine && !expired" ng-click="releasePassword()" ng-disabled="busy">
                     {{ textKey('ACTION_RELEASE') | translate }}

@@ -68,6 +68,27 @@ public final class PamAttributes {
     public static final String REVEAL_PASSWORD = "pam-reveal-password";
 
     /**
+     * Whether holders may extend their checkout: "" for the default (that of
+     * "pam-extensions-enabled", on unless turned off), "yes" or "no".
+     */
+    public static final String EXTENSIONS = "pam-extensions";
+    public static final String EXTENSIONS_YES = "yes";
+    public static final String EXTENSIONS_NO = "no";
+
+    /**
+     * How many times a checkout may be extended, also bounding how many
+     * times the time limit a request may ask for at once. Empty means
+     * "pam-max-extensions".
+     */
+    public static final String MAX_EXTENSIONS = "pam-max-extensions";
+
+    /**
+     * By how many minutes an extension extends a checkout. Empty means the
+     * checkout's time limit.
+     */
+    public static final String EXTENSION_DURATION = "pam-extension-duration";
+
+    /**
      * How many distinct approvers must approve a request before
      * its checkout starts. Empty or 0 means no approval is needed.
      */
@@ -146,6 +167,9 @@ public final class PamAttributes {
             new NumericField(CHECKOUT_DURATION),
             new EnumField(CHECKOUT_EXCLUSIVE, Arrays.asList("", EXCLUSIVE_YES, EXCLUSIVE_NO)),
             new NumericField(APPROVALS_REQUIRED),
+            new EnumField(EXTENSIONS, Arrays.asList("", EXTENSIONS_YES, EXTENSIONS_NO)),
+            new NumericField(MAX_EXTENSIONS),
+            new NumericField(EXTENSION_DURATION),
             new BooleanField(REVEAL_PASSWORD, "true")
         )));
 

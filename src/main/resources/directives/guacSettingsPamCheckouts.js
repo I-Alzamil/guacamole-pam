@@ -32,6 +32,12 @@ angular.module('guacPam').directive('guacSettingsPamCheckouts', [function guacSe
              */
             $scope.reasonShown = null;
 
+            /**
+             * The checkout whose details are shown, as {checkout, details}
+             * ("holder", "approvals", "extensions" or "ended"), or null.
+             */
+            $scope.detailsShown = null;
+
             var loadCheckouts = function loadCheckouts() {
                 pamService.getActiveCheckouts().then(function activeRetrieved(checkouts) {
                     $scope.activeCheckouts = checkouts;
@@ -46,6 +52,28 @@ angular.module('guacPam').directive('guacSettingsPamCheckouts', [function guacSe
             $scope.$on('pamShowCheckoutReason', function showHistoryReason(event, checkout) {
                 $scope.showReason(checkout);
             });
+
+            /**
+             * Shows who holds a checkout, who approved it, or who ended it,
+             * with where they did so from.
+             */
+            $scope.showDetails = function showDetails(checkout, details) {
+                $scope.detailsShown = { checkout : checkout, details : details };
+            };
+
+            $scope.$on('pamShowCheckoutDetails', function showHistoryDetails(event, checkout, details) {
+                $scope.showDetails(checkout, details);
+            });
+
+            /**
+             * Closes the details; when given a click, only one on the
+             * backdrop itself.
+             */
+            $scope.closeDetails = function closeDetails($event) {
+                if ($event && $event.target !== $event.currentTarget)
+                    return;
+                $scope.detailsShown = null;
+            };
 
             /**
              * Closes the reason; when given a click, only one on the
@@ -88,9 +116,10 @@ angular.module('guacPam').directive('guacSettingsPamCheckouts', [function guacSe
             };
 
             var closeOnEscape = function closeOnEscape(e) {
-                if (e.key === 'Escape' && $scope.reasonShown)
-                    $scope.$apply(function closeReason() {
+                if (e.key === 'Escape' && ($scope.reasonShown || $scope.detailsShown))
+                    $scope.$apply(function closeDialogs() {
                         $scope.reasonShown = null;
+                        $scope.detailsShown = null;
                     });
             };
 

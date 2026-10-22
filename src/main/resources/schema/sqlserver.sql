@@ -72,8 +72,11 @@ CREATE TABLE pam_checkout (
   released        datetime2(3),
   release_reason  nvarchar(16),
   released_by     nvarchar(128),
+  released_host   nvarchar(256),
   reveal_count    int            NOT NULL DEFAULT 1,
   exclusive       bit            NOT NULL DEFAULT 1,
+  extensions      int            NOT NULL DEFAULT 0,
+  max_extensions  int            NOT NULL DEFAULT 0,
 
   CONSTRAINT pam_checkout_pkey PRIMARY KEY (checkout_id),
   CONSTRAINT pam_checkout_connection
@@ -95,7 +98,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'pam_checkout_holder')
 CREATE INDEX pam_checkout_holder
   ON pam_checkout (connection_id, username, released);
 
--- Its link to the checkout takes no action when the checkout is deleted
+-- Its links to checkouts take no action when the checkout is deleted
 -- (checkouts never are): SQL Server refuses a second path of actions from
 -- deleting a connection, which also clears the checkout's connection
 IF OBJECT_ID(N'pam_request', N'U') IS NULL
@@ -112,8 +115,14 @@ CREATE TABLE pam_request (
   status             nvarchar(16)   NOT NULL DEFAULT 'PENDING',
   decided            datetime2(3),
   decided_by         nvarchar(128),
+  decided_host       nvarchar(256),
   checkout_id        int,
   decision_reason    nvarchar(500),
+  starts             datetime2(3),
+  ends               datetime2(3),
+  periods            int            NOT NULL DEFAULT 1,
+  extends_checkout   int,
+  extension_minutes  int,
 
   CONSTRAINT pam_request_pkey PRIMARY KEY (request_id),
   CONSTRAINT pam_request_connection
@@ -121,6 +130,9 @@ CREATE TABLE pam_request (
     REFERENCES guacamole_connection (connection_id) ON DELETE SET NULL,
   CONSTRAINT pam_request_checkout
     FOREIGN KEY (checkout_id)
+    REFERENCES pam_checkout (checkout_id),
+  CONSTRAINT pam_request_extends
+    FOREIGN KEY (extends_checkout)
     REFERENCES pam_checkout (checkout_id)
 
 );
@@ -136,6 +148,7 @@ CREATE TABLE pam_request_approval (
   request_id int            NOT NULL,
   approver   nvarchar(128)  NOT NULL,
   approved   datetime2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+  remote_host nvarchar(256),
 
   CONSTRAINT pam_request_approval_pkey PRIMARY KEY (request_id, approver),
   CONSTRAINT pam_request_approval_request

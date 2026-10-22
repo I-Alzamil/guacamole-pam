@@ -37,6 +37,14 @@ public class PasswordRequest {
     private String lastStatus;
     private String lastDecidedBy;
     private String lastDecisionReason;
+    private ApprovalRequest reservation;
+    private int maxPeriods = 1;
+    private int extensionMinutes;
+    private int extensionsLeft;
+    private ApprovalRequest extension;
+    private String reservedBy;
+    private Long reservedFrom;
+    private Long reservedUntil;
 
     PasswordRequest(String identifier, String name, String accountName, String accountDn, String url,
             String notes, boolean managed, boolean exclusive, int durationMinutes, List<Checkout> active,
@@ -227,6 +235,96 @@ public class PasswordRequest {
      */
     public ApprovalRequest getPending() {
         return pending;
+    }
+
+    /**
+     * Adds the reservations of the connection: the user's next one, and, if
+     * checkouts of the connection are exclusive, the next one of anyone else.
+     *
+     * @param reservations
+     *     The connection's reservations, the earliest first.
+     */
+    PasswordRequest withReservations(List<ApprovalRequest> reservations, String currentUser) {
+        for (ApprovalRequest request : reservations) {
+            if (request.getUsername().equals(currentUser)) {
+                if (reservation == null)
+                    reservation = request;
+            }
+            else if (exclusive && reservedBy == null) {
+                reservedBy = request.getUsername();
+                reservedFrom = request.getStarts();
+                reservedUntil = request.getEnds();
+            }
+        }
+        return this;
+    }
+
+    /**
+     * Adds what the connection allows of extensions, and of the user's own
+     * checkout (or null) how many extensions are left and its latest request
+     * to extend it (or null).
+     */
+    PasswordRequest withExtensions(int maxPeriods, int extensionMinutes, Checkout own, ApprovalRequest extension) {
+        this.maxPeriods = maxPeriods;
+        this.extensionMinutes = extensionMinutes;
+        this.extensionsLeft = own == null ? 0 : Math.max(0, own.getMaxExtensions() - own.getExtensions());
+        this.extension = extension;
+        return this;
+    }
+
+    /**
+     * How many times its time limit a request may ask for at once: 1 if the
+     * connection allows no extensions.
+     */
+    public int getMaxPeriods() {
+        return maxPeriods;
+    }
+
+    /**
+     * By how many minutes an extension extends a checkout.
+     */
+    public int getExtensionMinutes() {
+        return extensionMinutes;
+    }
+
+    /**
+     * How many more times the user's own checkout may be extended.
+     */
+    public int getExtensionsLeft() {
+        return extensionsLeft;
+    }
+
+    /**
+     * The latest request to extend the user's own checkout, whatever became
+     * of it, or null.
+     */
+    public ApprovalRequest getExtension() {
+        return extension;
+    }
+
+    /**
+     * The user's next approved request made ahead of time, not used yet,
+     * or null. From its start until its end, the user checks out with it.
+     */
+    public ApprovalRequest getReservation() {
+        return reservation;
+    }
+
+    /**
+     * Who else has the next reservation of a connection checked out alone,
+     * or null. No one else checks it out during that time, and checkouts
+     * end when it starts.
+     */
+    public String getReservedBy() {
+        return reservedBy;
+    }
+
+    public Long getReservedFrom() {
+        return reservedFrom;
+    }
+
+    public Long getReservedUntil() {
+        return reservedUntil;
     }
 
     /**

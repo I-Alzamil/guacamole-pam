@@ -71,6 +71,20 @@ check "...in a checkout keeping the remote host the request came from" "yes $REQ
     "$([ -n "$REQUESTED_FROM" ] && echo yes) $(sql "SELECT k.remote_host
         FROM pam_checkout k JOIN pam_request r ON r.checkout_id = k.checkout_id WHERE r.request_id = $ID")"
 check_contains "...in a response that is never cached" "no-store" "$(grep -i '^cache-control' "$T2_TMP/headers")"
+APPROVALS=$(curl -s -G --data-urlencode "contains=T2 ticket 1" "$PAM/approvals/history?token=$ADMIN" | python3 -I -c "
+import sys,json
+r=[r for r in json.load(sys.stdin) if r['id']==int(sys.argv[1])][0]
+print(' '.join('%s@%s' % (a['approver'], a.get('remoteHost') or '') for a in r['approvals']))" "$ID")
+check "each approval keeps where its approver approved from" \
+    "t2-approver1@$REQUESTED_FROM t2-approver2@$REQUESTED_FROM" "$APPROVALS"
+check "the checkout lists those approvals too" "t2-approver1@$REQUESTED_FROM t2-approver2@$REQUESTED_FROM" \
+    "$(curl -s -G --data-urlencode "contains=T2 ticket 1" "$PAM/checkouts/history?token=$ADMIN" | python3 -I -c "
+import sys,json
+c=[c for c in json.load(sys.stdin) if c.get('approvals')][0]
+print(' '.join('%s@%s' % (a['approver'], a.get('remoteHost') or '') for a in c['approvals']))")"
+check "...and the history can be searched by it" yes "$(curl -s -G --data-urlencode "contains=$REQUESTED_FROM" \
+    --data-urlencode "contains=T2 ticket 1" "$PAM/approvals/history?token=$ADMIN" | python3 -I -c "
+import sys,json; print('yes' if any(r['id']==int(sys.argv[1]) for r in json.load(sys.stdin)) else 'no')" "$ID")"
 check "the requester releases it" 204 "$(status_of "$(api POST "$PAM/requests/$ACCOUNT/release" "$REQUESTER")")"
 check "...after which there is no password without a new request" 202 "$(status_of "$(api POST "$PAM/requests/$ACCOUNT" "$REQUESTER" '{"reason":"again"}')")"
 
@@ -79,6 +93,8 @@ section "Denials, cancellations and self-approval"
 ID=$(pending_id t2-requester)
 check_contains "a denial needs a reason" "reason for the denial" "$(message_of "$(api POST "$PAM/approvals/$ID/deny" "$APPROVER1" '{}')")"
 check "approver 1 denies with a reason" 204 "$(status_of "$(api POST "$PAM/approvals/$ID/deny" "$APPROVER1" '{"reason":"Not this week"}')")"
+check "...kept with where they denied it from" "t2-approver1 $REQUESTED_FROM" \
+    "$(sql "SELECT decided_by, decided_host FROM pam_request WHERE request_id = $ID" | tr '\t' ' ')"
 LATEST=$(api GET "$PAM/requests/$ACCOUNT" "$REQUESTER" | cut -d' ' -f2-)
 check "the requester sees the denial and its reason" "DENIED Not this week" \
     "$(json_get "$LATEST" "str(d.get('lastStatus')) + ' ' + str(d.get('lastDecisionReason'))")"
@@ -119,6 +135,9 @@ check "...and the history can be searched by it" yes "$(curl -s -G --data-urlenc
     --data-urlencode "contains=T2 maintenance" "$PAM/checkouts/history?token=$ADMIN" | python3 -I -c "
 import sys,json; print('yes' if any(c['id']==int(sys.argv[1]) for c in json.load(sys.stdin)) else 'no')" "$ACTIVE")"
 check "the administrator revokes it" 204 "$(status_of "$(api POST "$PAM/checkouts/$ACTIVE/revoke" "$ADMIN")")"
+check "...kept with where they revoked it from" "$GUAC_ADMIN yes" \
+    "$(sql "SELECT released_by FROM pam_checkout WHERE checkout_id = $ACTIVE") $([ -n "$(sql "SELECT released_host
+        FROM pam_checkout WHERE checkout_id = $ACTIVE")" ] && echo yes)"
 check_contains "...and the connection refuses a new session" "403 You must request access" "$(tunnel "$REQUESTER" "$GATED" c)"
 
 # The periodic check ends expired checkouts every 15 seconds; until then,

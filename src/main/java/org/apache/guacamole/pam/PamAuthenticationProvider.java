@@ -28,6 +28,7 @@ import org.apache.guacamole.pam.platform.PlatformImport;
 import org.apache.guacamole.pam.platform.PlatformRepository;
 import org.apache.guacamole.pam.rotation.RotationService;
 import org.apache.guacamole.properties.BooleanGuacamoleProperty;
+import org.apache.guacamole.properties.IntegerGuacamoleProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,6 +61,24 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
     private static final BooleanGuacamoleProperty ADMIN_BYPASS_REQUESTS = new BooleanGuacamoleProperty() {
         @Override
         public String getName() { return "pam-admin-bypass-requests"; }
+    };
+
+    /**
+     * Whether holders may extend their checkouts, unless a connection says
+     * otherwise. True by default.
+     */
+    private static final BooleanGuacamoleProperty EXTENSIONS_ENABLED = new BooleanGuacamoleProperty() {
+        @Override
+        public String getName() { return "pam-extensions-enabled"; }
+    };
+
+    /**
+     * How many times a checkout may be extended, unless a connection says
+     * otherwise. 2 by default.
+     */
+    private static final IntegerGuacamoleProperty MAX_EXTENSIONS = new IntegerGuacamoleProperty() {
+        @Override
+        public String getName() { return "pam-max-extensions"; }
     };
 
     private final PlatformRepository platforms;
@@ -146,7 +165,9 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         approvals = new ApprovalRepository(database);
         badgePreferences = new BadgePreferences(database);
         checkoutService = new CheckoutService(connections, checkouts, platforms, approvals, rotationService,
-                environment.getProperty(ADMIN_BYPASS_REQUESTS, false));
+                environment.getProperty(ADMIN_BYPASS_REQUESTS, false),
+                environment.getProperty(EXTENSIONS_ENABLED, true),
+                Math.max(0, environment.getProperty(MAX_EXTENSIONS, CheckoutService.DEFAULT_MAX_EXTENSIONS)));
         approvalService = new ApprovalService(approvals, checkoutService);
 
         // Offer the Account connection type in the connection editor

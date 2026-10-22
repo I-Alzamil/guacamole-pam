@@ -140,12 +140,19 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
 
     /**
      * Checks out the password of an account, or shows it again to its
-     * holder. The reason is only needed for a new checkout. Resolves with the
-     * password, or, for accounts needing approval, with the request status
-     * (which has no "password").
+     * holder. The reason is only needed for a new checkout; the start
+     * (milliseconds since 1970 UTC) only for access needing approval
+     * requested ahead of time; and how many times the time limit is asked
+     * for, if more than once. Resolves with the password, or, for accounts
+     * needing approval, with the request status (which has no "password").
      */
-    service.requestPassword = function requestPassword(identifier, reason) {
-        return request('POST', 'requests/' + encodeURIComponent(identifier), { reason : reason });
+    service.requestPassword = function requestPassword(identifier, reason, starts, periods) {
+        var body = { reason : reason };
+        if (starts)
+            body.starts = String(starts);
+        if (periods > 1)
+            body.periods = String(periods);
+        return request('POST', 'requests/' + encodeURIComponent(identifier), body);
     };
 
     /**
@@ -161,6 +168,29 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
      */
     service.cancelRequest = function cancelRequest(identifier) {
         return request('DELETE', 'requests/' + encodeURIComponent(identifier) + '/pending');
+    };
+
+    /**
+     * Extends the user's checkout, or asks for it to be extended where
+     * approval is needed. Resolves with the request as the user now sees it.
+     */
+    service.extend = function extend(identifier, reason) {
+        return request('POST', 'requests/' + encodeURIComponent(identifier) + '/extension', { reason : reason });
+    };
+
+    /**
+     * Cancels the user's request to extend their checkout.
+     */
+    service.cancelExtension = function cancelExtension(identifier) {
+        return request('DELETE', 'requests/' + encodeURIComponent(identifier) + '/extension');
+    };
+
+    /**
+     * Cancels the user's own next approved access requested ahead of time,
+     * not used yet.
+     */
+    service.cancelReservation = function cancelReservation(identifier) {
+        return request('DELETE', 'requests/' + encodeURIComponent(identifier) + '/reservation');
     };
 
     /**

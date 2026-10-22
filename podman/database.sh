@@ -23,6 +23,7 @@
 #                       NULL as empty
 #   sql_now             SQL for the current time, as the extension stores it
 #   sql_ago SECONDS     SQL for that many seconds ago
+#   sql_in SECONDS      SQL for that many seconds from now
 
 PAM_DB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PAM_GUACAMOLE_IMAGE=docker.io/guacamole/guacamole:1.6.0
@@ -108,6 +109,14 @@ sql_ago() {
         postgresql) echo "(CURRENT_TIMESTAMP - make_interval(secs => $1))";;
         mysql|mariadb) echo "TIMESTAMPADD(SECOND, -$1, CURRENT_TIMESTAMP(3))";;
         sqlserver) echo "DATEADD(second, -$1, SYSUTCDATETIME())";;
+    esac
+}
+
+sql_in() {
+    case "$PAM_DB" in
+        postgresql) echo "(CURRENT_TIMESTAMP + make_interval(secs => $1))";;
+        mysql|mariadb) echo "TIMESTAMPADD(SECOND, $1, CURRENT_TIMESTAMP(3))";;
+        sqlserver) echo "DATEADD(second, $1, SYSUTCDATETIME())";;
     esac
 }
 

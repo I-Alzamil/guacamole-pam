@@ -17,7 +17,9 @@ import org.slf4j.LoggerFactory;
  * permission, of their own or of one of their groups, covers the request's
  * connection. Administrators may decide on any. A request needs as many
  * distinct approvers as its connection requires, none of them the requester; a
- * single denial rejects it. The final approval starts the checkout.
+ * single denial rejects it. The final approval starts the checkout or, for a
+ * request made ahead of time, reserves the connection for it; for a request
+ * to extend a checkout, it extends it.
  */
 public class ApprovalService {
 
@@ -70,18 +72,23 @@ public class ApprovalService {
 
     /**
      * Approves a request. If this is the last approval needed, the
-     * requester's checkout starts now.
+     * requester's checkout starts now, or the connection is reserved for
+     * the time they asked for.
+     *
+     * @param remoteHost
+     *     Where the approver decides from, kept with the decision, or null
+     *     if unknown.
      *
      * @throws GuacamoleClientException
      *     If the request is the approver's own, or cannot be approved now.
      */
-    public ApprovalRequest approve(int requestId, Approver approver) throws GuacamoleException {
+    public ApprovalRequest approve(int requestId, Approver approver, String remoteHost) throws GuacamoleException {
 
         ApprovalRequest pending = requireQualified(requestId, approver);
         if (pending.getUsername().equals(approver.getUsername()))
             throw new GuacamoleClientException("You cannot approve your own request.");
 
-        ApprovalRequest request = approvals.approve(requestId, approver.getUsername());
+        ApprovalRequest request = approvals.approve(requestId, approver.getUsername(), remoteHost);
         logger.info("User \"{}\" approved request {} of \"{}\" for \"{}\" ({}/{}).", approver.getUsername(),
                 requestId, request.getUsername(), Values.forLog(request.getConnectionName()),
                 request.getApprovers().size(), request.getApprovalsRequired());
@@ -89,9 +96,14 @@ public class ApprovalService {
         if (request.getApprovers().size() < request.getApprovalsRequired())
             return request;
 
-        Checkout checkout;
+        Checkout checkout = null;
         try {
-            checkout = checkoutService.startApprovedCheckout(request);
+            if (request.getExtendsCheckout() != null)
+                checkout = checkoutService.grantExtension(request, approver.getUsername());
+            else if (request.getStarts() == null)
+                checkout = checkoutService.startApprovedCheckout(request);
+            else
+                checkoutService.reserve(request, approver.getUsername());
         }
         catch (GuacamoleClientException e) {
 
@@ -101,11 +113,14 @@ public class ApprovalService {
                 return current;
 
             approvals.withdrawApproval(requestId, approver.getUsername());
-            throw new GuacamoleClientException("The checkout cannot start now: " + e.getMessage());
+            throw new GuacamoleClientException((request.getExtendsCheckout() != null ? "The checkout cannot be extended: "
+                    : request.getStarts() != null ? "The access cannot be reserved: "
+                    : "The checkout cannot start now: ") + e.getMessage());
 
         }
 
-        approvals.markApproved(requestId, checkout.getId(), approver.getUsername());
+        if (checkout != null)
+            approvals.markApproved(requestId, checkout.getId(), approver.getUsername());
         return approvals.get(requestId);
 
     }
@@ -119,10 +134,14 @@ public class ApprovalService {
      * Denies a request, with the reason shown to its requester. One denial
      * is enough to reject it.
      *
+     * @param remoteHost
+     *     Where the approver decides from, kept with the decision, or null
+     *     if unknown.
+     *
      * @throws GuacamoleClientException
      *     If the reason is missing or too long.
      */
-    public void deny(int requestId, Approver approver, String reason) throws GuacamoleException {
+    public void deny(int requestId, Approver approver, String reason, String remoteHost) throws GuacamoleException {
 
         String trimmed = reason == null ? "" : reason.trim();
         if (trimmed.isEmpty())
@@ -134,7 +153,7 @@ public class ApprovalService {
         if (request.getUsername().equals(approver.getUsername()))
             throw new GuacamoleClientException("You cannot decide on your own request. Cancel it instead.");
 
-        approvals.decide(requestId, ApprovalRequest.DENIED, approver.getUsername(), trimmed);
+        approvals.decide(requestId, ApprovalRequest.DENIED, approver.getUsername(), remoteHost, trimmed);
         logger.info("User \"{}\" denied request {} of \"{}\" for \"{}\".", approver.getUsername(), requestId,
                 request.getUsername(), Values.forLog(request.getConnectionName()));
 

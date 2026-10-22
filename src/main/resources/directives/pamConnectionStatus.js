@@ -3,8 +3,9 @@
  * "Currently in use by N users" (Guacamole counts open sessions there, which
  * Accounts never have, so this counts the users holding the password, using
  * Guacamole's own wording and styling). For any connection needing a
- * request, a label when the user holds it or awaits approval, which opens
- * the request dialog (to release, or cancel) instead of the connection.
+ * request, a label when the user holds it, awaits approval, or has it
+ * approved ahead of time, which opens the request dialog (to release, or
+ * cancel) instead of the connection.
  * Placed by templates/pamConnectionStatus.html.
  */
 angular.module('guacPam').directive('pamConnectionStatus', [function pamConnectionStatus() {
@@ -34,7 +35,8 @@ angular.module('guacPam').directive('pamConnectionStatus', [function pamConnecti
             };
 
             /**
-             * "held" or "pending" (also the label's class), or null.
+             * "held", "pending" or "reserved" (also the label's class), or
+             * null.
              */
             $scope.status = function status() {
                 var current = entry();
@@ -44,6 +46,8 @@ angular.module('guacPam').directive('pamConnectionStatus', [function pamConnecti
                     return 'held';
                 if (current.pending)
                     return 'pending';
+                if (current.reservation && current.reservation.ends > Date.now())
+                    return 'reserved';
                 return null;
             };
 
@@ -52,6 +56,9 @@ angular.module('guacPam').directive('pamConnectionStatus', [function pamConnecti
                 var translate = $filter('translate');
                 if ($scope.status() === 'pending')
                     return translate('PAM.HOME.TEXT_PENDING');
+                if ($scope.status() === 'reserved')
+                    return translate('PAM.HOME.TEXT_RESERVED',
+                            { STARTS : $filter('date')(current.reservation.starts, 'short') });
                 return translate(current.account ? 'PAM.HOME.TEXT_CHECKED_OUT' : 'PAM.HOME.TEXT_ACCESS_HELD',
                         { EXPIRES : $filter('date')(current.expires, 'shortTime') });
             };

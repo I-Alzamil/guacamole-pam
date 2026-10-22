@@ -64,8 +64,11 @@ CREATE TABLE IF NOT EXISTS pam_checkout (
   released        datetime(3),
   release_reason  varchar(16),
   released_by     varchar(128),
+  released_host   varchar(256),
   reveal_count    integer       NOT NULL DEFAULT 1,
   exclusive       boolean       NOT NULL DEFAULT TRUE,
+  extensions      integer       NOT NULL DEFAULT 0,
+  max_extensions  integer       NOT NULL DEFAULT 0,
 
   -- The connection of an active exclusive checkout, and of any active one
   active_exclusive integer AS (CASE WHEN released IS NULL AND exclusive THEN connection_id END) VIRTUAL,
@@ -98,15 +101,22 @@ CREATE TABLE IF NOT EXISTS pam_request (
   status             varchar(16)   NOT NULL DEFAULT 'PENDING',
   decided            datetime(3),
   decided_by         varchar(128),
+  decided_host       varchar(256),
   checkout_id        integer,
   decision_reason    varchar(500),
+  starts             datetime(3),
+  ends               datetime(3),
+  periods            integer       NOT NULL DEFAULT 1,
+  extends_checkout   integer,
+  extension_minutes  integer,
 
-  -- The connection of a pending request
-  pending_connection integer AS (CASE WHEN status = 'PENDING' THEN connection_id END) VIRTUAL,
+  -- The connection of a pending request, besides extensions
+  pending_connection integer AS (CASE WHEN status = 'PENDING' AND extends_checkout IS NULL
+                                 THEN connection_id END) VIRTUAL,
 
   PRIMARY KEY (request_id),
 
-  -- At most one pending request per user and connection
+  -- At most one pending request per user and connection, besides extensions
   UNIQUE KEY pam_request_pending (pending_connection, username),
 
   CONSTRAINT pam_request_connection
@@ -114,6 +124,9 @@ CREATE TABLE IF NOT EXISTS pam_request (
     REFERENCES guacamole_connection (connection_id) ON DELETE SET NULL,
   CONSTRAINT pam_request_checkout
     FOREIGN KEY (checkout_id)
+    REFERENCES pam_checkout (checkout_id) ON DELETE SET NULL,
+  CONSTRAINT pam_request_extends
+    FOREIGN KEY (extends_checkout)
     REFERENCES pam_checkout (checkout_id) ON DELETE SET NULL
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -123,6 +136,7 @@ CREATE TABLE IF NOT EXISTS pam_request_approval (
   request_id integer       NOT NULL,
   approver   varchar(128)  NOT NULL,
   approved   datetime(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  remote_host varchar(256),
 
   PRIMARY KEY (request_id, approver),
   CONSTRAINT pam_request_approval_request

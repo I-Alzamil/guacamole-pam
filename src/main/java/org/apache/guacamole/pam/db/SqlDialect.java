@@ -1,6 +1,7 @@
 package org.apache.guacamole.pam.db;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -20,7 +21,8 @@ import java.util.TimeZone;
  *
  * Times are taken from the database's clock, so Guacamole servers sharing it
  * agree on them. Where the column type has no time zone (MySQL, SQL Server),
- * they are stored in UTC, and are read with {@link #getTimestamp}.
+ * they are stored in UTC, and are read with {@link #getTimestamp} (and any
+ * other time written with {@link #setTimestamp}).
  */
 public abstract class SqlDialect {
 
@@ -151,6 +153,14 @@ public abstract class SqlDialect {
      */
     public static Timestamp getTimestamp(ResultSet results, String column) throws SQLException {
         return results.getTimestamp(column, Calendar.getInstance(UTC));
+    }
+
+    /**
+     * Sets a parameter to the given time, in milliseconds since the epoch,
+     * stored as {@link #now} would store it.
+     */
+    public static void setTimestamp(PreparedStatement statement, int index, long time) throws SQLException {
+        statement.setTimestamp(index, new Timestamp(time), Calendar.getInstance(UTC));
     }
 
     /**
