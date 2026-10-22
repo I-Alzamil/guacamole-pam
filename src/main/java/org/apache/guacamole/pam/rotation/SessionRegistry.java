@@ -273,10 +273,19 @@ class SessionRegistry {
         try (Connection connection = database.getConnection()) {
 
             // Rows this server failed to remove are not refreshed, and go
-            // stale like those of a stopped server
+            // stale like those of a stopped server. Each is recorded on its
+            // own: one of a connection just deleted, whose session closes
+            // shortly, cannot be, and must not keep the others from being
             for (Session session : local.values()) {
-                if (Values.parseId(session.identifier) != null)
+                if (Values.parseId(session.identifier) == null)
+                    continue;
+                try {
                     record(connection, session);
+                }
+                catch (SQLException e) {
+                    logger.debug("Unable to record the session of \"{}\" on connection {}: {}", session.username,
+                            session.identifier, e.getMessage());
+                }
             }
 
             List<String[]> stale = new ArrayList<>();
