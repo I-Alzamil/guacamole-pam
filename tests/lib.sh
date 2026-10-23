@@ -196,7 +196,7 @@ parameter() {
 reveal() {
     case "$2" in
         pam:v1:*) printf '%s\n' "$2" | PAM_ENCRYPTION_KEY="$PAM_TEST_KEY" java -cp "$T2_JAR" \
-                      org.apache.guacamole.pam.crypto.SecretCipher "$1";;
+                      io.github.ialzamil.guacamole.pam.crypto.SecretCipher "$1";;
         *) printf '%s\n' "$2";;
     esac
 }

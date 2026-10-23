@@ -3,7 +3,7 @@
     "name": "Privileged Access Management",
     "namespace": "pam",
     "authProviders": [
-        "org.apache.guacamole.pam.PamAuthenticationProvider"
+        "io.github.ialzamil.guacamole.pam.PamAuthenticationProvider"
     ],
     "js": [
         "pam.min.js"

@@ -253,7 +253,7 @@ environment and the value on input, so neither appears in the process list:
 ```sh
 psql -tAc "SELECT pending_password FROM pam_rotation_state WHERE connection_id = 42" \
   | PAM_ENCRYPTION_KEY=<the key> java -cp guacamole-pam-<version>.jar \
-      org.apache.guacamole.pam.crypto.SecretCipher pending-password
+      io.github.ialzamil.guacamole.pam.crypto.SecretCipher pending-password
 ```
 
 The last argument is the kind of value: `pending-password`,
