@@ -265,18 +265,20 @@ public class CheckoutService {
 
             String trimmed = validateReason(reason);
             Long ends = null;
+            String when = "";
             if (starts == null)
                 requireAvailable(target, username);
             else {
                 validateStart(starts);
-                ends = starts + getDuration(target) * 60000L * periods;
+                long end = starts + getDuration(target) * 60000L * periods;
+                ends = end;
+                when = ", from " + Instant.ofEpochMilli(starts) + " to " + Instant.ofEpochMilli(end);
             }
 
             ApprovalRequest pending = approvals.create(id, username, remoteHost, trimmed, approvalsRequired,
                     starts, ends, isExclusive(target), periods);
             logger.info("User \"{}\" requested \"{}\" (request {}, {} approvals needed{}{}). Reason: {}",
-                    username, Values.forLog(target.getName()), pending.getId(), approvalsRequired,
-                    starts == null ? "" : ", from " + Instant.ofEpochMilli(starts) + " to " + Instant.ofEpochMilli(ends),
+                    username, Values.forLog(target.getName()), pending.getId(), approvalsRequired, when,
                     periods == 1 ? "" : ", " + periods + " times its time limit", Values.forLog(trimmed));
 
         }
@@ -526,7 +528,9 @@ public class CheckoutService {
 
         Target target = requireRequestable(context, identifier);
         Checkout checkout = checkouts.getActive(target.getId(), username);
-        ApprovalRequest extension = checkout == null ? null : approvals.getLatestExtension(checkout.getId());
+        if (checkout == null)
+            throw new GuacamoleClientException("No extension of your checkout awaits approval.");
+        ApprovalRequest extension = approvals.getLatestExtension(checkout.getId());
         if (extension == null || !ApprovalRequest.PENDING.equals(extension.getStatus()))
             throw new GuacamoleClientException("No extension of your checkout awaits approval.");
 
