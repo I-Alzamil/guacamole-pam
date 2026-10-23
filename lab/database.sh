@@ -171,7 +171,13 @@ db_start() {
                 -v pam-sqlserver-data:/var/opt/mssql \
                 mcr.microsoft.com/mssql/server:2022-latest
             db_wait || return 1
-            if [ "$(sql "SELECT 1" 2>/dev/null)" != 1 ]; then
+            # Asked of the server: an existing database cannot be opened
+            # while it is recovered after a restart, and would look new
+            local databases
+            databases=$(podman exec myguacdbtest /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa \
+                -P "$PAM_SQLSERVER_SA_PASSWORD" -b -h -1 \
+                -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.databases WHERE name = 'guacamole'" | tr -d ' \r')
+            if [ "$databases" = 0 ]; then
                 # New: the database, Guacamole's login owning it, the schema
                 local schema
                 schema=$(guacamole_schema sqlserver)
@@ -183,8 +189,19 @@ db_start() {
                     ALTER ROLE db_owner ADD MEMBER guacamole;" >/dev/null
                 podman cp "$schema" myguacdbtest:/tmp/guacamole.sql
                 podman exec myguacdbtest /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa \
-                    -P "$PAM_SQLSERVER_SA_PASSWORD" -d guacamole -b -i /tmp/guacamole.sql >/dev/null
-            fi;;
+                    -P "$PAM_SQLSERVER_SA_PASSWORD" -d guacamole -b -i /tmp/guacamole.sql >/dev/null || return 1
+            elif [ "$databases" != 1 ]; then
+                echo "Unable to tell whether SQL Server has the guacamole database." >&2
+                return 1
+            fi
+            # Until it is online
+            local i
+            for i in $(seq 90); do
+                [ "$(sql "SELECT 1" 2>/dev/null | tr -d ' \r')" = 1 ] && return 0
+                sleep 2
+            done
+            echo "The guacamole database did not come online." >&2
+            return 1;;
     esac
 }
 
