@@ -17,7 +17,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -469,117 +471,35 @@ public class DatabaseClient {
         properties.setProperty("user", username);
         properties.setProperty("password", password);
 
-        File trust = null;
+        // Certificates the driver reads while connecting, removed after
+        List<File> files = new ArrayList<>();
         try {
 
-            String url;
             Driver driver;
+            String url;
             switch (target.getKind()) {
 
                 case POSTGRESQL:
                     driver = load(POSTGRESQL_DRIVER, "PostgreSQL", "the PostgreSQL JDBC driver (postgresql-*.jar)");
-                    url = "jdbc:postgresql://" + host(target) + ":" + target.getPort() + "/"
-                            + (target.getDatabase() == null ? "postgres" : target.getDatabase());
-                    properties.setProperty("connectTimeout", Integer.toString(CONNECT_TIMEOUT_SECONDS));
-                    properties.setProperty("loginTimeout", Integer.toString(CONNECT_TIMEOUT_SECONDS));
-                    properties.setProperty("socketTimeout", Integer.toString(SOCKET_TIMEOUT_SECONDS));
-                    properties.setProperty("ApplicationName", "guacamole-pam");
-                    properties.setProperty("gssEncMode", "disable");
-                    if (!target.isEncrypted())
-                        properties.setProperty("sslmode", "disable");
-                    else if (!target.isVerified()) {
-                        properties.setProperty("sslmode", "require");
-                        properties.setProperty("sslfactory", "org.postgresql.ssl.NonValidatingFactory");
-                    }
-                    else {
-                        properties.setProperty("sslmode", "verify-full");
-                        if (target.getAuthorities().isEmpty())
-                            properties.setProperty("sslfactory", "org.postgresql.ssl.DefaultJavaSSLFactory");
-                        else {
-                            trust = writePem(target);
-                            properties.setProperty("sslrootcert", trust.getPath());
-                        }
-                    }
+                    url = postgreSql(target, properties, files);
                     break;
 
                 case MYSQL:
-                    boolean mariadbDriver = isInstalled(MARIADB_DRIVER);
-                    driver = mariadbDriver ? load(MARIADB_DRIVER, "MySQL", null) : load(MYSQL_DRIVER, "MySQL",
-                            "MariaDB Connector/J (mariadb-java-client-*.jar) or MySQL Connector/J (mysql-connector-j-*.jar)");
-                    url = (mariadbDriver ? "jdbc:mariadb://" : "jdbc:mysql://") + host(target) + ":" + target.getPort()
-                            + "/" + (target.getDatabase() == null ? "" : target.getDatabase());
-                    properties.setProperty("connectTimeout", Integer.toString(CONNECT_TIMEOUT_SECONDS * 1000));
-                    properties.setProperty("socketTimeout", Integer.toString(SOCKET_TIMEOUT_SECONDS * 1000));
-                    properties.setProperty("useServerPrepStmts", "false");
-
-                    // Never send the server local files, nor run objects it
-                    // sends, whatever the driver's defaults
-                    properties.setProperty("allowLoadLocalInfile", "false");
-                    properties.setProperty("allowLocalInfile", "false");
-                    properties.setProperty("allowUrlInLocalInfile", "false");
-                    properties.setProperty("autoDeserialize", "false");
-                    if (mariadbDriver) {
-                        if (!target.isEncrypted()) {
-                            properties.setProperty("sslMode", "disable");
-                            properties.setProperty("allowPublicKeyRetrieval", "true");
-                        }
-                        else if (!target.isVerified())
-                            properties.setProperty("sslMode", "trust");
-                        else {
-                            properties.setProperty("sslMode", "verify-full");
-                            if (!target.getAuthorities().isEmpty()) {
-                                trust = writePem(target);
-                                properties.setProperty("serverSslCert", trust.getPath());
-                            }
-                        }
+                    if (isInstalled(MARIADB_DRIVER)) {
+                        driver = load(MARIADB_DRIVER, "MySQL", null);
+                        url = mariaDbConnectorJ(target, properties, files);
                     }
                     else {
-                        if (!target.isEncrypted()) {
-                            properties.setProperty("sslMode", "DISABLED");
-                            properties.setProperty("allowPublicKeyRetrieval", "true");
-                        }
-                        else if (!target.isVerified())
-                            properties.setProperty("sslMode", "REQUIRED");
-                        else {
-                            properties.setProperty("sslMode", "VERIFY_IDENTITY");
-                            if (!target.getAuthorities().isEmpty()) {
-                                String storePassword = randomPassword();
-                                trust = writeTrustStore(target, storePassword);
-                                properties.setProperty("trustCertificateKeyStoreUrl", trust.toURI().toString());
-                                properties.setProperty("trustCertificateKeyStoreType", "PKCS12");
-                                properties.setProperty("trustCertificateKeyStorePassword", storePassword);
-                                properties.setProperty("fallbackToSystemTrustStore", "false");
-                            }
-                        }
+                        driver = load(MYSQL_DRIVER, "MySQL", "MariaDB Connector/J (mariadb-java-client-*.jar) or"
+                                + " MySQL Connector/J (mysql-connector-j-*.jar)");
+                        url = mySqlConnectorJ(target, properties, files);
                     }
                     break;
 
                 case SQLSERVER:
                     driver = load(SQLSERVER_DRIVER, "SQL Server",
                             "the Microsoft JDBC Driver for SQL Server (mssql-jdbc-*.jar)");
-                    url = "jdbc:sqlserver://" + target.getHostname() + ":" + target.getPort();
-                    properties.setProperty("databaseName", target.getDatabase() == null ? "master" : target.getDatabase());
-                    properties.setProperty("loginTimeout", Integer.toString(CONNECT_TIMEOUT_SECONDS));
-                    properties.setProperty("socketTimeout", Integer.toString(SOCKET_TIMEOUT_SECONDS * 1000));
-                    properties.setProperty("applicationName", "guacamole-pam");
-                    if (!target.isEncrypted())
-                        properties.setProperty("encrypt", "false");
-                    else if (!target.isVerified()) {
-                        properties.setProperty("encrypt", "true");
-                        properties.setProperty("trustServerCertificate", "true");
-                    }
-                    else {
-                        properties.setProperty("encrypt", "true");
-                        properties.setProperty("trustServerCertificate", "false");
-                        properties.setProperty("hostNameInCertificate", target.getHostname());
-                        if (!target.getAuthorities().isEmpty()) {
-                            String storePassword = randomPassword();
-                            trust = writeTrustStore(target, storePassword);
-                            properties.setProperty("trustStore", trust.getPath());
-                            properties.setProperty("trustStoreType", "PKCS12");
-                            properties.setProperty("trustStorePassword", storePassword);
-                        }
-                    }
+                    url = sqlServer(target, properties, files);
                     break;
 
                 default:
@@ -594,10 +514,156 @@ public class DatabaseClient {
 
         }
         finally {
-            if (trust != null && !trust.delete())
-                trust.deleteOnExit();
+            for (File file : files) {
+                if (!file.delete())
+                    file.deleteOnExit();
+            }
         }
 
+    }
+
+    /**
+     * The URL and properties of PostgreSQL's driver (pgjdbc).
+     */
+    private static String postgreSql(DatabaseTarget target, Properties properties, List<File> files)
+            throws SQLException {
+
+        properties.setProperty("connectTimeout", Integer.toString(CONNECT_TIMEOUT_SECONDS));
+        properties.setProperty("loginTimeout", Integer.toString(CONNECT_TIMEOUT_SECONDS));
+        properties.setProperty("socketTimeout", Integer.toString(SOCKET_TIMEOUT_SECONDS));
+        properties.setProperty("ApplicationName", "guacamole-pam");
+        properties.setProperty("gssEncMode", "disable");
+
+        if (!target.isEncrypted())
+            properties.setProperty("sslmode", "disable");
+        else if (!target.isVerified()) {
+            properties.setProperty("sslmode", "require");
+            properties.setProperty("sslfactory", "org.postgresql.ssl.NonValidatingFactory");
+        }
+        else {
+            properties.setProperty("sslmode", "verify-full");
+            if (target.getAuthorities().isEmpty())
+                properties.setProperty("sslfactory", "org.postgresql.ssl.DefaultJavaSSLFactory");
+            else
+                properties.setProperty("sslrootcert", track(files, writePem(target)).getPath());
+        }
+
+        return "jdbc:postgresql://" + host(target) + ":" + target.getPort() + "/"
+                + (target.getDatabase() == null ? "postgres" : target.getDatabase());
+
+    }
+
+    /**
+     * The URL and properties of MariaDB Connector/J, for MariaDB and MySQL.
+     */
+    private static String mariaDbConnectorJ(DatabaseTarget target, Properties properties, List<File> files)
+            throws SQLException {
+
+        mySqlFamily(properties);
+        if (!target.isEncrypted()) {
+            properties.setProperty("sslMode", "disable");
+            properties.setProperty("allowPublicKeyRetrieval", "true");
+        }
+        else if (!target.isVerified())
+            properties.setProperty("sslMode", "trust");
+        else {
+            properties.setProperty("sslMode", "verify-full");
+            if (!target.getAuthorities().isEmpty())
+                properties.setProperty("serverSslCert", track(files, writePem(target)).getPath());
+        }
+
+        return "jdbc:mariadb://" + host(target) + ":" + target.getPort() + "/"
+                + (target.getDatabase() == null ? "" : target.getDatabase());
+
+    }
+
+    /**
+     * The URL and properties of MySQL Connector/J, for MySQL and MariaDB.
+     */
+    private static String mySqlConnectorJ(DatabaseTarget target, Properties properties, List<File> files)
+            throws SQLException {
+
+        mySqlFamily(properties);
+        if (!target.isEncrypted()) {
+            properties.setProperty("sslMode", "DISABLED");
+            properties.setProperty("allowPublicKeyRetrieval", "true");
+        }
+        else if (!target.isVerified())
+            properties.setProperty("sslMode", "REQUIRED");
+        else {
+            properties.setProperty("sslMode", "VERIFY_IDENTITY");
+            if (!target.getAuthorities().isEmpty()) {
+                String storePassword = randomPassword();
+                File store = track(files, writeTrustStore(target, storePassword));
+                properties.setProperty("trustCertificateKeyStoreUrl", store.toURI().toString());
+                properties.setProperty("trustCertificateKeyStoreType", "PKCS12");
+                properties.setProperty("trustCertificateKeyStorePassword", storePassword);
+                properties.setProperty("fallbackToSystemTrustStore", "false");
+            }
+        }
+
+        return "jdbc:mysql://" + host(target) + ":" + target.getPort() + "/"
+                + (target.getDatabase() == null ? "" : target.getDatabase());
+
+    }
+
+    /**
+     * Properties both MySQL drivers take alike.
+     */
+    private static void mySqlFamily(Properties properties) {
+
+        properties.setProperty("connectTimeout", Integer.toString(CONNECT_TIMEOUT_SECONDS * 1000));
+        properties.setProperty("socketTimeout", Integer.toString(SOCKET_TIMEOUT_SECONDS * 1000));
+        properties.setProperty("useServerPrepStmts", "false");
+
+        // Never send the server local files, nor run objects it sends,
+        // whatever the driver's defaults (each driver names some of these)
+        properties.setProperty("allowLoadLocalInfile", "false");
+        properties.setProperty("allowLocalInfile", "false");
+        properties.setProperty("allowUrlInLocalInfile", "false");
+        properties.setProperty("autoDeserialize", "false");
+
+    }
+
+    /**
+     * The URL and properties of the Microsoft JDBC Driver for SQL Server.
+     */
+    private static String sqlServer(DatabaseTarget target, Properties properties, List<File> files)
+            throws SQLException {
+
+        properties.setProperty("databaseName", target.getDatabase() == null ? "master" : target.getDatabase());
+        properties.setProperty("loginTimeout", Integer.toString(CONNECT_TIMEOUT_SECONDS));
+        properties.setProperty("socketTimeout", Integer.toString(SOCKET_TIMEOUT_SECONDS * 1000));
+        properties.setProperty("applicationName", "guacamole-pam");
+
+        if (!target.isEncrypted())
+            properties.setProperty("encrypt", "false");
+        else if (!target.isVerified()) {
+            properties.setProperty("encrypt", "true");
+            properties.setProperty("trustServerCertificate", "true");
+        }
+        else {
+            properties.setProperty("encrypt", "true");
+            properties.setProperty("trustServerCertificate", "false");
+            properties.setProperty("hostNameInCertificate", target.getHostname());
+            if (!target.getAuthorities().isEmpty()) {
+                String storePassword = randomPassword();
+                properties.setProperty("trustStore", track(files, writeTrustStore(target, storePassword)).getPath());
+                properties.setProperty("trustStoreType", "PKCS12");
+                properties.setProperty("trustStorePassword", storePassword);
+            }
+        }
+
+        return "jdbc:sqlserver://" + target.getHostname() + ":" + target.getPort();
+
+    }
+
+    /**
+     * Keeps a temporary file to remove once connected.
+     */
+    private static File track(List<File> files, File file) {
+        files.add(file);
+        return file;
     }
 
     /**
