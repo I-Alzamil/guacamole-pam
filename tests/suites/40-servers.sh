@@ -1,5 +1,5 @@
 #!/bin/bash
-# Two Guacamole servers sharing the database (lab.sh guacamole --second): sessions seen
+# Two Guacamole servers sharing the database (lab.sh app --second): sessions seen
 # by every server, checkouts ended on one server closing sessions on the
 # other, one rotation of a connection at a time, and sessions of a server
 # that stopped. Skipped unless the second server runs. About 3 minutes.

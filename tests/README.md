@@ -42,7 +42,7 @@ and each database's own client).
 
 ```
 ./build.sh
-lab/lab.sh guacamole --second services   # --second: a second server, for 40-servers
+lab/lab.sh app --second services   # --second: a second server, for 40-servers
 ```
 
 `lab.sh seed` is not needed: suites create what they use.

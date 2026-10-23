@@ -3,7 +3,7 @@
 # podman containers on the network "myguacnet". For development only: every
 # password is a fixed test one. Build the jar first with build.sh.
 #
-#   lab.sh guacamole [--second]
+#   lab.sh app [--second]
 #       (Re)starts Guacamole's database, guacd and Guacamole with the built
 #       jar, on http://localhost:8080. --second also starts a second
 #       Guacamole sharing them, on http://localhost:8081 (tests/suites/
@@ -36,7 +36,7 @@
 #   lab.sh stop
 #       Stops every container of the lab.
 #
-# Commands run in the order given: "lab.sh reset guacamole services seed"
+# Commands run in the order given: "lab.sh reset app services seed"
 # starts afresh.
 #
 # Guacamole's database is PostgreSQL unless PAM_DB says mysql, mariadb or
@@ -89,7 +89,7 @@ start_guacamole() {
 }
 
 start_second() {
-    running myguactest || { echo "Start Guacamole first: lab.sh guacamole --second." >&2; return 1; }
+    running myguactest || { echo "Start Guacamole first: lab.sh app --second." >&2; return 1; }
     stop myguactest2
     run_guacamole myguactest2 8081 && echo "Second Guacamole: http://localhost:8081"
 }
@@ -335,15 +335,15 @@ second=no
 for arg in "$@"; do
     case "$arg" in
         --second) second=yes;;
-        guacamole|services|seed|reset|stop) ;;
+        app|services|seed|reset|stop) ;;
         *) usage;;
     esac
 done
 
-guacamole=no
+app=no
 for arg in "$@"; do
     case "$arg" in
-        guacamole) start_guacamole || exit 1; guacamole=yes
+        app) start_guacamole || exit 1; app=yes
             [ $second = yes ] && { start_second || exit 1; };;
         services) start_services || exit 1;;
         seed) ./seed.sh || exit 1;;
@@ -351,6 +351,6 @@ for arg in "$@"; do
         stop) stop $LAB_CONTAINERS; echo "Lab stopped.";;
     esac
 done
-# --second without "guacamole": that server only
-[ $second = yes ] && [ $guacamole = no ] && { start_second || exit 1; }
+# --second without "app": that server only
+[ $second = yes ] && [ $app = no ] && { start_second || exit 1; }
 exit 0

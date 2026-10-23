@@ -593,19 +593,19 @@ passwords. Its commands run in the order given:
 
 | Command | What it does |
 |---|---|
-| `lab/lab.sh guacamole` | (Re)starts Guacamole's database, guacd and Guacamole with the built jar, on http://localhost:8080. Run it again after each build. Stored secrets are encrypted with a fixed test key; set `PAM_ENCRYPTION_KEY=` to store them unencrypted |
-| `lab/lab.sh guacamole --second` | Also a second Guacamole sharing the database and guacd, on http://localhost:8081, for the two-server tests (`--second` alone starts only that one) |
+| `lab/lab.sh app` | (Re)starts Guacamole's database, guacd and Guacamole with the built jar, on http://localhost:8080. Run it again after each build. Stored secrets are encrypted with a fixed test key; set `PAM_ENCRYPTION_KEY=` to store them unencrypted |
+| `lab/lab.sh app --second` | Also a second Guacamole sharing the database and guacd, on http://localhost:8081, for the two-server tests (`--second` alone starts only that one) |
 | `lab/lab.sh services` | The servers whose accounts the lab manages, keeping those already running: SSH `mysshtest` (user `mysshtest`), OpenLDAP `myldaptest` (`uid=ldaptest,ou=people,dc=example,dc=org`), Samba AD `myadtest` (LDAPS and Kerberos, `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`), MIT Kerberos `mykdctest` (realm `EXAMPLE.ORG`, `kdctest`), TACACS+ `mytacacstest` (tac_plus-ng, built from source into `localhost/pam-tacacs-test` the first time; `tactest`), and databases over TLS with certificates of a test CA generated into `lab/targets/certs`: PostgreSQL `mypgtarget`, MySQL `mymysqltarget`, MariaDB `mymariadbtarget`, SQL Server `mymssqltarget` (`dbtest`). Passwords are listed at the top of `lab/lab.sh` |
 | `lab/lab.sh seed` | Adds the test platforms, connections, users and group to a fresh database, through the REST API (`lab/seed.sh`) |
 | `lab/lab.sh reset` | Recreates Guacamole's database, with only Guacamole's schema and `guacadmin` / `guacadmin` |
 | `lab/lab.sh stop` | Stops every container of the lab |
 
-For example, `./build.sh && lab/lab.sh reset guacamole services seed` starts
+For example, `./build.sh && lab/lab.sh reset app services seed` starts
 afresh.
 
 Guacamole's database is PostgreSQL unless `PAM_DB` says `mysql` (MySQL 8.4),
 `mariadb` (MariaDB 11.4) or `sqlserver` (SQL Server 2022) when `lab.sh`
-starts it, as `PAM_DB=sqlserver lab/lab.sh guacamole`. Later commands and
+starts it, as `PAM_DB=sqlserver lab/lab.sh app`. Later commands and
 the tests use whichever is running. Each keeps its own data (`lab/db` for
 PostgreSQL, podman volumes for the others), created with Guacamole's schema
 and `guacadmin` / `guacadmin` on first start (`lab/database.sh`).

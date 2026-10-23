@@ -1,7 +1,7 @@
 #!/bin/bash
 # Fill a fresh database with the test platforms, connections, users and group,
 # through the REST API of the running Guacamole (start it and the test
-# servers with "lab.sh guacamole services" first). Run by "lab.sh seed".
+# servers with "lab.sh app services" first). Run by "lab.sh seed".
 # Anything that already exists (by name) is left as it is.
 #
 #   Users (password = name + "pass"):
