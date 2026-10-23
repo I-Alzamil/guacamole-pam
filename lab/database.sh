@@ -150,7 +150,7 @@ db_start() {
             local init=()
             # A new database gets Guacamole's schema
             [ -z "$(ls -A "$PAM_DB_DIR/db/pgdata" 2>/dev/null)" ] \
-                && init=(-v "$PAM_DB_DIR/init/initdb.sql:/docker-entrypoint-initdb.d/initdb.sql:Z")
+                && init=(-v "$(guacamole_schema postgresql):/docker-entrypoint-initdb.d/guacamole.sql:Z")
             podman run --rm -d --name myguacdbtest --hostname myguacdbtest --net myguacnet \
                 -e POSTGRES_PASSWORD="$PAM_DB_PASSWORD" \
                 -e PGDATA=/var/lib/postgresql/data/pgdata \
