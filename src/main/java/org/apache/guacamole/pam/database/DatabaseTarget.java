@@ -1,17 +1,11 @@
 package org.apache.guacamole.pam.database;
 
-import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
-import java.security.cert.Certificate;
-import java.security.cert.CertificateException;
-import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import org.apache.guacamole.pam.Certificates;
 import org.apache.guacamole.pam.Values;
 
 /**
@@ -186,38 +180,9 @@ public final class DatabaseTarget {
 
         return new DatabaseTarget(kind, hostname, Values.parsePort(parameters.get(PORT), kind.defaultPort),
                 database, encryption,
-                parseAuthorities(parameters.get(CA_CERTIFICATES)), adminUsername, adminPassword, username,
+                Certificates.parseAuthorities(parameters.get(CA_CERTIFICATES)), adminUsername, adminPassword, username,
                 Values.emptyToNull(parameters.get(PASSWORD)),
                 accountHost == null ? DEFAULT_ACCOUNT_HOST : accountHost);
-
-    }
-
-    /**
-     * Reads the certificates of a PEM text, or none if it is empty.
-     *
-     * @throws IllegalArgumentException
-     *     If the text holds anything but certificates, or none.
-     */
-    static List<X509Certificate> parseAuthorities(String pem) {
-
-        String text = Values.trimToNull(pem);
-        if (text == null)
-            return Collections.emptyList();
-
-        List<X509Certificate> certificates = new ArrayList<>();
-        try {
-            for (Certificate certificate : CertificateFactory.getInstance("X.509").generateCertificates(
-                    new ByteArrayInputStream(text.getBytes(StandardCharsets.US_ASCII))))
-                certificates.add((X509Certificate) certificate);
-        }
-        catch (CertificateException e) {
-            throw new IllegalArgumentException("The CA certificates are not valid PEM certificates (\"-----BEGIN"
-                    + " CERTIFICATE-----\" ...): " + e.getMessage());
-        }
-
-        if (certificates.isEmpty())
-            throw new IllegalArgumentException("The CA certificates field holds no certificate.");
-        return Collections.unmodifiableList(certificates);
 
     }
 

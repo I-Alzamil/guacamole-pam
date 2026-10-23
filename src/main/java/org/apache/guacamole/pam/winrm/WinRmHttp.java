@@ -12,8 +12,6 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -31,6 +29,8 @@ import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
+
+import org.apache.guacamole.pam.Certificates;
 
 /**
  * One HTTPS connection to a WinRM host, kept open for every request: NTLM
@@ -290,7 +290,7 @@ class WinRmHttp implements AutoCloseable {
 
             if (chain == null || chain.length == 0)
                 throw new CertificateException("The host presented no certificate.");
-            presented = fingerprint(chain[0]);
+            presented = Certificates.fingerprint(chain[0]);
 
             if (pinned != null) {
                 if (!pinned.equals(presented))
@@ -354,22 +354,6 @@ class WinRmHttp implements AutoCloseable {
         @Override
         public X509Certificate[] getAcceptedIssuers() {
             return new X509Certificate[0];
-        }
-
-        private static String fingerprint(X509Certificate certificate) throws CertificateException {
-            try {
-                byte[] digest = MessageDigest.getInstance("SHA-256").digest(certificate.getEncoded());
-                StringBuilder hex = new StringBuilder();
-                for (byte b : digest) {
-                    if (hex.length() > 0)
-                        hex.append(':');
-                    hex.append(String.format("%02X", b));
-                }
-                return hex.toString();
-            }
-            catch (NoSuchAlgorithmException e) {
-                throw new CertificateException(e);
-            }
         }
 
     }

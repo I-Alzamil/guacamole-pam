@@ -1,14 +1,13 @@
 package org.apache.guacamole.pam.ldap;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 
 import javax.net.ssl.X509TrustManager;
 
 import com.unboundid.util.ssl.JVMDefaultTrustManager;
+
+import org.apache.guacamole.pam.Certificates;
 
 /**
  * Validates LDAP server certificates. With a pinned fingerprint only that
@@ -44,7 +43,7 @@ class CertificateTrustManager implements X509TrustManager {
         if (chain == null || chain.length == 0)
             throw new CertificateException("The LDAP server presented no certificate.");
 
-        presented = fingerprint(chain[0]);
+        presented = Certificates.fingerprint(chain[0]);
 
         if (pinned == null) {
             JVMDefaultTrustManager.getInstance().checkServerTrusted(chain, authType);
@@ -65,25 +64,6 @@ class CertificateTrustManager implements X509TrustManager {
     @Override
     public X509Certificate[] getAcceptedIssuers() {
         return new X509Certificate[0];
-    }
-
-    /**
-     * Same format as "openssl x509 -fingerprint -sha256".
-     */
-    static String fingerprint(X509Certificate certificate) throws CertificateEncodingException {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(certificate.getEncoded());
-            StringBuilder hex = new StringBuilder();
-            for (byte b : digest) {
-                if (hex.length() > 0)
-                    hex.append(':');
-                hex.append(String.format("%02X", b));
-            }
-            return hex.toString();
-        }
-        catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     /**
