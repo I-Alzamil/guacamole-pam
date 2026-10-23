@@ -176,6 +176,14 @@ public class PamDatabase {
      * Returns a pooled database connection, creating the extension's tables
      * first if this is the first use. Closing it returns it to the pool.
      */
+    /**
+     * Most connections this server opens to the database at once
+     * ("pam-database-max-connections").
+     */
+    public int getMaxConnections() {
+        return maxConnections;
+    }
+
     public Connection getConnection() throws GuacamoleException {
         Connection connection;
         try {

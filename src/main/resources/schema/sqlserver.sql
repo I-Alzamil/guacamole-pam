@@ -199,6 +199,18 @@ CREATE TABLE pam_connection_secret (
 
 );
 
+IF OBJECT_ID(N'pam_setting', N'U') IS NULL
+CREATE TABLE pam_setting (
+
+  name          nvarchar(64)    NOT NULL,
+  value         nvarchar(1024),
+  modified      datetime2(3)    NOT NULL DEFAULT SYSUTCDATETIME(),
+  modified_by   nvarchar(128),
+
+  CONSTRAINT pam_setting_pkey PRIMARY KEY (name)
+
+);
+
 -- Last, so the extension can tell the schema is complete
 -- (PamDatabase.SCHEMA_VERSION)
 IF NOT EXISTS (SELECT 1 FROM pam_schema_version WHERE version = 1)

@@ -40,6 +40,22 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
     };
 
     /**
+     * The settings shared by every server, as { settings, server }: each
+     * shared setting, and this server's own (administrators only).
+     */
+    service.getSettings = function getSettings() {
+        return request('GET', 'settings');
+    };
+
+    /**
+     * Changes shared settings, all or none: each by name, to a value, or to
+     * null for its default. Resolves with the settings as then.
+     */
+    service.updateSettings = function updateSettings(values) {
+        return request('PUT', 'settings', values);
+    };
+
+    /**
      * Number of managed connections whose last rotation failed or could not
      * be confirmed (administrators only).
      */

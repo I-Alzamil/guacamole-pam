@@ -167,6 +167,8 @@ Guacamole itself needs). Nothing needs configuring:
 - **When a checkout ends**, by release, revocation or expiry, the server
   ending it closes the holder's sessions at once. Other servers close theirs
   within 15 seconds.
+- **Settings are kept in the database** (see [Settings](#settings)), so every
+  server applies the same ones, within 5 seconds of a change.
 
 With encrypted secrets, every server needs the same keys.
 
@@ -266,22 +268,12 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
 - **Administrators skip approvals, but still give a reason** when a connection
   or Account requires a request, so their access is in the history like
   anyone else's. To let administrators connect and check out Accounts without
-  any request instead (logged), set this in `guacamole.properties` (or the
-  `PAM_ADMIN_BYPASS_REQUESTS` environment variable in the Docker image):
-
-  ```
-  pam-admin-bypass-requests: true
-  ```
+  any request instead (logged), tick **Administrators bypass requests** on
+  the **PAM Settings** tab.
 - **Extensions are allowed by default**, twice per checkout. Each
   connection's *Access requests* section can allow or refuse them, and set
-  how many and how long. To change the default for every connection, set
-  these in `guacamole.properties` (or `PAM_EXTENSIONS_ENABLED` and
-  `PAM_MAX_EXTENSIONS` in the Docker image):
-
-  ```
-  pam-extensions-enabled: false
-  pam-max-extensions: 3
-  ```
+  how many and how long. The default for every connection is set on the
+  **PAM Settings** tab.
 - Only administrators can change a connection's *Password management* and
   *Access requests* sections, platforms, or who may approve. Nor can anyone
   else change, on a connection whose password is managed:
@@ -362,6 +354,26 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
 - Approvers see a yellow badge counting requests awaiting their decision.
   Administrators also see a red badge counting failed rotations. Each user can
   turn either off under **Preferences → Notification badges**.
+
+### Settings
+
+The **PAM Settings** tab (administrators only) holds the settings shared by
+every Guacamole server using the database: whether administrators bypass
+requests, and whether and how many times checkouts may be extended by
+default. They're stored in the database (`pam_setting`), apply without a
+restart, and reach every server within 5 seconds. Each change is logged with
+who made it.
+
+They used to be set in `guacamole.properties` (`pam-admin-bypass-requests`,
+`pam-extensions-enabled`, `pam-max-extensions`, or their `PAM_*` variables in
+the Docker image). A value still set there is imported once, by the first
+server reading the settings, unless the setting was already decided in the
+database; from then on it's ignored, with a warning in the log until removed.
+
+Some settings stay in each server's `guacamole.properties`, as they're needed
+to reach the database, or protect what it stores: `pam-database`,
+`pam-database-max-connections` and the `pam-encryption-*` keys. The tab
+shows the server's own, read only; keep them alike on every server.
 
 ### Who may approve
 

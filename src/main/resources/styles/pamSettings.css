@@ -1143,3 +1143,33 @@ a.button.disabled {
     opacity: 0.6;
     font-style: italic;
 }
+
+/* PAM Settings tab: each setting with its help, default and last change */
+.pam-setting-table th {
+    vertical-align: top;
+    padding-top: 0.4em;
+    white-space: nowrap;
+}
+
+.pam-setting-table td {
+    padding-bottom: 0.75em;
+}
+
+.pam-setting-table input[type="number"] {
+    width: 6em;
+}
+
+.pam-setting-help,
+.pam-setting-meta {
+    margin: 0.25em 0 0;
+    max-width: 48em;
+}
+
+.pam-setting-meta {
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+.pam-setting-warning {
+    color: #c62828;
+}

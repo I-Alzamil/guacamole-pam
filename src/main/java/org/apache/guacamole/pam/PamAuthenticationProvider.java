@@ -1,5 +1,7 @@
 package org.apache.guacamole.pam;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import com.google.common.collect.MapMaker;
@@ -27,8 +29,7 @@ import org.apache.guacamole.pam.db.ConnectionSecrets;
 import org.apache.guacamole.pam.platform.PlatformImport;
 import org.apache.guacamole.pam.platform.PlatformRepository;
 import org.apache.guacamole.pam.rotation.RotationService;
-import org.apache.guacamole.properties.BooleanGuacamoleProperty;
-import org.apache.guacamole.properties.IntegerGuacamoleProperty;
+import org.apache.guacamole.pam.settings.PamSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,34 +54,6 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
     public static final String IDENTIFIER = "pam";
 
 
-    /**
-     * Whether administrators connect, and check out Accounts, without a
-     * request. False by default: administrators then skip approvals only,
-     * and give a reason like anyone else.
-     */
-    private static final BooleanGuacamoleProperty ADMIN_BYPASS_REQUESTS = new BooleanGuacamoleProperty() {
-        @Override
-        public String getName() { return "pam-admin-bypass-requests"; }
-    };
-
-    /**
-     * Whether holders may extend their checkouts, unless a connection says
-     * otherwise. True by default.
-     */
-    private static final BooleanGuacamoleProperty EXTENSIONS_ENABLED = new BooleanGuacamoleProperty() {
-        @Override
-        public String getName() { return "pam-extensions-enabled"; }
-    };
-
-    /**
-     * How many times a checkout may be extended, unless a connection says
-     * otherwise. 2 by default.
-     */
-    private static final IntegerGuacamoleProperty MAX_EXTENSIONS = new IntegerGuacamoleProperty() {
-        @Override
-        public String getName() { return "pam-max-extensions"; }
-    };
-
     private final PlatformRepository platforms;
 
     private final PlatformImport platformImport;
@@ -102,6 +75,14 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
     private final ConnectionSecrets connectionSecrets;
 
     private final PamDatabase database;
+
+    private final PamSettings settings;
+
+    /**
+     * How stored secrets are protected on this server, as set in its
+     * guacamole.properties, or null while inactive.
+     */
+    private final Secrets secrets;
 
     /**
      * Identifier of the auth provider whose connections are managed
@@ -144,17 +125,20 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             secretMigration = null;
             connectionSecrets = null;
             database = null;
+            settings = null;
+            secrets = null;
             managedDataSource = null;
             return;
         }
 
-        Secrets secrets = Secrets.fromEnvironment(environment);
+        secrets = Secrets.fromEnvironment(environment);
         logEncryption(secrets);
 
         database = new PamDatabase(environment);
         managedDataSource = database.getDialect().getName();
         logger.info("The PAM extension manages the connections stored in {}.",
                 database.getDialect().getDisplayName());
+        settings = new PamSettings(database, environment);
         CheckoutRepository checkouts = new CheckoutRepository(database);
         connectionSecrets = new ConnectionSecrets(database, secrets);
         platforms = new PlatformRepository(database, secrets);
@@ -165,9 +149,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         approvals = new ApprovalRepository(database);
         badgePreferences = new BadgePreferences(database);
         checkoutService = new CheckoutService(connections, checkouts, platforms, approvals, rotationService,
-                environment.getProperty(ADMIN_BYPASS_REQUESTS, false),
-                environment.getProperty(EXTENSIONS_ENABLED, true),
-                Math.max(0, environment.getProperty(MAX_EXTENSIONS, CheckoutService.DEFAULT_MAX_EXTENSIONS)));
+                settings);
         approvalService = new ApprovalService(approvals, checkoutService);
 
         // Offer the Account connection type in the connection editor
@@ -282,6 +264,36 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     public BadgePreferences getBadgePreferences() {
         return badgePreferences;
+    }
+
+    public PamSettings getSettings() {
+        return settings;
+    }
+
+    /**
+     * The settings of this server that stay in its guacamole.properties, as
+     * the settings page shows them: the database ("database", its name),
+     * its connection pool ("maxConnections"), and how stored secrets are
+     * protected ("encryption": "encrypted", "decrypting", "none" or
+     * "error", with "keyId", "oldKeys" and "error").
+     */
+    public Map<String, Object> getServerSettings() {
+        Map<String, Object> server = new LinkedHashMap<>();
+        server.put("database", database.getDialect().getDisplayName());
+        server.put("maxConnections", database.getMaxConnections());
+        List<String> keyIds = secrets.getKeyIds();
+        if (secrets.getError() != null) {
+            server.put("encryption", "error");
+            server.put("error", secrets.getError());
+        }
+        else if (secrets.isEncrypting()) {
+            server.put("encryption", "encrypted");
+            server.put("keyId", keyIds.get(0));
+            server.put("oldKeys", keyIds.size() - 1);
+        }
+        else
+            server.put("encryption", keyIds.isEmpty() ? "none" : "decrypting");
+        return server;
     }
 
     /**

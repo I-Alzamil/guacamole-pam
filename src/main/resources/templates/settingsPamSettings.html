@@ -1,0 +1,59 @@
+<div class="pam-settings pam-shared-settings">
+
+    <!-- Shared by every server using the database -->
+    <div class="settings section">
+        <p>{{ 'PAM_SETTINGS.HELP_SHARED' | translate }}</p>
+
+        <form name="settingsForm" ng-submit="save()" novalidate>
+            <table class="properties pam-setting-table" ng-class="{loading: !entries}">
+                <tr ng-repeat="entry in entries">
+                    <th><label for="pam-setting-{{ entry.name }}">{{ 'PAM_SETTINGS.FIELD_HEADER_' + key(entry) | translate }}</label></th>
+                    <td>
+                        <input ng-if="entry.type === 'BOOLEAN'" type="checkbox" id="pam-setting-{{ entry.name }}"
+                               ng-model="values[entry.name]">
+                        <input ng-if="entry.type === 'INTEGER'" type="number" id="pam-setting-{{ entry.name }}"
+                               name="{{ entry.name }}" required step="1" ng-min="entry.minimum" ng-max="entry.maximum"
+                               ng-model="values[entry.name]">
+                        <p class="pam-setting-help">{{ 'PAM_SETTINGS.HELP_' + key(entry) | translate }}</p>
+                        <p class="pam-setting-meta">
+                            {{ 'PAM_SETTINGS.INFO_DEFAULT' | translate:{ VALUE: (label(entry, entry.defaultValue) | translate) } }}
+                            <span ng-if="entry.modified && !entry.imported">{{ 'PAM_SETTINGS.INFO_MODIFIED' | translate:{
+                                USER: entry.modifiedBy, DATE: ((entry.modified | date:'medium') + ' ' + (entry.modified | pamZone)) } }}</span>
+                            <span ng-if="entry.imported">{{ 'PAM_SETTINGS.INFO_IMPORTED' | translate:{
+                                DATE: ((entry.modified | date:'medium') + ' ' + (entry.modified | pamZone)) } }}</span>
+                        </p>
+                    </td>
+                </tr>
+            </table>
+
+            <div class="action-buttons">
+                <button type="submit" ng-disabled="!isDirty() || settingsForm.$invalid || saving">{{ 'PAM.ACTION_SAVE' | translate }}</button>
+                <button type="button" ng-click="restoreDefaults()" ng-disabled="!anySet() || saving"
+                        >{{ 'PAM_SETTINGS.ACTION_RESTORE_DEFAULTS' | translate }}</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- This server's own, from its guacamole.properties -->
+    <h2 class="header">{{ 'PAM_SETTINGS.SECTION_HEADER_SERVER' | translate }}</h2>
+    <div class="settings section">
+        <p>{{ 'PAM_SETTINGS.HELP_SERVER' | translate }}</p>
+
+        <table class="properties pam-setting-table" ng-class="{loading: !server}">
+            <tr>
+                <th>{{ 'PAM_SETTINGS.FIELD_HEADER_DATABASE' | translate }}</th>
+                <td>{{ server.database }}</td>
+            </tr>
+            <tr>
+                <th>{{ 'PAM_SETTINGS.FIELD_HEADER_MAX_CONNECTIONS' | translate }}</th>
+                <td>{{ 'PAM_SETTINGS.INFO_MAX_CONNECTIONS' | translate:{ COUNT: server.maxConnections } }}</td>
+            </tr>
+            <tr>
+                <th>{{ 'PAM_SETTINGS.FIELD_HEADER_ENCRYPTION' | translate }}</th>
+                <td ng-class="{'pam-setting-warning': server.encryption === 'error'}">{{ 'PAM_SETTINGS.INFO_ENCRYPTION_' + (server.encryption | uppercase)
+                    | translate:{ KEY_ID: server.keyId, OLD_KEYS: server.oldKeys, ERROR: server.error } }}</td>
+            </tr>
+        </table>
+    </div>
+
+</div>

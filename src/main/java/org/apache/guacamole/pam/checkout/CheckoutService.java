@@ -26,6 +26,7 @@ import org.apache.guacamole.pam.management.ManagementTypes;
 import org.apache.guacamole.pam.platform.Platform;
 import org.apache.guacamole.pam.platform.PlatformRepository;
 import org.apache.guacamole.pam.rotation.RotationService;
+import org.apache.guacamole.pam.settings.PamSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,15 +57,10 @@ public class CheckoutService {
     public static final int MAX_MINUTES = 7 * 24 * 60;
 
     /**
-     * How many times a checkout may be extended, unless "pam-max-extensions"
-     * or a connection says otherwise.
+     * Upper bound of the extensions a connection can allow, as of the
+     * setting {@link PamSettings#MAX_EXTENSIONS}.
      */
-    public static final int DEFAULT_MAX_EXTENSIONS = 2;
-
-    /**
-     * Upper bound of the extensions a connection can allow.
-     */
-    private static final int MAX_EXTENSIONS = 20;
+    private static final int MAX_EXTENSIONS = PamSettings.MAX_EXTENSIONS.getMaximum();
 
     private static final int MAX_REASON_LENGTH = 500;
 
@@ -115,29 +111,16 @@ public class CheckoutService {
     private final RotationService rotationService;
 
     /**
-     * Whether administrators bypass requests entirely. Otherwise they only
-     * skip approvals, and give a reason like anyone else.
+     * Settings shared by every server: whether administrators bypass
+     * requests, and how checkouts may be extended unless a connection says
+     * otherwise.
      */
-    private final boolean adminBypass;
-
-    /**
-     * Whether holders may extend checkouts, unless a connection says
-     * otherwise ("pam-extensions-enabled").
-     */
-    private final boolean extensionsEnabled;
-
-    /**
-     * How many times a checkout may be extended, unless a connection says
-     * otherwise ("pam-max-extensions").
-     */
-    private final int defaultMaxExtensions;
+    private final PamSettings settings;
 
     public CheckoutService(ConnectionRepository connections, CheckoutRepository checkouts,
             PlatformRepository platforms, ApprovalRepository approvals, RotationService rotationService,
-            boolean adminBypass, boolean extensionsEnabled, int defaultMaxExtensions) {
-        this.adminBypass = adminBypass;
-        this.extensionsEnabled = extensionsEnabled;
-        this.defaultMaxExtensions = defaultMaxExtensions;
+            PamSettings settings) {
+        this.settings = settings;
         this.connections = connections;
         this.approvals = approvals;
         this.platforms = platforms;
@@ -894,8 +877,8 @@ public class CheckoutService {
      * Whether the user, an administrator or not, connects and checks out
      * without a request.
      */
-    private boolean bypassesRequests(boolean administrator) {
-        return administrator && adminBypass;
+    private boolean bypassesRequests(boolean administrator) throws GuacamoleException {
+        return administrator && settings.isAdminBypassRequests();
     }
 
     /**
@@ -987,27 +970,27 @@ public class CheckoutService {
      * Whether holders may extend their checkouts of the connection: as it
      * says, or as "pam-extensions-enabled" says.
      */
-    private boolean allowsExtensions(Target target) {
+    private boolean allowsExtensions(Target target) throws GuacamoleException {
         String value = target.getAttribute(PamAttributes.EXTENSIONS);
         if (PamAttributes.EXTENSIONS_YES.equals(value))
             return true;
         if (PamAttributes.EXTENSIONS_NO.equals(value))
             return false;
-        return extensionsEnabled;
+        return settings.isExtensionsEnabled();
     }
 
     /**
      * How many times a checkout of the connection may be extended in all: 0
      * if it allows no extensions.
      */
-    private int getMaxExtensions(Target target) {
+    private int getMaxExtensions(Target target) throws GuacamoleException {
         if (!allowsExtensions(target))
             return 0;
         try {
             return Math.max(0, Math.min(MAX_EXTENSIONS, Integer.parseInt(target.getAttribute(PamAttributes.MAX_EXTENSIONS))));
         }
         catch (NumberFormatException | NullPointerException e) {
-            return Math.min(MAX_EXTENSIONS, defaultMaxExtensions);
+            return settings.getMaxExtensions();
         }
     }
 
@@ -1015,7 +998,7 @@ public class CheckoutService {
      * How many times its time limit a request for the connection may ask
      * for at once: one more than the extensions it allows.
      */
-    private int getMaxPeriods(Target target) {
+    private int getMaxPeriods(Target target) throws GuacamoleException {
         return 1 + getMaxExtensions(target);
     }
 

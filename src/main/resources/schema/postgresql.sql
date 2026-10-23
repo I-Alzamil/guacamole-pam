@@ -241,6 +241,21 @@ CREATE TABLE IF NOT EXISTS pam_connection_secret (
 
 );
 
+-- Settings of the extension shared by every Guacamole server using the
+-- database, set on its settings page. A row records the setting was decided
+-- here: its value, or NULL for the default. Without modified_by, it was
+-- imported from a server's guacamole.properties
+CREATE TABLE IF NOT EXISTS pam_setting (
+
+  name          varchar(64)   NOT NULL,
+  value         varchar(1024),
+  modified      timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  modified_by   varchar(128),
+
+  PRIMARY KEY (name)
+
+);
+
 -- Last, so the default platforms above are only added to a fresh install, and
 -- so the extension can tell the schema is complete (PamDatabase.SCHEMA_VERSION)
 INSERT INTO pam_schema_version (version) VALUES (1)

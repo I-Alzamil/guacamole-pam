@@ -52,6 +52,14 @@ default, or `PAM_DB=mysql`, `mariadb` or `sqlserver` (see the main README's
 Development section). Queries they make directly go through `sql` in
 `lab/database.sh`, so every suite runs on each of them.
 
+Importing settings from `guacamole.properties` needs a server started with
+them, so it's checked by hand: start another Guacamole on the lab's database
+with `-e PAM_EXTENSIONS_ENABLED=false -e PAM_MAX_EXTENSIONS=4` (as `lab.sh`
+starts one, on another port), on a database where only `pam-max-extensions`
+was set on the tab, then open the PAM Settings tab there. The log shows
+`pam-extensions-enabled` imported, and `pam-max-extensions` ignored with a
+warning.
+
 ### Running
 
 ```
@@ -73,6 +81,7 @@ defaults (`http://localhost:8080`, `guacadmin` / `guacadmin`).
 | `20-access` | Requests and reasons; two approvals, directly and through a group; non-approvers; self-approval; denials with reasons; cancellations; checkouts of Accounts and of connections, release and revocation; an expired checkout not ended yet opening no session; what administrators skip; deleting a connection keeping its checkouts and requests in the history |
 | `25-ahead` | Requests ahead of time: what is refused (no approval needed, a past start, more than 30 days ahead); approval reserving the connection; overlapping requests refused, or no longer approvable once another is approved (the approval withdrawn); others' checkouts ending when a reservation starts, and refused during it; checking out with a reservation, until its end, and only once; cancelling one; expiry at its end rather than after 24 hours; deleting a connection cancelling its reservations |
 | `26-extensions` | Several time limits at once (up to one more than the extensions allowed, using them up); extensions without approval (a reason needed, granted at once, by the time limit, until none is left) and with approval (as many approvals as requests, not by the holder, by the extension length); a connection allowing none; cancelling one; one expiring with its checkout; others' reservations bounding them; the checkout history listing them with their approvers |
+| `27-settings` | The PAM Settings tab: read and changed by administrators only; invalid values and unknown settings (the encryption key among them) refused, with the whole change; administrators bypassing requests, and the extensions allowed by default, applied to requests at once, and on the second server within its 5-second cache (skipped without `lab.sh --second`); each change recorded as whose, and logged; the server's own settings shown, never its key; defaults restored, still recorded as decided in the database |
 | `30-security` | What editors who are not administrators cannot change (password management, access requests; and of managed connections their credentials, the password included, where they connect, an RDP gateway, SFTP or a VNC repeater included, how they check the server, their protocol and guacd), while display parameters and saving unchanged still work, the original account-takeover attack end to end; balancing groups; administrator endpoints; platform secrets |
 | `40-servers` | Two servers sharing the database (skipped without `lab.sh --second`): sessions counted by every server; a checkout revoked on one server closing the session on the other; after-use rotation waiting for sessions on the other server; one rotation at a time, and no checkout during it, across servers; records of a stopped server ignored once stale, removed, then the connection rotated. Sessions are held open by `session.py`, as a browser would |
 | `50-encryption` | Stored secrets with the test key of `lab.sh` (skipped without one): platform secrets and pending passwords encrypted at rest; every connection's passwords, private keys and passphrases, Accounts' included, kept apart behind tokens such as `${PAM_PASSWORD_17}`; Guacamole's own tokens left in place; what the API shows editors (`********`, never a token); editor saves keeping, replacing or refusing values (`********` sent back, or the token by an API client; another field's or connection's token or value; `********` in a clone or where nothing is stored; an unknown key); sessions logging in with kept passwords and with a kept private key and passphrase (checked in guacd's log, against a wrong-password control); a balancing group opening both its connections, each with its own secrets; a kept value moved to another connection in the database refused; rotations. Suites read encrypted values with the jar's own decryption tool |

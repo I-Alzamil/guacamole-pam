@@ -132,6 +132,32 @@ public class PamREST {
     }
 
     /**
+     * The settings shared by every server ("settings"), and those of this
+     * server staying in its guacamole.properties ("server").
+     */
+    @GET
+    @Path("settings")
+    public Map<String, Object> getSettings() throws GuacamoleException {
+        requireAdministrator();
+        Map<String, Object> settings = new LinkedHashMap<>();
+        settings.put("settings", provider.getSettings().list());
+        settings.put("server", provider.getServerSettings());
+        return settings;
+    }
+
+    /**
+     * Changes shared settings, all or none: each by name, to a value, or to
+     * null for its default. Returns the settings as then.
+     */
+    @PUT
+    @Path("settings")
+    public Map<String, Object> updateSettings(Map<String, Object> values) throws GuacamoleException {
+        requireAdministrator();
+        provider.getSettings().update(values, username());
+        return getSettings();
+    }
+
+    /**
      * Requests awaiting approval that the user may decide on, oldest first.
      */
     @GET

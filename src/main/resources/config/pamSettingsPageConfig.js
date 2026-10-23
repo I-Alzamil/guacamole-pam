@@ -1,6 +1,7 @@
 /**
- * Adds the "Platforms", "Password Rotation" and "Checkouts" tabs to the
- * settings panel for administrators, and the "Approvals" tab for approvers, by
+ * Adds the "Platforms", "Password Rotation", "Checkouts" and "PAM Settings"
+ * tabs to the settings panel for administrators, and the "Approvals" tab for
+ * approvers, by
  * decorating userPageService.getSettingsPages().
  * The tab contents are injected into settings.html by
  * templates/settingsPamTab.html.
@@ -40,6 +41,11 @@ angular.module('guacPam').config(['$provide', function pamSettingsPageConfig($pr
                             name      : 'PAM.TAB_APPROVALS',
                             url       : '/settings/pam-approvals',
                             className : 'pam-approvals-page'
+                        }));
+                    if (access.administrator)
+                        pages.push(new PageDefinition({
+                            name : 'PAM.TAB_SETTINGS',
+                            url  : '/settings/pam-settings'
                         }));
                     return pages;
                 }, function accessFailed() {

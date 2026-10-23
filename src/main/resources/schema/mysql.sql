@@ -184,6 +184,17 @@ CREATE TABLE IF NOT EXISTS pam_connection_secret (
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS pam_setting (
+
+  name          varchar(64)   NOT NULL,
+  value         varchar(1024),
+  modified      datetime(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  modified_by   varchar(128),
+
+  PRIMARY KEY (name)
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Last, so the extension can tell the schema is complete
 -- (PamDatabase.SCHEMA_VERSION)
 INSERT IGNORE INTO pam_schema_version (version) VALUES (1);
