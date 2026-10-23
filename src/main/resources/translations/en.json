@@ -313,7 +313,7 @@
         "FIELD_HEADER_WINRM_ADMIN_USERNAME": "Local administrator:",
         "FIELD_HELP_WINRM_ADMIN_USERNAME": "Empty: each account sets its own password.",
         "FIELD_HEADER_WINRM_ADMIN_PASSWORD": "Administrator password:",
-        "SECTION_HEADER_WINRM_TRUST": "Certificate trust",
+        "SECTION_HEADER_WINRM_TRUST": "Certificate trust (optional)",
         "FIELD_HEADER_WINRM_CA_CERTIFICATES": "CA certificates (PEM):",
         "FIELD_HELP_WINRM_CA_CERTIFICATES": "Empty: each host's first certificate is trusted. Set: hosts' certificates must be issued by one of these and name the host."
     },
