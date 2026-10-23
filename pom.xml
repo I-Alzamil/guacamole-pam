@@ -30,6 +30,14 @@
     <name>guacamole-pam</name>
     <url>http://guacamole.apache.org/</url>
 
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>11</maven.compiler.release>
@@ -55,6 +63,17 @@
                 <filtering>true</filtering>
                 <includes>
                     <include>guac-manifest.json</include>
+                </includes>
+            </resource>
+
+            <!-- This project's license and notice, which name the bundled
+                 libraries' licenses -->
+            <resource>
+                <directory>${project.basedir}</directory>
+                <targetPath>META-INF</targetPath>
+                <includes>
+                    <include>LICENSE</include>
+                    <include>NOTICE</include>
                 </includes>
             </resource>
         </resources>
@@ -150,36 +169,16 @@
                                         <exclude>META-INF/MANIFEST.MF</exclude>
                                     </excludes>
                                 </filter>
+                                <!-- Kerby's license is this project's own, already in
+                                     META-INF/LICENSE, and its notice is in this project's
+                                     NOTICE -->
                                 <filter>
                                     <artifact>org.apache.kerby:*</artifact>
                                     <excludes>
                                         <exclude>META-INF/MANIFEST.MF</exclude>
                                         <exclude>META-INF/DEPENDENCIES</exclude>
-                                    </excludes>
-                                </filter>
-                                <!-- Every Kerby module has the same Apache license: keep kerb-client's -->
-                                <filter>
-                                    <artifact>org.apache.kerby:kerby-*</artifact>
-                                    <excludes>
                                         <exclude>META-INF/LICENSE</exclude>
-                                    </excludes>
-                                </filter>
-                                <filter>
-                                    <artifact>org.apache.kerby:kerb-co*</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/LICENSE</exclude>
-                                    </excludes>
-                                </filter>
-                                <filter>
-                                    <artifact>org.apache.kerby:kerb-crypto</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/LICENSE</exclude>
-                                    </excludes>
-                                </filter>
-                                <filter>
-                                    <artifact>org.apache.kerby:kerb-util</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/LICENSE</exclude>
+                                        <exclude>META-INF/NOTICE</exclude>
                                     </excludes>
                                 </filter>
                                 <filter>
@@ -201,12 +200,6 @@
                                     </excludes>
                                 </filter>
                             </filters>
-                            <transformers>
-                                <!-- Merge the NOTICE files of Apache-licensed dependencies -->
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
-                                    <addHeader>false</addHeader>
-                                </transformer>
-                            </transformers>
                         </configuration>
                     </execution>
                 </executions>
