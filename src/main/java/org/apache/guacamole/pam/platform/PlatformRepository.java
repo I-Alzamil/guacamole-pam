@@ -40,7 +40,7 @@ import org.apache.guacamole.pam.management.ManagementTypes;
  * server-side use; {@link Platform} never serializes them, so they cannot
  * reach a client.
  */
-public class PlatformRepository {
+public final class PlatformRepository {
 
     private static final int MAX_NAME_LENGTH = 128;
 

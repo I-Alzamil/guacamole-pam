@@ -74,8 +74,7 @@ final class NtlmLogin {
         // The server's clock, if it sent it, avoids failures from clock skew
         boolean serverTime = targetInfo.hasAvPair(AvId.MsvAvTimestamp);
         long time = serverTime
-                ? ((FileTime) ((AvPairTimestamp) targetInfo.getAvPair(AvId.MsvAvTimestamp)).getValue())
-                        .getWindowsTimeStamp()
+                ? ((AvPairTimestamp) targetInfo.getAvPair(AvId.MsvAvTimestamp)).getValue().getWindowsTimeStamp()
                 : FileTime.now().getWindowsTimeStamp();
 
         byte[] clientChallenge = new byte[8];

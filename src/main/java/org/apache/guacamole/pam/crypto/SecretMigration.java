@@ -25,7 +25,7 @@ import org.slf4j.LoggerFactory;
  * values written another way (by hand, or by a server with other settings).
  * One server at a time migrates, under a database lock.
  */
-public class SecretMigration {
+public final class SecretMigration {
 
     private static final Logger logger = LoggerFactory.getLogger(SecretMigration.class);
 

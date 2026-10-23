@@ -55,7 +55,7 @@ import org.slf4j.LoggerFactory;
  * ended checkouts. Each server then also closes its sessions whose user lost
  * access to their connection meanwhile (see {@link SessionAccess}).
  */
-public class RotationService {
+public final class RotationService {
 
     private static final Logger logger = LoggerFactory.getLogger(RotationService.class);
 
