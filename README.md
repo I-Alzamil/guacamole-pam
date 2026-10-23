@@ -7,8 +7,9 @@ Privileged access management for [Apache Guacamole](https://guacamole.apache.org
   SSH with a send/expect script, over LDAP (OpenLDAP, Active Directory and
   other directories), over Kerberos (kpasswd, for MIT Kerberos, Heimdal and
   Active Directory realms), over WinRM (local Windows accounts, HTTPS
-  only), or over TACACS+ (accounts a TACACS+ server holds itself, where it
-  allows password changes): its *type*. It also sets
+  only), over TACACS+ (accounts a TACACS+ server holds itself, where it
+  allows password changes), or as database accounts (PostgreSQL, MySQL,
+  MariaDB and SQL Server, over their JDBC drivers): its *type*. It also sets
   when they're changed: never, after each use, or periodically. The new password
   is only stored once the target accepts it.
 - **Accounts.** An "Account" connection type holds a password that users check
@@ -339,13 +340,17 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   `"winrm-admin-password"`. **Restore
   defaults** adds back "Unix", "macOS" and "Windows" if missing;
   a platform with one of their names is left as it is, even if changed.
-- **LDAP, Kerberos and TACACS+ platforms can be tested before saving**, with
-  **Test** in the platform editor. It checks the settings as they are,
-  changing no password: the server is reached and trusted (LDAP: its
+- **LDAP, Kerberos, TACACS+ and Database platforms can be tested before
+  saving**, with **Test** in the platform editor. It checks the settings as
+  they are, changing no password: the server is reached and trusted (LDAP: its
   certificate; a Kerberos KDC: its realm, then the password change server; a
   TACACS+ server, and its backup: that it accepts the shared secret, by
-  starting a login it abandons before any password), and the rotation account
-  or admin principal, if any, signs in. Each step's outcome
+  starting a login it abandons before any password; a database: its
+  certificate), and the rotation account, admin principal or administrator
+  account, if any, signs in (for a database, also whether it may change other
+  accounts' passwords). A database platform without an administrator signs in
+  as an account that doesn't exist, `guacamole-pam-test`, which the server
+  must refuse and may log as a failed login. Each step's outcome
   is listed, and the test is logged. Stored passwords, shown masked, are the
   ones tested, unless where they are sent changed: enter them again then.
   Without an admin principal, Active Directory and some KDCs don't say
@@ -365,6 +370,49 @@ group. Then tick **Approve** next to the connections or connection groups they
 may approve in the editor's connections list. A connection group covers every
 connection in it, including ones added later. Set how many distinct approvers a
 connection needs in its *Access requests* section.
+
+### Database accounts
+
+A **Database** platform manages the passwords of PostgreSQL roles, MySQL and
+MariaDB accounts, or SQL Server logins on one database server, for its
+**Account** connections: Guacamole opens no sessions to databases, so a DBA
+checks out the password and uses it in their own client. Each connection's
+account is its username; on MySQL and MariaDB, set its **Account host** if it
+isn't `'name'@'%'`. Opened sessions keep working when a password changes.
+
+The platform uses the database's JDBC driver from `GUACAMOLE_HOME/lib`, where
+Guacamole's own is: put there the driver of each other database you manage
+(PostgreSQL JDBC, MariaDB Connector/J or MySQL Connector/J, the Microsoft JDBC
+Driver for SQL Server), then restart Guacamole. A missing driver is named when
+testing or rotating. The Docker image ships all three in
+`/opt/guacamole/drivers`, but only links its own database's: link the others,
+for example from a script in `/opt/guacamole/entrypoint.d` (as this
+repository's test setup does in `podman/entrypoint.d/855-add-pam.sh`):
+
+```
+for driver in /opt/guacamole/drivers/*.jar; do
+    [ -e "$GUACAMOLE_HOME/lib/$(basename "$driver")" ] || ln -s "$driver" "$GUACAMOLE_HOME/lib/"
+done
+```
+
+Connections use TLS with the server's certificate checked by default,
+against the platform's **CA certificates** (or the server's own certificate),
+or those Java trusts; the certificate must name the server's hostname.
+
+MariaDB accounts using another authentication method than
+`mysql_native_password`, such as `ed25519`, need MariaDB Connector/J: MySQL
+Connector/J (the Docker image's) can't sign in with them, so their passwords
+are left unchanged, saying so.
+
+Without an administrator account, each account changes its own password.
+With one, it needs:
+
+| Database | Administrator account | The account itself |
+|---|---|---|
+| PostgreSQL | Superuser, or `CREATEROLE` and (since PostgreSQL 16) the ADMIN option on each role: `GRANT role TO admin WITH ADMIN OPTION` | Any login role |
+| MySQL | `CREATE USER` | Any account (changing with its current password, as `password_require_current` may require) |
+| MariaDB | `CREATE USER`, and `SELECT` on `mysql.global_priv` to read each account's authentication method, which is kept | Any account (with `SET PASSWORD`: `ALTER USER` needs `CREATE USER` even for one's own account) |
+| SQL Server | `ALTER ANY LOGIN`, and `CONTROL SERVER` for sysadmin logins | Any SQL login (giving its current password). Windows logins are domain accounts: use LDAP or Kerberos |
 
 ### Setting up WinRM over HTTPS
 
@@ -464,8 +512,9 @@ openssl s_client -connect <host>:5986 </dev/null 2>/dev/null | openssl x509 -noo
   accordingly.
 - **A stored platform password only goes where it was entered for.** Saving
   a platform with another server, port, encryption or trusted certificate
-  (LDAP), realm or KDC (Kerberos), port or CA certificates (WinRM), or
-  server, port or backup server (TACACS+) needs its administrator password
+  (LDAP), realm or KDC (Kerberos), port or CA certificates (WinRM), server,
+  port or backup server (TACACS+), or database type, hostname, port, name,
+  encryption or CA certificates (Database) needs its administrator password
   (TACACS+: its shared secret) entered again, so whoever may edit platforms
   can't have it sent to a server of their choosing. WinRM hosts are set on
   each connection, which only administrators can change.
@@ -505,6 +554,15 @@ openssl s_client -connect <host>:5986 </dev/null 2>/dev/null | openssl x509 -noo
   command line. Without an administrator on the platform, each account sets its
   own password, so it must be a local administrator. Only local accounts are
   supported: manage domain accounts with an LDAP or Kerberos platform.
+- **Database passwords stay out of the servers' logs.** PostgreSQL is sent a
+  SCRAM-SHA-256 verifier computed by the extension, and MariaDB, for accounts
+  using `mysql_native_password` (its default), that method's hash, never the
+  password: both would log it in the clear when logging statements. MySQL and
+  SQL Server mask passwords in their logs themselves. MariaDB accounts using
+  another method, such as `ed25519`, keep it, so are given the password
+  itself, which MariaDB's general log (off by default) would show. Without an
+  administrator account, SQL Server and MySQL are given the current password
+  too, which they check.
 - **TACACS+ is only as safe as its network.** TACACS+ (RFC 8907) hides
   packets with an MD5 pad derived from the shared secret, which the RFC
   itself calls weak; the server is trusted only by knowing that secret. Use
@@ -537,6 +595,7 @@ Guacamole's schema and `guacadmin` / `guacadmin` on first start
 | `startldap.sh` | OpenLDAP server `myldaptest`, test user `uid=ldaptest,ou=people,dc=example,dc=org` |
 | `startad.sh` | Samba Active Directory `myadtest` (LDAPS and Kerberos), test user `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`. Prints the certificate fingerprint to pin |
 | `startkdc.sh` | MIT Kerberos KDC `mykdctest`, realm `EXAMPLE.ORG`, admin `admin/admin`, test user `kdctest` |
+| `startdatabases.sh` | Test databases (not Guacamole's own) over TLS, with certificates of a test CA generated into `podman/targets/certs`: PostgreSQL `mypgtarget` (`postgres`), MySQL `mymysqltarget` and MariaDB `mymariadbtarget` (`root`), SQL Server `mymssqltarget` (`sa`), each with a test account `dbtest` |
 | `starttacacs.sh` | TACACS+ server `mytacacstest` (tac_plus-ng, built from source into `localhost/pam-tacacs-test` the first time), port 49, shared secret `TacacsSecr3t`, test user `tactest` |
 | `startguac2.sh` | A second Guacamole server sharing the database, on http://localhost:8081, for the two-server tests. Stopped by `build.sh`: start it again after a build |
 | `seed.sh` | Adds the test platforms, connections, users and group to a fresh database, through the REST API |

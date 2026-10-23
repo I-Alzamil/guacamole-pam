@@ -23,6 +23,7 @@ public final class ManagementTypes {
         register(new KerberosManagementType());
         register(new WinRmManagementType());
         register(new TacacsManagementType());
+        register(new DatabaseManagementType());
     }
 
     private ManagementTypes() {

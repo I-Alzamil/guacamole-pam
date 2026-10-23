@@ -223,6 +223,9 @@ PY
 }
 
 # rotate ID -> "STATUS: first line of the message"
+# use_platform CONNECTION PLATFORM: moves the connection to the platform
+use_platform() { edit_connection "$ADMIN" "$1" '' "{\"pam-platform\":\"$2\"}" >/dev/null; }
+
 rotate() {
     json_get "$(api POST "$PAM/connections/$1/rotate" "$ADMIN" | cut -d' ' -f2-)" \
         "d.get('status','?') + ((': ' + d['message'].splitlines()[0]) if d.get('message') else '')"
@@ -285,6 +288,31 @@ tacacs_set_password() {
     hash=$(podman exec mytacacstest mkpasswd -m sha-512 "$2")
     podman exec mytacacstest sh -c "grep -v '^$1:' /etc/tacacs/shadow > /tmp/shadow;
         echo '$1:$hash:$(( $(date +%s) / 86400 )):0:99999:7:::' >> /tmp/shadow; cat /tmp/shadow > /etc/tacacs/shadow"
+}
+
+# The test databases (startdatabases.sh), through their own clients, signing
+# in over the network (where passwords are checked): db_accepts KIND USER
+# PASSWORD, with KIND postgresql, mysql, mariadb or sqlserver
+db_accepts() {
+    case "$1" in
+        postgresql) podman exec -e PGPASSWORD="$3" mypgtarget psql "host=mypgtarget dbname=postgres user=$2 sslmode=require" \
+            -tAc "SELECT 1" 2>/dev/null;;
+        mysql) podman exec mymysqltarget mysql -h mymysqltarget -u"$2" -p"$3" -N -e "SELECT 1" 2>/dev/null;;
+        mariadb) podman exec mymariadbtarget mariadb -h mymariadbtarget -u"$2" -p"$3" -N -e "SELECT 1" 2>/dev/null;;
+        sqlserver) podman exec mymssqltarget /opt/mssql-tools18/bin/sqlcmd -S mymssqltarget -U "$2" -P "$3" -C -N -h -1 \
+            -Q "SET NOCOUNT ON; SELECT 1" 2>/dev/null | tr -d ' ';;
+    esac | grep -qx 1 && echo yes || echo no
+}
+
+# db_sql KIND SQL: runs SQL as the database's administrator, on the server
+db_sql() {
+    case "$1" in
+        postgresql) podman exec mypgtarget psql -U postgres -tAq -c "$2";;
+        mysql) podman exec mymysqltarget mysql -uroot -pMyAdm1n-Pass -N -e "$2" 2>/dev/null;;
+        mariadb) podman exec mymariadbtarget mariadb -uroot -pMariaAdm1n-Pass -N -e "$2";;
+        sqlserver) podman exec mymssqltarget /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'SqlAdm1n-Pass!' -h -1 -b \
+            -Q "SET NOCOUNT ON; $2";;
+    esac
 }
 
 # The Samba realm, through MIT's kinit (another implementation than the extension's)

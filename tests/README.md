@@ -3,6 +3,9 @@
 Two tiers, from cheapest to most realistic. What only real Windows does
 (WinRM's channel binding hardening, how a domain controller checks
 passwords) is not automated: check it by hand against a Windows machine.
+Nor is MariaDB Connector/J, which the Docker image lacks (the suites use the
+image's drivers): with it in Guacamole's `lib`, check that a MariaDB `ed25519`
+account rotates, by the administrator and by itself, and stays `ed25519`.
 
 | Tier | What | Needs | Run |
 |---|---|---|---|
@@ -32,7 +35,8 @@ Run with every build. Highlights:
 Everything is checked through Guacamole's REST API, and every new password
 is also checked directly on the server, with a tool independent of the
 extension (OpenSSH, `ldapwhoami`, Samba's `ldapsearch`, MIT `kinit`, and
-`tests/tacacs.py`, a TACACS+ client written apart from the extension's).
+`tests/tacacs.py`, a TACACS+ client written apart from the extension's,
+and each database's own client).
 
 ### Prerequisites
 
@@ -43,6 +47,7 @@ extension (OpenSSH, `ldapwhoami`, Samba's `ldapsearch`, MIT `kinit`, and
 ./startad.sh
 ./startkdc.sh
 ./starttacacs.sh
+./startdatabases.sh
 ./startguac2.sh   # optional: a second server, for 40-servers
 ```
 
@@ -70,6 +75,7 @@ defaults (`http://localhost:8080`, `guacadmin` / `guacadmin`).
 | Suite | Covers |
 |---|---|
 | `10-rotation` | SSH (the Unix default, as the account and as root, with `@case` choosing by the prompt; `@fail` before and after the change), LDAP (OpenLDAP over LDAPS and StartTLS, Samba AD), Kerberos (MIT and Samba AD), TACACS+ (tac_plus-ng: the account itself, through a backup server, with a TACACS+ username; another shared secret and a password changed elsewhere refused, unchanged), each by an administrator account and by the account itself; host key and certificate pinning; untrusted certificates; Kerberos accounts whose salt is not the default (a renamed account, as for a promoted domain controller's Administrator) |
+| `15-databases` | PostgreSQL, MySQL, MariaDB and SQL Server accounts, by their administrators and by the accounts themselves, over TLS checked against the test CA: what each administrator needs (PostgreSQL's ADMIN option, MySQL's CREATE USER, SQL Server's CONTROL SERVER for sysadmin logins), MySQL's `password_require_current` and account hosts, MariaDB accounts' authentication methods kept (an `ed25519` account left unchanged with MySQL Connector/J, the image's driver, saying MariaDB Connector/J is needed), passwords kept out of PostgreSQL's and MariaDB's statement logs, certificates of another CA refused, unverified TLS, and the Test button |
 | `20-access` | Requests and reasons; two approvals, directly and through a group; non-approvers; self-approval; denials with reasons; cancellations; checkouts of Accounts and of connections, release and revocation; an expired checkout not ended yet opening no session; what administrators skip; deleting a connection keeping its checkouts and requests in the history |
 | `25-ahead` | Requests ahead of time: what is refused (no approval needed, a past start, more than 30 days ahead); approval reserving the connection; overlapping requests refused, or no longer approvable once another is approved (the approval withdrawn); others' checkouts ending when a reservation starts, and refused during it; checking out with a reservation, until its end, and only once; cancelling one; expiry at its end rather than after 24 hours; deleting a connection cancelling its reservations |
 | `26-extensions` | Several time limits at once (up to one more than the extensions allowed, using them up); extensions without approval (a reason needed, granted at once, by the time limit, until none is left) and with approval (as many approvals as requests, not by the holder, by the extension length); a connection allowing none; cancelling one; one expiring with its checkout; others' reservations bounding them; the checkout history listing them with their approvers |

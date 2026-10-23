@@ -1,8 +1,8 @@
 #!/bin/bash
 # Fill a fresh database with the test platforms, connections, users and group,
 # through the REST API of the running Guacamole (start it with build.sh, and
-# the test servers with startssh.sh, startldap.sh, startad.sh, startkdc.sh
-# and starttacacs.sh first).
+# the test servers with startssh.sh, startldap.sh, startad.sh, startkdc.sh,
+# starttacacs.sh and startdatabases.sh first).
 # Anything that already exists (by name) is left as it is.
 #
 #   Users (password = name + "pass"):
@@ -14,12 +14,16 @@
 #     from the running containers
 #     MYTEST_KERBEROS (MIT KDC mykdctest, realm EXAMPLE.ORG)
 #     MYTEST_TACACS (tac_plus-ng mytacacstest)
+#     MYTEST_POSTGRESQL, MYTEST_MYSQL, MYTEST_MARIADB, MYTEST_SQLSERVER (the
+#     test databases, as their administrators, trusting the test CA)
 #   Connections:
 #     PAM test (Linux)  ssh to mysshtest, rotated by "Unix", no request needed
 #     LDAP: ldaptest    account on MYTEST_LDAP
 #     AD: adtest        account on MYTEST_AD
 #     Kerberos: kdctest account on MYTEST_KERBEROS
 #     TACACS+: tactest  account on MYTEST_TACACS
+#     PostgreSQL: dbtest, MySQL: dbtest, MariaDB: dbtest, SQL Server: dbtest
+#                       accounts on the test databases
 #     Vendor portal     stored-only account, 2 approvals
 #     test              stored-only account, 1 approval
 
@@ -35,6 +39,8 @@ export LDAP_FP=$(fingerprint myldaptest /container/service/slapd/assets/certs/ld
 export AD_FP=$(fingerprint myadtest /var/lib/samba/private/tls/cert.pem)
 [ -z "$LDAP_FP" ] && echo "warning: myldaptest is not running, MYTEST_LDAP gets no pinned certificate"
 [ -z "$AD_FP" ] && echo "warning: myadtest is not running, MYTEST_AD gets no pinned certificate"
+export DB_CA="$(cat "$(dirname "$0")/podman/targets/certs/ca.crt" 2>/dev/null)"
+[ -z "$DB_CA" ] && echo "warning: no test CA yet (startdatabases.sh): the database platforms trust Java's CAs only"
 
 python3 -I - <<'PY'
 import json, os, sys, time, urllib.error, urllib.parse, urllib.request
@@ -89,6 +95,18 @@ for p in [
     {"name": "MYTEST_TACACS", "description": "tac_plus-ng test server (starttacacs.sh)", "type": "tacacs",
      "settings": {"tacacs-server": "mytacacstest", "tacacs-secret": "TacacsSecr3t"},
      "policy": {"rotation-mode": "after-use"}},
+] + [
+    {"name": "MYTEST_" + name.upper(), "description": label + " test database " + host + " (startdatabases.sh)",
+     "type": "database",
+     "settings": {"database-type": kind, "database-hostname": host, "database-ca-certificates": os.environ["DB_CA"],
+                  "database-admin-username": admin, "database-admin-password": password},
+     "policy": {"rotation-mode": "after-use"}}
+    for name, label, kind, host, admin, password in [
+        ("postgresql", "PostgreSQL", "postgresql", "mypgtarget", "postgres", "PgAdm1n-Pass"),
+        ("mysql", "MySQL", "mysql", "mymysqltarget", "root", "MyAdm1n-Pass"),
+        ("mariadb", "MariaDB", "mysql", "mymariadbtarget", "root", "MariaAdm1n-Pass"),
+        ("sqlserver", "SQL Server", "sqlserver", "mymssqltarget", "sa", "SqlAdm1n-Pass!"),
+    ]
 ]:
     if p["name"] in platforms:
         print("platform exists:", p["name"])
@@ -118,6 +136,17 @@ for c in [
     {"name": "TACACS+: tactest", "protocol": "pam-account",
      "parameters": {"username": "tactest", "password": "P@ssw0rd-Tac1"},
      "attributes": {"pam-platform": str(platforms["MYTEST_TACACS"]), "pam-checkout-duration": "30"}},
+] + [
+    {"name": label + ": dbtest", "protocol": "pam-account",
+     "parameters": {"username": "dbtest", "password": "P@ssw0rd-Db1", "account-url": url},
+     "attributes": {"pam-platform": str(platforms["MYTEST_" + name.upper()]), "pam-checkout-duration": "30"}}
+    for name, label, url in [
+        ("postgresql", "PostgreSQL", "mypgtarget:5432"),
+        ("mysql", "MySQL", "mymysqltarget:3306"),
+        ("mariadb", "MariaDB", "mymariadbtarget:3306"),
+        ("sqlserver", "SQL Server", "mymssqltarget:1433"),
+    ]
+] + [
     {"name": "Vendor portal", "protocol": "pam-account",
      "parameters": {"username": "svc-vendor", "password": "Vend0r-Pass!",
                     "account-url": "https://vendor.example.com/login",

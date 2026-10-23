@@ -126,7 +126,6 @@ ldap_platform UNPINNED "t2 unpinned" "" 636 "" yes
 create_connection LDAP_C "{\"name\":\"t2 ldap\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"pam-account\",
     \"parameters\":{\"username\":\"t2ldap\",\"password\":\"T2-Ldap-Start1!\"},
     \"attributes\":{\"pam-platform\":\"$LDAPS_ADMIN\",\"pam-ldap-dn\":\"$LDAP_DN\"}}"
-use_platform() { edit_connection "$ADMIN" "$1" '' "{\"pam-platform\":\"$2\"}" >/dev/null; }
 
 rotate_and_verify "$LDAP_C" "OpenLDAP over LDAPS, rotation account" openldap_accepts "$LDAP_DN"
 use_platform "$LDAP_C" "$LDAPS_SELF"; rotate_and_verify "$LDAP_C" "OpenLDAP over LDAPS, account itself" openldap_accepts "$LDAP_DN"

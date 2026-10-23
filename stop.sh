@@ -9,3 +9,4 @@ podman stop myldaptest
 podman stop myadtest
 podman stop mykdctest
 podman stop mytacacstest
+podman stop mypgtarget mymysqltarget mymariadbtarget mymssqltarget
