@@ -98,12 +98,58 @@ public class DatabaseClientTest {
 
         settings.put(DatabaseTarget.TYPE, "postgresql");
         settings.put(DatabaseTarget.ADMIN_USERNAME, "admin");
+        settings.put(DatabaseTarget.ADMIN_PASSWORD, "secret");
+        for (String hostname : new String[] { "db1", "db-1.example.org", "192.0.2.7", "2001:db8::7", "[2001:db8::7]" }) {
+            settings.put(DatabaseTarget.HOSTNAME, hostname);
+            assertEquals(hostname, DatabaseTarget.fromParameters(settings).getHostname());
+        }
+        settings.put(DatabaseTarget.DATABASE, "app_db-1");
+        assertEquals("app_db-1", DatabaseTarget.fromParameters(settings).getDatabase());
+        settings.remove(DatabaseTarget.ADMIN_PASSWORD);
+        settings.put(DatabaseTarget.HOSTNAME, "db1");
+        settings.remove(DatabaseTarget.DATABASE);
         try {
             DatabaseTarget.fromParameters(settings);
             fail("An administrator account without a password is accepted.");
         }
         catch (IllegalArgumentException e) {
             assertEquals("The administrator account has no password.", e.getMessage());
+        }
+    }
+
+    /**
+     * Hostnames and database names are written into JDBC URLs, where
+     * anything more would set other options of the driver.
+     */
+    @Test
+    public void refusesDriverOptionsInHostnamesAndDatabases() {
+        Map<String, String> settings = new HashMap<>();
+        settings.put(DatabaseTarget.TYPE, "mysql");
+        settings.put(DatabaseTarget.USERNAME, "dba");
+
+        for (String hostname : new String[] { "evil:3306/x?allowLoadLocalInfile=true", "db1/x", "db1?a=b",
+                "db1;trustServerCertificate=true", "db1&a=b", "db 1", "-db1", "db1#" }) {
+            settings.put(DatabaseTarget.HOSTNAME, hostname);
+            try {
+                DatabaseTarget.fromParameters(settings);
+                fail("The hostname \"" + hostname + "\" is accepted.");
+            }
+            catch (IllegalArgumentException e) {
+                assertTrue(e.getMessage().startsWith("Invalid database hostname"));
+            }
+        }
+
+        settings.put(DatabaseTarget.HOSTNAME, "db1");
+        for (String database : new String[] { "x?allowLoadLocalInfile=true", "x&autoDeserialize=true", "x;a=b",
+                "x/y", "x y", "x%3Fa" }) {
+            settings.put(DatabaseTarget.DATABASE, database);
+            try {
+                DatabaseTarget.fromParameters(settings);
+                fail("The database name \"" + database + "\" is accepted.");
+            }
+            catch (IllegalArgumentException e) {
+                assertTrue(e.getMessage().startsWith("Invalid database name"));
+            }
         }
     }
 

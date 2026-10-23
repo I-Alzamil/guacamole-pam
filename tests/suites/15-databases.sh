@@ -189,6 +189,22 @@ for target in "postgresql mypgtarget PG_C" "mysql mymysqltarget MY_C" "sqlserver
     use_platform "${!connection}" "$PG_SELF"
 done
 
+# ---------------------------------------------------------------- JDBC URLs
+section "Database: driver options in hostnames and database names"
+
+# Written into JDBC URLs, they would set other options of the driver, such
+# as MySQL's reading of local files for the server
+RESULT=$(api POST "$PAM/platforms" "$ADMIN" "$(db_platform "t2 mysql url host" mysql \
+    'mymysqltarget:3306/x?allowLoadLocalInfile=true&' root MyAdm1n-Pass)")
+check_contains "options after the hostname: refused" "Invalid database hostname" "$(message_of "$RESULT")"
+RESULT=$(api POST "$PAM/platforms" "$ADMIN" "$(db_platform "t2 mysql url database" mysql mymysqltarget root \
+    MyAdm1n-Pass '{"database-name":"x?allowLoadLocalInfile=true"}')")
+check_contains "options after the database name: refused" "Invalid database name" "$(message_of "$RESULT")"
+RESULT=$(api POST "$PAM/platforms/test" "$ADMIN" "$(db_platform "t2 mssql url host" sqlserver \
+    'mymssqltarget;trustServerCertificate=true' sa 'SqlAdm1n-Pass!')")
+check_contains "...nor tested" "Invalid database hostname" "$(message_of "$RESULT")"
+check "...and none was created" "" "$(platform_id "t2 mysql url host")$(platform_id "t2 mysql url database")"
+
 # ---------------------------------------------------------------- Test button
 section "Database: testing platforms"
 

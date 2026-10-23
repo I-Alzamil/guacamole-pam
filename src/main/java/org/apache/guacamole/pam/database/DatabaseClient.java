@@ -511,6 +511,13 @@ public class DatabaseClient {
                     properties.setProperty("connectTimeout", Integer.toString(CONNECT_TIMEOUT_SECONDS * 1000));
                     properties.setProperty("socketTimeout", Integer.toString(SOCKET_TIMEOUT_SECONDS * 1000));
                     properties.setProperty("useServerPrepStmts", "false");
+
+                    // Never send the server local files, nor run objects it
+                    // sends, whatever the driver's defaults
+                    properties.setProperty("allowLoadLocalInfile", "false");
+                    properties.setProperty("allowLocalInfile", "false");
+                    properties.setProperty("allowUrlInLocalInfile", "false");
+                    properties.setProperty("autoDeserialize", "false");
                     if (mariadbDriver) {
                         if (!target.isEncrypted()) {
                             properties.setProperty("sslMode", "disable");

@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import org.apache.guacamole.pam.Values;
 
@@ -100,6 +101,22 @@ public final class DatabaseTarget {
     public static final String ACCOUNT_HOST = "database-account-host";
     public static final String DEFAULT_ACCOUNT_HOST = "%";
 
+    /**
+     * A hostname, an IPv4 address, or an IPv6 address (bracketed or not).
+     * They are written into JDBC URLs, where anything more (a path, "?",
+     * "&" or ";") would set other options of the driver, such as MySQL's
+     * reading of local files for the server.
+     */
+    private static final Pattern VALID_HOSTNAME = Pattern.compile(
+            "[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?|\\[?[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*\\]?");
+
+    /**
+     * A database name, which PostgreSQL and MySQL take in the URL as well.
+     * Only the database connected to, which changing passwords does not
+     * depend on, so plain names are enough.
+     */
+    private static final Pattern VALID_DATABASE = Pattern.compile("[A-Za-z0-9_$-]{1,128}");
+
     private final Kind kind;
     private final String hostname;
     private final int port;
@@ -143,6 +160,14 @@ public final class DatabaseTarget {
         String hostname = Values.trimToNull(parameters.get(HOSTNAME));
         if (hostname == null)
             throw new IllegalArgumentException("The platform has no database hostname.");
+        if (!VALID_HOSTNAME.matcher(hostname).matches())
+            throw new IllegalArgumentException("Invalid database hostname \"" + hostname + "\": give a hostname or an"
+                    + " IP address only.");
+
+        String database = Values.trimToNull(parameters.get(DATABASE));
+        if (database != null && !VALID_DATABASE.matcher(database).matches())
+            throw new IllegalArgumentException("Invalid database name \"" + database + "\": use letters, digits, \"_\","
+                    + " \"$\" and \"-\" only.");
 
         String encryption = Values.trimToNull(parameters.get(ENCRYPTION));
         if (encryption != null && !ENCRYPTION_UNVERIFIED.equals(encryption) && !ENCRYPTION_NONE.equals(encryption))
@@ -160,7 +185,7 @@ public final class DatabaseTarget {
         String accountHost = Values.trimToNull(parameters.get(ACCOUNT_HOST));
 
         return new DatabaseTarget(kind, hostname, Values.parsePort(parameters.get(PORT), kind.defaultPort),
-                Values.trimToNull(parameters.get(DATABASE)), encryption,
+                database, encryption,
                 parseAuthorities(parameters.get(CA_CERTIFICATES)), adminUsername, adminPassword, username,
                 Values.emptyToNull(parameters.get(PASSWORD)),
                 accountHost == null ? DEFAULT_ACCOUNT_HOST : accountHost);

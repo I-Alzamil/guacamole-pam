@@ -337,7 +337,7 @@
         "FIELD_HEADER_DATABASE_PORT": "Port:",
         "FIELD_HELP_DATABASE_PORT": "Empty: 5432 (PostgreSQL), 3306 (MySQL, MariaDB) or 1433 (SQL Server).",
         "FIELD_HEADER_DATABASE_NAME": "Database name:",
-        "FIELD_HELP_DATABASE_NAME": "Where to connect, for servers allowing accounts only some databases. Empty: postgres (PostgreSQL), master (SQL Server), none (MySQL, MariaDB).",
+        "FIELD_HELP_DATABASE_NAME": "Where to connect, for servers allowing accounts only some databases. Empty: postgres (PostgreSQL), master (SQL Server), none (MySQL, MariaDB). Letters, digits, _, $ and - only.",
         "SECTION_HEADER_DATABASE_TRUST": "Encryption",
         "FIELD_HEADER_DATABASE_ENCRYPTION": "Encryption:",
         "FIELD_OPTION_DATABASE_ENCRYPTION_EMPTY": "TLS, certificate checked",
