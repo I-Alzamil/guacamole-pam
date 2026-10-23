@@ -199,43 +199,30 @@ public class CheckoutService {
 
         Target target = requireRequestable(context, identifier);
         int id = target.getId();
-        boolean account = isAccount(target);
 
-        if (periods < 1 || periods > getMaxPeriods(target))
-            throw new GuacamoleClientException(getMaxPeriods(target) == 1
+        int maxPeriods = getMaxPeriods(target);
+        if (periods < 1 || periods > maxPeriods)
+            throw new GuacamoleClientException(maxPeriods == 1
                     ? "This access cannot be asked for longer than its time limit."
-                    : "This access can be asked for up to " + getMaxPeriods(target) + " times its time limit.");
+                    : "This access can be asked for up to " + maxPeriods + " times its time limit.");
 
         // Expired checkouts not ended yet would refuse the request
         rotationService.expireCheckouts();
 
-        if (account) {
+        if (isAccount(target)) {
             String password = target.getPassword();
             if (password == null || password.isEmpty())
                 throw new GuacamoleClientException("No password is stored for this account yet.");
         }
 
         Checkout checkout = checkouts.getActive(id, username);
-        if (checkout != null) {
-            if (account) {
-                if (!checkouts.recordReveal(checkout.getId()))
-                    throw new GuacamoleClientException("This checkout has ended.");
-                logger.info("User \"{}\" viewed the password of \"{}\" (checkout {}).",
-                        username, Values.forLog(target.getName()), checkout.getId());
-            }
-            return RequestOutcome.granted(toGrant(checkout, target));
-        }
+        if (checkout != null)
+            return showAgain(target, username, checkout);
 
         // The user's reservation, once it started
         ApprovalRequest reservation = starts == null ? approvals.getReservation(id, username) : null;
-        if (reservation != null && reservation.getStarts() <= System.currentTimeMillis()) {
-            checkout = startCheckout(target, username, remoteHost, reservation.getReason(), account ? 1 : 0,
-                    reservation.getEnds(), reservation.getPeriods());
-            approvals.markUsed(reservation.getId(), checkout.getId());
-            logger.info("User \"{}\" used request {} for \"{}\" (checkout {}).", username, reservation.getId(),
-                    Values.forLog(target.getName()), checkout.getId());
-            return RequestOutcome.granted(toGrant(checkout, connections.load(id)));
-        }
+        if (reservation != null && reservation.getStarts() <= System.currentTimeMillis())
+            return useReservation(target, username, remoteHost, reservation);
 
         int approvalsRequired = administrator ? 0 : getApprovalsRequired(target);
         if (starts != null && approvalsRequired == 0)
@@ -244,30 +231,78 @@ public class CheckoutService {
             logger.info("Administrator \"{}\" bypasses the approval of \"{}\".", username,
                     Values.forLog(target.getName()));
 
-        if (approvalsRequired > 0 && approvals.getPending(id, username) == null) {
-
-            String trimmed = validateReason(reason);
-            Long ends = null;
-            String when = "";
-            if (starts == null)
-                requireAvailable(target, username);
-            else {
-                validateStart(starts);
-                long end = starts + getDuration(target) * 60000L * periods;
-                ends = end;
-                when = ", from " + Instant.ofEpochMilli(starts) + " to " + Instant.ofEpochMilli(end);
-            }
-
-            ApprovalRequest pending = approvals.create(id, username, remoteHost, trimmed, approvalsRequired,
-                    starts, ends, isExclusive(target), periods);
-            logger.info("User \"{}\" requested \"{}\" (request {}, {} approvals needed{}{}). Reason: {}",
-                    username, Values.forLog(target.getName()), pending.getId(), approvalsRequired, when,
-                    periods == 1 ? "" : ", " + periods + " times its time limit", Values.forLog(trimmed));
-
+        if (approvalsRequired > 0) {
+            if (approvals.getPending(id, username) == null)
+                askApproval(target, username, remoteHost, reason, approvalsRequired, starts, periods);
+            return RequestOutcome.pending(toRequest(target, platformOf(target), username, administrator));
         }
 
-        if (approvalsRequired > 0)
-            return RequestOutcome.pending(toRequest(target, platformOf(target), username, administrator));
+        return checkOutNow(target, username, remoteHost, reason, periods, administrator);
+
+    }
+
+    /**
+     * The user's own active checkout, shown again: an Account's password
+     * again, which is recorded.
+     */
+    private RequestOutcome showAgain(Target target, String username, Checkout checkout) throws GuacamoleException {
+        if (isAccount(target)) {
+            if (!checkouts.recordReveal(checkout.getId()))
+                throw new GuacamoleClientException("This checkout has ended.");
+            logger.info("User \"{}\" viewed the password of \"{}\" (checkout {}).",
+                    username, Values.forLog(target.getName()), checkout.getId());
+        }
+        return RequestOutcome.granted(toGrant(checkout, target));
+    }
+
+    /**
+     * Starts the checkout of the user's reservation, which started: until
+     * it ends, with its reason.
+     */
+    private RequestOutcome useReservation(Target target, String username, String remoteHost,
+            ApprovalRequest reservation) throws GuacamoleException {
+        Checkout checkout = startCheckout(target, username, remoteHost, reservation.getReason(),
+                isAccount(target) ? 1 : 0, reservation.getEnds(), reservation.getPeriods());
+        approvals.markUsed(reservation.getId(), checkout.getId());
+        logger.info("User \"{}\" used request {} for \"{}\" (checkout {}).", username, reservation.getId(),
+                Values.forLog(target.getName()), checkout.getId());
+        return RequestOutcome.granted(toGrant(checkout, connections.load(target.getId())));
+    }
+
+    /**
+     * Asks for approval of access now, if the connection could be held now,
+     * or from a start ahead of time.
+     */
+    private void askApproval(Target target, String username, String remoteHost, String reason,
+            int approvalsRequired, Long starts, int periods) throws GuacamoleException {
+
+        String trimmed = validateReason(reason);
+        Long ends = null;
+        String when = "";
+        if (starts == null)
+            requireAvailable(target, username);
+        else {
+            validateStart(starts);
+            long end = starts + getDuration(target) * 60000L * periods;
+            ends = end;
+            when = ", from " + Instant.ofEpochMilli(starts) + " to " + Instant.ofEpochMilli(end);
+        }
+
+        ApprovalRequest pending = approvals.create(target.getId(), username, remoteHost, trimmed, approvalsRequired,
+                starts, ends, isExclusive(target), periods);
+        logger.info("User \"{}\" requested \"{}\" (request {}, {} approvals needed{}{}). Reason: {}",
+                username, Values.forLog(target.getName()), pending.getId(), approvalsRequired, when,
+                periods == 1 ? "" : ", " + periods + " times its time limit", Values.forLog(trimmed));
+
+    }
+
+    /**
+     * Checks out a connection needing no approval: with the user's reason,
+     * unless it needs no request or the user is an administrator bypassing
+     * requests.
+     */
+    private RequestOutcome checkOutNow(Target target, String username, String remoteHost, String reason,
+            int periods, boolean administrator) throws GuacamoleException {
 
         String checkoutReason;
         if (!requiresRequest(target))
@@ -280,9 +315,9 @@ public class CheckoutService {
         else
             checkoutReason = validateReason(reason);
 
-
-        checkout = startCheckout(target, username, remoteHost, checkoutReason, account ? 1 : 0, null, periods);
-        return RequestOutcome.granted(toGrant(checkout, connections.load(id)));
+        Checkout checkout = startCheckout(target, username, remoteHost, checkoutReason, isAccount(target) ? 1 : 0,
+                null, periods);
+        return RequestOutcome.granted(toGrant(checkout, connections.load(target.getId())));
 
     }
 
