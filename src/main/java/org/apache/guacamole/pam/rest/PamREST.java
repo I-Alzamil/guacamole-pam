@@ -41,6 +41,7 @@ import org.apache.guacamole.pam.ssh.SequenceScript;
 import org.apache.guacamole.pam.ssh.ValidationResult;
 import org.apache.guacamole.pam.rotation.ManagedConnection;
 import org.apache.guacamole.pam.rotation.RotationResult;
+import org.apache.guacamole.pam.settings.PamSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -132,17 +133,13 @@ public class PamREST {
     }
 
     /**
-     * The settings shared by every server ("settings"), and those of this
-     * server staying in its guacamole.properties ("server").
+     * The settings shared by every server.
      */
     @GET
     @Path("settings")
-    public Map<String, Object> getSettings() throws GuacamoleException {
+    public List<PamSettings.Entry> getSettings() throws GuacamoleException {
         requireAdministrator();
-        Map<String, Object> settings = new LinkedHashMap<>();
-        settings.put("settings", provider.getSettings().list());
-        settings.put("server", provider.getServerSettings());
-        return settings;
+        return provider.getSettings().list();
     }
 
     /**
@@ -151,7 +148,7 @@ public class PamREST {
      */
     @PUT
     @Path("settings")
-    public Map<String, Object> updateSettings(Map<String, Object> values) throws GuacamoleException {
+    public List<PamSettings.Entry> updateSettings(Map<String, Object> values) throws GuacamoleException {
         requireAdministrator();
         provider.getSettings().update(values, username());
         return getSettings();

@@ -40,8 +40,7 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
     };
 
     /**
-     * The settings shared by every server, as { settings, server }: each
-     * shared setting, and this server's own (administrators only).
+     * The settings shared by every server (administrators only).
      */
     service.getSettings = function getSettings() {
         return request('GET', 'settings');

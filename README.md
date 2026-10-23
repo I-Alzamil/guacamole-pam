@@ -372,8 +372,8 @@ database; from then on it's ignored, with a warning in the log until removed.
 
 Some settings stay in each server's `guacamole.properties`, as they're needed
 to reach the database, or protect what it stores: `pam-database`,
-`pam-database-max-connections` and the `pam-encryption-*` keys. The tab
-shows the server's own, read only; keep them alike on every server.
+`pam-database-max-connections` and the `pam-encryption-*` keys: keep them
+alike on every server.
 
 ### Who may approve
 

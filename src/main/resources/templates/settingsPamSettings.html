@@ -1,6 +1,5 @@
 <div class="pam-settings pam-shared-settings">
 
-    <!-- Shared by every server using the database -->
     <div class="settings section">
         <p>{{ 'PAM_SETTINGS.HELP_SHARED' | translate }}</p>
 
@@ -32,28 +31,6 @@
                         >{{ 'PAM_SETTINGS.ACTION_RESTORE_DEFAULTS' | translate }}</button>
             </div>
         </form>
-    </div>
-
-    <!-- This server's own, from its guacamole.properties -->
-    <h2 class="header">{{ 'PAM_SETTINGS.SECTION_HEADER_SERVER' | translate }}</h2>
-    <div class="settings section">
-        <p>{{ 'PAM_SETTINGS.HELP_SERVER' | translate }}</p>
-
-        <table class="properties pam-setting-table" ng-class="{loading: !server}">
-            <tr>
-                <th>{{ 'PAM_SETTINGS.FIELD_HEADER_DATABASE' | translate }}</th>
-                <td>{{ server.database }}</td>
-            </tr>
-            <tr>
-                <th>{{ 'PAM_SETTINGS.FIELD_HEADER_MAX_CONNECTIONS' | translate }}</th>
-                <td>{{ 'PAM_SETTINGS.INFO_MAX_CONNECTIONS' | translate:{ COUNT: server.maxConnections } }}</td>
-            </tr>
-            <tr>
-                <th>{{ 'PAM_SETTINGS.FIELD_HEADER_ENCRYPTION' | translate }}</th>
-                <td ng-class="{'pam-setting-warning': server.encryption === 'error'}">{{ 'PAM_SETTINGS.INFO_ENCRYPTION_' + (server.encryption | uppercase)
-                    | translate:{ KEY_ID: server.keyId, OLD_KEYS: server.oldKeys, ERROR: server.error } }}</td>
-            </tr>
-        </table>
     </div>
 
 </div>

@@ -1,7 +1,5 @@
 package org.apache.guacamole.pam;
 
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import com.google.common.collect.MapMaker;
@@ -82,12 +80,6 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
     private final PamSettings settings;
 
     /**
-     * How stored secrets are protected on this server, as set in its
-     * guacamole.properties, or null while inactive.
-     */
-    private final Secrets secrets;
-
-    /**
      * Identifier of the auth provider whose connections are managed
      * ("postgresql", "mysql" or "sqlserver"), or null while inactive. The
      * rotation engine reads and writes that provider's tables directly.
@@ -130,12 +122,11 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             connectionSecrets = null;
             database = null;
             settings = null;
-            secrets = null;
             managedDataSource = null;
             return;
         }
 
-        secrets = Secrets.fromEnvironment(environment);
+        Secrets secrets = Secrets.fromEnvironment(environment);
         logEncryption(secrets);
 
         database = new PamDatabase(environment);
@@ -273,32 +264,6 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     public PamSettings getSettings() {
         return settings;
-    }
-
-    /**
-     * The settings of this server that stay in its guacamole.properties, as
-     * the settings page shows them: the database ("database", its name),
-     * its connection pool ("maxConnections"), and how stored secrets are
-     * protected ("encryption": "encrypted", "decrypting", "none" or
-     * "error", with "keyId", "oldKeys" and "error").
-     */
-    public Map<String, Object> getServerSettings() {
-        Map<String, Object> server = new LinkedHashMap<>();
-        server.put("database", database.getDialect().getDisplayName());
-        server.put("maxConnections", database.getMaxConnections());
-        List<String> keyIds = secrets.getKeyIds();
-        if (secrets.getError() != null) {
-            server.put("encryption", "error");
-            server.put("error", secrets.getError());
-        }
-        else if (secrets.isEncrypting()) {
-            server.put("encryption", "encrypted");
-            server.put("keyId", keyIds.get(0));
-            server.put("oldKeys", keyIds.size() - 1);
-        }
-        else
-            server.put("encryption", keyIds.isEmpty() ? "none" : "decrypting");
-        return server;
     }
 
     /**

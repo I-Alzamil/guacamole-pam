@@ -2,9 +2,8 @@
 # The settings shared by every server, on the PAM Settings tab: who may read
 # and change them, invalid changes refused whole, each change applying to
 # requests at once, and on the second server within its cache time (when it
-# runs), what this server keeps from its guacamole.properties, and defaults
-# restored. Importing guacamole.properties values needs a server started
-# with them: see tests/README.md.
+# runs), and defaults restored. Importing guacamole.properties values needs a
+# server started with them: see tests/README.md.
 
 SETTINGS="$PAM/settings"
 GUAC2_URL="${GUAC2_URL:-http://localhost:8081}"
@@ -28,7 +27,7 @@ check "setup: a connection and a user exist" yes "$([ -n "$GATED" ] && [ -n "$US
 setting() { # NAME EXPRESSION -> the expression, of the setting as listed
     curl -s "$SETTINGS?token=$ADMIN" | python3 -I -c "
 import sys,json
-e=[e for e in json.load(sys.stdin)['settings'] if e['name']==sys.argv[1]][0]
+e=[e for e in json.load(sys.stdin) if e['name']==sys.argv[1]][0]
 print($2)" "$1"
 }
 
@@ -41,7 +40,7 @@ check "an administrator reads each, at its default" \
     "pam-admin-bypass-requests=False pam-extensions-enabled=True pam-max-extensions=2" \
     "$(curl -s "$SETTINGS?token=$ADMIN" | python3 -I -c "
 import sys,json
-print(' '.join('%s=%s' % (e['name'], e['value']) for e in json.load(sys.stdin)['settings']))")"
+print(' '.join('%s=%s' % (e['name'], e['value']) for e in json.load(sys.stdin)))")"
 check "...with their defaults and bounds" "2 0 20" "$(setting pam-max-extensions "e['defaultValue'], e['minimum'], e['maximum']")"
 
 # ---------------------------------------------------------------- invalid
@@ -62,7 +61,7 @@ R=$(api POST "$PAM/requests/$GATED" "$ADMIN" '{}')
 check_contains "by default, an administrator gives a reason too" "reason" "$(message_of "$R")"
 R=$(api PUT "$SETTINGS" "$ADMIN" '{"pam-admin-bypass-requests":true}')
 check "an administrator lets administrators bypass requests" "200 True" \
-    "$(status_of "$R") $(json_get "${R#* }" "[e['value'] for e in d['settings'] if e['name']=='pam-admin-bypass-requests'][0]")"
+    "$(status_of "$R") $(json_get "${R#* }" "[e['value'] for e in d if e['name']=='pam-admin-bypass-requests'][0]")"
 check "...recorded as theirs" "True $GUAC_ADMIN" "$(setting pam-admin-bypass-requests "e['set'], e['modifiedBy']")"
 check "...in the database" "true $GUAC_ADMIN" \
     "$(sql "SELECT value, modified_by FROM pam_setting WHERE name = 'pam-admin-bypass-requests'" | tr '\t' ' ')"
@@ -100,26 +99,10 @@ else
     section "Skipped: no second server (start it with lab/lab.sh --second)"
 fi
 
-# ---------------------------------------------------------------- this server
-section "What each server keeps in its guacamole.properties"
-SERVER=$(curl -s "$SETTINGS?token=$ADMIN" | python3 -I -c "
-import sys,json
-s=json.load(sys.stdin)['server']
-print(s['database'], s['maxConnections'], s['encryption'], len(s.get('keyId') or ''), s.get('oldKeys'))")
-if [ -n "$PAM_TEST_KEY" ]; then
-    check "its database, its connections to it, and encryption with its key" \
-        "$(json_get "$(curl -s "$SETTINGS?token=$ADMIN")" "d['server']['database']") 10 encrypted 8 0" "$SERVER"
-else
-    check "its database, its connections to it, and no encryption" \
-        "$(json_get "$(curl -s "$SETTINGS?token=$ADMIN")" "d['server']['database']") 10 none 0 None" "$SERVER"
-fi
-check "...never the key itself" "no" \
-    "$([ -n "$PAM_TEST_KEY" ] && curl -s "$SETTINGS?token=$ADMIN" | grep -qF -- "$PAM_TEST_KEY" && echo yes || echo no)"
-
 # ---------------------------------------------------------------- defaults
 section "Defaults restored"
 R=$(api PUT "$SETTINGS" "$ADMIN" '{"pam-admin-bypass-requests":null,"pam-extensions-enabled":null,"pam-max-extensions":null}')
 check "each set back to its default" "200 False/False True/False 2/False" "$(status_of "$R") $(json_get "${R#* }" \
-    "' '.join('%s/%s' % (e['value'], e['set']) for e in d['settings'])")"
+    "' '.join('%s/%s' % (e['value'], e['set']) for e in d)")"
 check "...still recorded as decided here, so a server's guacamole.properties cannot bring them back" 3 \
     "$(sql "SELECT COUNT(*) FROM pam_setting WHERE value IS NULL")"

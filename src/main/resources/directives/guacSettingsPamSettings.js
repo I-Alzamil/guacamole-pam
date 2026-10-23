@@ -1,7 +1,6 @@
 /**
  * The "PAM Settings" tab: the settings shared by every Guacamole server
- * using the database, editable, and below them this server's own, read
- * only, as its guacamole.properties sets them.
+ * using the database.
  */
 angular.module('guacPam').directive('guacSettingsPamSettings', [function guacSettingsPamSettings() {
 
@@ -22,11 +21,6 @@ angular.module('guacPam').directive('guacSettingsPamSettings', [function guacSet
             $scope.entries = null;
 
             /**
-             * This server's own settings, or null while loading.
-             */
-            $scope.server = null;
-
-            /**
              * The values being edited, by setting name.
              */
             $scope.values = {};
@@ -37,8 +31,7 @@ angular.module('guacPam').directive('guacSettingsPamSettings', [function guacSet
             $scope.saving = false;
 
             var show = function show(settings) {
-                $scope.entries = settings.settings;
-                $scope.server = settings.server;
+                $scope.entries = settings;
                 $scope.values = {};
                 angular.forEach($scope.entries, function copyValue(entry) {
                     $scope.values[entry.name] = entry.value;

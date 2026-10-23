@@ -471,27 +471,17 @@
     "PAM_SETTINGS": {
         "ACTION_RESTORE_DEFAULTS": "Restore defaults",
         "FIELD_HEADER_ADMIN_BYPASS_REQUESTS": "Administrators bypass requests:",
-        "FIELD_HEADER_DATABASE": "Database:",
-        "FIELD_HEADER_ENCRYPTION": "Encryption at rest:",
         "FIELD_HEADER_EXTENSIONS_ENABLED": "Allow extensions:",
-        "FIELD_HEADER_MAX_CONNECTIONS": "Database connections:",
         "FIELD_HEADER_MAX_EXTENSIONS": "Extensions per checkout:",
         "HELP_ADMIN_BYPASS_REQUESTS": "Administrators connect to connections, and check out Accounts, without a request, which is logged. Otherwise they skip approvals only, and give a reason like anyone else.",
         "HELP_EXTENSIONS_ENABLED": "Whether holders may extend their checkouts, for connections leaving it to this setting.",
         "HELP_MAX_EXTENSIONS": "How many times a checkout may be extended, for connections leaving it to this setting. Requests may also ask for up to one more than this many time limits at once.",
-        "HELP_SERVER": "Set in each server's guacamole.properties, as they are needed to reach the database, or protect what it stores: make them alike on every server sharing it. Shown for the server this page comes from.",
         "HELP_SHARED": "Shared by every Guacamole server using this database, and applied to all of them within seconds, without a restart. Connections can override some of them.",
         "INFO_DEFAULT": "Default: {VALUE}.",
-        "INFO_ENCRYPTION_DECRYPTING": "Decrypting stored secrets to plaintext (pam-encryption-decrypt)",
-        "INFO_ENCRYPTION_ENCRYPTED": "Encrypted with key {KEY_ID}{OLD_KEYS, plural, =0{} one{, and 1 earlier key} other{, and # earlier keys}} (pam-encryption-key)",
-        "INFO_ENCRYPTION_ERROR": "Not working: {ERROR}",
-        "INFO_ENCRYPTION_NONE": "Off: set pam-encryption-key to encrypt stored secrets",
         "INFO_IMPORTED": "Imported from guacamole.properties on {DATE}.",
-        "INFO_MAX_CONNECTIONS": "{COUNT} at most (pam-database-max-connections)",
         "INFO_MODIFIED": "Last changed by {USER} on {DATE}.",
         "INFO_NO": "No",
-        "INFO_YES": "Yes",
-        "SECTION_HEADER_SERVER": "This Server"
+        "INFO_YES": "Yes"
     },
     "PAM_PLATFORM_TRANSFER": {
         "ACTION_EXPORT": "Export",

@@ -173,14 +173,6 @@ public class PamDatabase {
     }
 
     /**
-     * Most connections this server opens to the database at once
-     * ("pam-database-max-connections").
-     */
-    public int getMaxConnections() {
-        return maxConnections;
-    }
-
-    /**
      * Returns a pooled database connection, creating the extension's tables
      * first if this is the first use. Closing it returns it to the pool.
      */
