@@ -19,6 +19,7 @@ import org.apache.guacamole.pam.approval.ApprovalRepository;
 import org.apache.guacamole.pam.approval.BadgePreferences;
 import org.apache.guacamole.pam.approval.Approver;
 import org.apache.guacamole.pam.approval.ApprovalService;
+import org.apache.guacamole.pam.approval.ApproverDirectory;
 import org.apache.guacamole.pam.checkout.CheckoutRepository;
 import org.apache.guacamole.pam.checkout.CheckoutService;
 import org.apache.guacamole.pam.crypto.SecretMigration;
@@ -65,6 +66,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
     private final CheckoutService checkoutService;
 
     private final ApprovalRepository approvals;
+
+    private final ApproverDirectory approvers;
 
     private final BadgePreferences badgePreferences;
 
@@ -119,6 +122,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             connections = null;
             rotationService = null;
             approvals = null;
+            approvers = null;
             badgePreferences = null;
             checkoutService = null;
             approvalService = null;
@@ -147,6 +151,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         secretMigration = new SecretMigration(database, platforms, connections, connectionSecrets, secrets);
         rotationService = new RotationService(database, platforms, connections, checkouts);
         approvals = new ApprovalRepository(database);
+        approvers = new ApproverDirectory(database);
         badgePreferences = new BadgePreferences(database);
         checkoutService = new CheckoutService(connections, checkouts, platforms, approvals, rotationService,
                 settings);
@@ -306,7 +311,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
     public Approver getApprover(AuthenticatedUser authenticatedUser) throws GuacamoleException {
         String username = getUsername(authenticatedUser);
         return new Approver(username, isAdministrator(authenticatedUser),
-                approvals.getApprovableConnections(username, authenticatedUser.getEffectiveUserGroups()));
+                approvers.getApprovableConnections(username, authenticatedUser.getEffectiveUserGroups()));
     }
 
     /**

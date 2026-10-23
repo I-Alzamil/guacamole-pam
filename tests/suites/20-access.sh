@@ -148,6 +148,44 @@ for round in 1 2 3 4; do
 done
 check "...both answered, approved with both approvals, one checkout (4 rounds)" "" "${race_failures[*]}"
 
+# ---------------------------------------------------------------- who may approve
+section "Approvers through connection groups and nested user groups"
+
+# An Account two connection groups deep
+create_group OUTER '{"name":"t2 approvals outer","parentIdentifier":"ROOT","type":"ORGANIZATIONAL","attributes":{}}'
+create_group INNER "{\"name\":\"t2 approvals inner\",\"parentIdentifier\":\"$OUTER\",\"type\":\"ORGANIZATIONAL\",\"attributes\":{}}"
+create_connection DEEP "{\"name\":\"t2 deep account\",\"parentIdentifier\":\"$INNER\",\"protocol\":\"pam-account\",
+    \"parameters\":{\"username\":\"svc-t2-deep\",\"password\":\"T2-Deep-Pw1!\"},\"attributes\":{\"pam-approvals-required\":\"1\"}}"
+grant_read t2-requester "$DEEP"
+
+create_user t2-by-group t2-by-group-pw "{\"pam-approver\":\"true\",\"pam-approver-connection-groups\":\"[\\\"$OUTER\\\"]\"}"
+create_user t2-by-root t2-by-root-pw '{"pam-approver":"true","pam-approver-connection-groups":"[\"ROOT\"]"}'
+create_user t2-nested t2-nested-pw
+create_user t2-disabled t2-disabled-pw
+create_user_group t2-deep-approvers "{\"pam-approver\":\"true\",\"pam-approver-connections\":\"[\\\"$DEEP\\\"]\"}"
+create_user_group t2-deep-members '{}' t2-nested
+api PATCH "$DATA/userGroups/t2-deep-approvers/memberUserGroups" "$ADMIN" \
+    '[{"op":"add","path":"/","value":"t2-deep-members"}]' >/dev/null
+DISABLED_ATTRIBUTES="{\"pam-approver\":\"true\",\"pam-approver-connections\":\"[\\\"$DEEP\\\"]\"}"
+create_user_group t2-deep-disabled "$DISABLED_ATTRIBUTES" t2-disabled
+api PUT "$DATA/userGroups/t2-deep-disabled" "$ADMIN" \
+    "{\"identifier\":\"t2-deep-disabled\",\"disabled\":true,\"attributes\":$DISABLED_ATTRIBUTES}" >/dev/null
+
+api POST "$PAM/requests/$DEEP" "$REQUESTER" '{"reason":"T2 deep"}' >/dev/null
+ID=$(pending_id t2-requester)
+sees() { # USERNAME PASSWORD -> whether they see the request awaiting approval
+    curl -s "$PAM/approvals/pending?token=$(token "$1" "$2")" | python3 -I -c "
+import sys,json; print('yes' if any(r['id']==int(sys.argv[1]) for r in json.load(sys.stdin)) else 'no')" "$ID"
+}
+check "an approver for a connection group, of a connection in a group within it" yes "$(sees t2-by-group t2-by-group-pw)"
+check "an approver for ROOT, of any connection" yes "$(sees t2-by-root t2-by-root-pw)"
+check "an approver through a group within the approvers' group" yes "$(sees t2-nested t2-nested-pw)"
+check "not through a disabled group" no "$(sees t2-disabled t2-disabled-pw)"
+check "not the approvers of other connections" no "$(sees t2-approver1 t2-approver1-pw)"
+R=$(api POST "$PAM/approvals/$ID/approve" "$(token t2-nested t2-nested-pw)")
+check "...and the nested one approves it" "200 APPROVED" "$(status_of "$R") $(json_get "${R#* }" "d['status']")"
+api POST "$PAM/requests/$DEEP/release" "$REQUESTER" >/dev/null
+
 # ---------------------------------------------------------------- connections needing a checkout
 section "Connections that need a checkout"
 check_contains "the gated connection refuses a session without a checkout" "403 You must request access" "$(tunnel "$REQUESTER" "$GATED" c)"
