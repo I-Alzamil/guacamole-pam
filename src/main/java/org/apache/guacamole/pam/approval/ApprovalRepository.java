@@ -819,6 +819,42 @@ public class ApprovalRepository {
     }
 
     /**
+     * Claims completing a request that has all its approvals, for the
+     * approver who gave the last one. Approvers giving theirs at once both
+     * see the request complete: only one may then start its checkout or
+     * reservation, or the other, refused, would withdraw an approval the
+     * request was completed with. The claim is held as the request's
+     * decider, which is unset while it is pending, until it is approved or
+     * the claim released.
+     *
+     * @return
+     *     Whether the approver claimed it: false if another approver did, or
+     *     it is no longer pending.
+     */
+    public boolean claimCompletion(int requestId, String approver) throws GuacamoleException {
+        try (Connection connection = database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "UPDATE pam_request SET decided_by = ?"
+               + " WHERE request_id = ? AND status = 'PENDING' AND decided_by IS NULL")) {
+            statement.setString(1, approver);
+            statement.setInt(2, requestId);
+            return statement.executeUpdate() > 0;
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to record the approval.", e);
+        }
+    }
+
+    /**
+     * Releases the approver's claim of completing a request, which could
+     * not be completed.
+     */
+    public void releaseCompletion(int requestId, String approver) throws GuacamoleException {
+        update("UPDATE pam_request SET decided_by = NULL WHERE request_id = ? AND status = 'PENDING'"
+                + " AND decided_by = ?", requestId, approver);
+    }
+
+    /**
      * Marks a pending request as approved, linked to its checkout.
      */
     public void markApproved(int requestId, int checkoutId, String approver) throws GuacamoleException {

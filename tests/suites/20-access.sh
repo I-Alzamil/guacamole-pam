@@ -113,6 +113,41 @@ check_contains "...nor deny it" "cannot decide on your own" \
     "$(message_of "$(api POST "$PAM/approvals/$ID/deny" "$APPROVER1" '{"reason":"x"}')")"
 api DELETE "$PAM/requests/$ACCOUNT/pending" "$APPROVER1" >/dev/null
 
+# ---------------------------------------------------------------- simultaneous approvals
+section "The last two approvals given at once"
+
+# Both approvers may see the request complete: only the one claiming it
+# starts the checkout. Another approver's claim, as while it starts it:
+api POST "$PAM/requests/$ACCOUNT" "$REQUESTER" '{"reason":"T2 claimed"}' >/dev/null
+ID=$(pending_id t2-requester)
+api POST "$PAM/approvals/$ID/approve" "$APPROVER1" >/dev/null
+sql "UPDATE pam_request SET decided_by = 't2-approver1' WHERE request_id = $ID" >/dev/null
+R=$(api POST "$PAM/approvals/$ID/approve" "$APPROVER2")
+check "the other approver completing it too: answered, leaving the rest to the claim's holder" "200 PENDING" \
+    "$(status_of "$R") $(json_get "${R#* }" "d['status']")"
+check "...keeping their approval, starting no checkout" "2 0" \
+    "$(sql "SELECT COUNT(*) FROM pam_request_approval WHERE request_id = $ID") $(sql "SELECT COUNT(*)
+        FROM pam_checkout WHERE connection_id = $ACCOUNT AND username = 't2-requester' AND released IS NULL")"
+sql "UPDATE pam_request SET decided_by = NULL WHERE request_id = $ID" >/dev/null
+api DELETE "$PAM/requests/$ACCOUNT/pending" "$REQUESTER" >/dev/null
+
+# The two at once, repeated, as they rarely meet
+race_failures=()
+for round in 1 2 3 4; do
+    api POST "$PAM/requests/$ACCOUNT" "$REQUESTER" "{\"reason\":\"T2 race $round\"}" >/dev/null
+    ID=$(pending_id t2-requester)
+    curl -s -o /dev/null -w '%{http_code}' -X POST "$PAM/approvals/$ID/approve?token=$APPROVER1" > "$T2_TMP/race1" &
+    curl -s -o /dev/null -w '%{http_code}' -X POST "$PAM/approvals/$ID/approve?token=$APPROVER2" > "$T2_TMP/race2" &
+    wait
+    OUTCOME="$(cat "$T2_TMP/race1") $(cat "$T2_TMP/race2") $(sql "SELECT status FROM pam_request WHERE request_id = $ID")"
+    OUTCOME+=" $(sql "SELECT COUNT(*) FROM pam_request_approval WHERE request_id = $ID")"
+    OUTCOME+=" $(sql "SELECT COUNT(*) FROM pam_checkout WHERE connection_id = $ACCOUNT AND username = 't2-requester'
+        AND released IS NULL")"
+    [ "$OUTCOME" = "200 200 APPROVED 2 1" ] || race_failures+=("round $round: $OUTCOME")
+    api POST "$PAM/requests/$ACCOUNT/release" "$REQUESTER" >/dev/null
+done
+check "...both answered, approved with both approvals, one checkout (4 rounds)" "" "${race_failures[*]}"
+
 # ---------------------------------------------------------------- connections needing a checkout
 section "Connections that need a checkout"
 check_contains "the gated connection refuses a session without a checkout" "403 You must request access" "$(tunnel "$REQUESTER" "$GATED" c)"

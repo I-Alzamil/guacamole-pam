@@ -96,6 +96,11 @@ public class ApprovalService {
         if (request.getApprovers().size() < request.getApprovalsRequired())
             return request;
 
+        // Another approver completing it at the same time does the rest;
+        // this approval stays
+        if (!approvals.claimCompletion(requestId, approver.getUsername()))
+            return approvals.get(requestId);
+
         Checkout checkout = null;
         try {
             if (request.getExtendsCheckout() != null)
@@ -106,17 +111,15 @@ public class ApprovalService {
                 checkoutService.reserve(request, approver.getUsername());
         }
         catch (GuacamoleClientException e) {
-
-            // Another approver may have just completed the request
-            ApprovalRequest current = approvals.get(requestId);
-            if (current != null && ApprovalRequest.APPROVED.equals(current.getStatus()))
-                return current;
-
+            approvals.releaseCompletion(requestId, approver.getUsername());
             approvals.withdrawApproval(requestId, approver.getUsername());
             throw new GuacamoleClientException((request.getExtendsCheckout() != null ? "The checkout cannot be extended: "
                     : request.getStarts() != null ? "The access cannot be reserved: "
                     : "The checkout cannot start now: ") + e.getMessage());
-
+        }
+        catch (GuacamoleException e) {
+            approvals.releaseCompletion(requestId, approver.getUsername());
+            throw e;
         }
 
         if (checkout != null)
