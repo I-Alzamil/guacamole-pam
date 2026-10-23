@@ -4,6 +4,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -158,6 +159,24 @@ public class TacacsClientTest {
 
     private static TacacsTarget target(FakeServer server, String password) {
         return TacacsTarget.fromParameters(settings("127.0.0.1", server.port, password));
+    }
+
+    /**
+     * A username's length is sent in one byte: 255 bytes of UTF-8 at most.
+     */
+    @Test
+    public void refusesUsernamesTooLongToSend() {
+        Map<String, String> settings = settings("127.0.0.1", 49, null);
+        settings.put(TacacsTarget.USERNAME, String.join("", Collections.nCopies(255, "a")));
+        assertEquals(255, TacacsTarget.fromParameters(settings).getUsername().length());
+        settings.put(TacacsTarget.USERNAME, String.join("", Collections.nCopies(128, "\u00e9")));
+        try {
+            TacacsTarget.fromParameters(settings);
+            fail("A username of 256 bytes is accepted.");
+        }
+        catch (IllegalArgumentException e) {
+            assertEquals("The TACACS+ username is longer than TACACS+ allows (255 bytes).", e.getMessage());
+        }
     }
 
     private static Map<String, String> settings(String host, int port, String password) {

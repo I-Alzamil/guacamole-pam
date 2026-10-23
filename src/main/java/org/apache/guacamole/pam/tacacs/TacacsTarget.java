@@ -1,5 +1,6 @@
 package org.apache.guacamole.pam.tacacs;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import org.apache.guacamole.pam.Values;
@@ -64,6 +65,10 @@ public final class TacacsTarget {
         String username = Values.trimToNull(parameters.get(USERNAME));
         if (username == null)
             throw new IllegalArgumentException("The connection has no TACACS+ username and no username.");
+
+        // Its length is sent in one byte
+        if (username.getBytes(StandardCharsets.UTF_8).length > 255)
+            throw new IllegalArgumentException("The TACACS+ username is longer than TACACS+ allows (255 bytes).");
 
         return new TacacsTarget(server, Values.trimToNull(parameters.get(BACKUP_SERVER)),
                 Values.parsePort(parameters.get(PORT), DEFAULT_PORT), secret, username,
