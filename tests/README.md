@@ -31,7 +31,8 @@ Run with every build. Highlights:
 
 Everything is checked through Guacamole's REST API, and every new password
 is also checked directly on the server, with a tool independent of the
-extension (OpenSSH, `ldapwhoami`, Samba's `ldapsearch`, MIT `kinit`).
+extension (OpenSSH, `ldapwhoami`, Samba's `ldapsearch`, MIT `kinit`, and
+`tests/tacacs.py`, a TACACS+ client written apart from the extension's).
 
 ### Prerequisites
 
@@ -41,6 +42,7 @@ extension (OpenSSH, `ldapwhoami`, Samba's `ldapsearch`, MIT `kinit`).
 ./startldap.sh
 ./startad.sh
 ./startkdc.sh
+./starttacacs.sh
 ./startguac2.sh   # optional: a second server, for 40-servers
 ```
 
@@ -67,7 +69,7 @@ defaults (`http://localhost:8080`, `guacadmin` / `guacadmin`).
 
 | Suite | Covers |
 |---|---|
-| `10-rotation` | SSH (the Unix default, as the account and as root, with `@case` choosing by the prompt; `@fail` before and after the change), LDAP (OpenLDAP over LDAPS and StartTLS, Samba AD), Kerberos (MIT and Samba AD), each by an administrator account and by the account itself; host key and certificate pinning; untrusted certificates; Kerberos accounts whose salt is not the default (a renamed account, as for a promoted domain controller's Administrator) |
+| `10-rotation` | SSH (the Unix default, as the account and as root, with `@case` choosing by the prompt; `@fail` before and after the change), LDAP (OpenLDAP over LDAPS and StartTLS, Samba AD), Kerberos (MIT and Samba AD), TACACS+ (tac_plus-ng: the account itself, through a backup server, with a TACACS+ username; another shared secret and a password changed elsewhere refused, unchanged), each by an administrator account and by the account itself; host key and certificate pinning; untrusted certificates; Kerberos accounts whose salt is not the default (a renamed account, as for a promoted domain controller's Administrator) |
 | `20-access` | Requests and reasons; two approvals, directly and through a group; non-approvers; self-approval; denials with reasons; cancellations; checkouts of Accounts and of connections, release and revocation; an expired checkout not ended yet opening no session; what administrators skip; deleting a connection keeping its checkouts and requests in the history |
 | `25-ahead` | Requests ahead of time: what is refused (no approval needed, a past start, more than 30 days ahead); approval reserving the connection; overlapping requests refused, or no longer approvable once another is approved (the approval withdrawn); others' checkouts ending when a reservation starts, and refused during it; checking out with a reservation, until its end, and only once; cancelling one; expiry at its end rather than after 24 hours; deleting a connection cancelling its reservations |
 | `26-extensions` | Several time limits at once (up to one more than the extensions allowed, using them up); extensions without approval (a reason needed, granted at once, by the time limit, until none is left) and with approval (as many approvals as requests, not by the holder, by the extension length); a connection allowing none; cancelling one; one expiring with its checkout; others' reservations bounding them; the checkout history listing them with their approvers |
@@ -77,7 +79,7 @@ defaults (`http://localhost:8080`, `guacadmin` / `guacadmin`).
 | `60-reveal` | Showing a connection's password to the holder of its checkout: refused by default and without a checkout; shown with its username when allowed, uncached, each display recorded in the history and logged, never to another user; a managed password rotated once released although its rotation mode is never, the SSH server refusing the one shown; no rotation after a checkout that showed nothing; nothing shown for a password that is Guacamole's `${GUAC_PASSWORD}` |
 | `70-revocation` | Revoked access: a session closing once its user may no longer read the connection, another of theirs staying open; a session closing when its connection is deleted; an administrator losing the permission losing its powers within the same login |
 | `80-platforms` | Importing platforms: created with their settings, policy and secrets (never shown); refused when one exists unless updating; updates keeping a stored secret left out, but refused when the port changes without it, or the type changes; one invalid platform, or a name given twice, importing nothing; restoring the default platforms, adding only a missing one and changing none; administrators only |
-| `85-testing` | Testing platforms before saving: OpenLDAP over LDAPS and StartTLS and Samba AD, MIT and Samba AD Kerberos, with and without a rotation account; a wrong password, another pinned certificate, an untrusted CA (naming the certificate to pin), an unknown server, an unknown admin principal, a realm the KDC does not confirm, an unreachable password change server; a saved platform's stored password tested, but refused once where it is sent changes, and a typed password tested instead without being saved; nothing saved; invalid settings, SSH platforms and users who are not administrators refused |
+| `85-testing` | Testing platforms before saving: OpenLDAP over LDAPS and StartTLS and Samba AD, MIT and Samba AD Kerberos, TACACS+ (another shared secret, an unknown server, a backup server), with and without a rotation account; a wrong password, another pinned certificate, an untrusted CA (naming the certificate to pin), an unknown server, an unknown admin principal, a realm the KDC does not confirm, an unreachable password change server; a saved platform's stored password tested, but refused once where it is sent changes, and a typed password tested instead without being saved; nothing saved; invalid settings, SSH platforms and users who are not administrators refused |
 | `90-macos` | The macOS default against a real Mac (skipped unless `T2_MACOS_HOST`, `T2_MACOS_USER` and `T2_MACOS_PASSWORD` name a throwaway standard account with Remote Login allowed, whose login keychain uses the same password): the account's password and its login keychain's both changed by the account itself, each checked on the Mac; a keychain on another password reported while the new password is kept; an account without a login keychain changed without a problem. Prints the account's last password and deletes its login keychain |
 
 ### Test data

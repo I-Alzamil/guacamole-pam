@@ -6,8 +6,9 @@ Privileged access management for [Apache Guacamole](https://guacamole.apache.org
   managed by a *platform*. A platform describes how passwords are changed: over
   SSH with a send/expect script, over LDAP (OpenLDAP, Active Directory and
   other directories), over Kerberos (kpasswd, for MIT Kerberos, Heimdal and
-  Active Directory realms), or over WinRM (local Windows accounts, HTTPS
-  only): its *type*. It also sets
+  Active Directory realms), over WinRM (local Windows accounts, HTTPS
+  only), or over TACACS+ (accounts a TACACS+ server holds itself, where it
+  allows password changes): its *type*. It also sets
   when they're changed: never, after each use, or periodically. The new password
   is only stored once the target accepts it.
 - **Accounts.** An "Account" connection type holds a password that users check
@@ -338,15 +339,19 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   `"winrm-admin-password"`. **Restore
   defaults** adds back "Unix", "macOS" and "Windows" if missing;
   a platform with one of their names is left as it is, even if changed.
-- **LDAP and Kerberos platforms can be tested before saving**, with **Test**
-  in the platform editor. It checks the settings as they are, changing no
-  password: the server is reached and trusted (LDAP: its certificate; a
-  Kerberos KDC: its realm, then the password change server), and the
-  rotation account or admin principal, if any, signs in. Each step's outcome
+- **LDAP, Kerberos and TACACS+ platforms can be tested before saving**, with
+  **Test** in the platform editor. It checks the settings as they are,
+  changing no password: the server is reached and trusted (LDAP: its
+  certificate; a Kerberos KDC: its realm, then the password change server; a
+  TACACS+ server, and its backup: that it accepts the shared secret, by
+  starting a login it abandons before any password), and the rotation account
+  or admin principal, if any, signs in. Each step's outcome
   is listed, and the test is logged. Stored passwords, shown masked, are the
   ones tested, unless where they are sent changed: enter them again then.
   Without an admin principal, Active Directory and some KDCs don't say
-  whether they serve the realm: the first rotation checks it. To find out,
+  whether they serve the realm: the first rotation checks it. Likewise, a
+  TACACS+ server only says whether it allows password changes when asked to
+  change one. To find out,
   the test asks for the realm's `krbtgt` principal with a wrong password,
   which the KDC logs as a failed login: expect one per test.
 - Approvers see a yellow badge counting requests awaiting their decision.
@@ -459,8 +464,9 @@ openssl s_client -connect <host>:5986 </dev/null 2>/dev/null | openssl x509 -noo
   accordingly.
 - **A stored platform password only goes where it was entered for.** Saving
   a platform with another server, port, encryption or trusted certificate
-  (LDAP), realm or KDC (Kerberos), or port or CA certificates (WinRM) needs
-  its administrator password entered again, so whoever may edit platforms
+  (LDAP), realm or KDC (Kerberos), port or CA certificates (WinRM), or
+  server, port or backup server (TACACS+) needs its administrator password
+  (TACACS+: its shared secret) entered again, so whoever may edit platforms
   can't have it sent to a server of their choosing. WinRM hosts are set on
   each connection, which only administrators can change.
 - **Editors can read passwords, unless a key is set.** Users with *edit*
@@ -499,6 +505,15 @@ openssl s_client -connect <host>:5986 </dev/null 2>/dev/null | openssl x509 -noo
   command line. Without an administrator on the platform, each account sets its
   own password, so it must be a local administrator. Only local accounts are
   supported: manage domain accounts with an LDAP or Kerberos platform.
+- **TACACS+ is only as safe as its network.** TACACS+ (RFC 8907) hides
+  packets with an MD5 pad derived from the shared secret, which the RFC
+  itself calls weak; the server is trusted only by knowing that secret. Use
+  TACACS+ platforms over a trusted management network only, with a long
+  random shared secret. Passwords are changed with the current one, as the
+  account itself: only on servers allowing it, such as tac_plus-ng with a
+  backend storing passwords (Facebook's tac_plus never allows it). For
+  accounts the server checks in a directory, use an LDAP or Kerberos
+  platform instead.
 
 ## Development
 
@@ -522,6 +537,7 @@ Guacamole's schema and `guacadmin` / `guacadmin` on first start
 | `startldap.sh` | OpenLDAP server `myldaptest`, test user `uid=ldaptest,ou=people,dc=example,dc=org` |
 | `startad.sh` | Samba Active Directory `myadtest` (LDAPS and Kerberos), test user `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`. Prints the certificate fingerprint to pin |
 | `startkdc.sh` | MIT Kerberos KDC `mykdctest`, realm `EXAMPLE.ORG`, admin `admin/admin`, test user `kdctest` |
+| `starttacacs.sh` | TACACS+ server `mytacacstest` (tac_plus-ng, built from source into `localhost/pam-tacacs-test` the first time), port 49, shared secret `TacacsSecr3t`, test user `tactest` |
 | `startguac2.sh` | A second Guacamole server sharing the database, on http://localhost:8081, for the two-server tests. Stopped by `build.sh`: start it again after a build |
 | `seed.sh` | Adds the test platforms, connections, users and group to a fresh database, through the REST API |
 | `stop.sh` | Stops all of the above |

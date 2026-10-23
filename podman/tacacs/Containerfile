@@ -1,0 +1,13 @@
+# tac_plus-ng (event-driven-servers), to test TACACS+ password rotation
+# against, with accounts in its own shadow file, which allows password
+# changes. Built from a fixed commit, as the project publishes no releases.
+FROM docker.io/library/debian:bookworm-slim
+ARG EDS_COMMIT=71cff5cb0f3b7e82eaca7af7e377331e408ea858
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git gcc make libc6-dev \
+        libpcre2-dev libssl-dev libc-ares-dev perl whois python3 \
+    && git clone https://github.com/MarcJHuber/event-driven-servers.git /src \
+    && cd /src && git checkout "$EDS_COMMIT" && ./configure --prefix=/usr/local tac_plus-ng && make && make install \
+    && cd / && rm -rf /src && apt-get purge -y git gcc make && apt-get autoremove -y && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /etc/tacacs && touch /etc/tacacs/shadow
+COPY tac_plus-ng.cfg /usr/local/etc/tac_plus-ng.cfg
+CMD ["/usr/local/sbin/tac_plus-ng", "-f", "/usr/local/etc/tac_plus-ng.cfg"]

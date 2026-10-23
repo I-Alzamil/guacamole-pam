@@ -1,7 +1,8 @@
 #!/bin/bash
-# Rotation over SSH, LDAP (OpenLDAP and Samba AD) and Kerberos (MIT and Samba
-# AD), by an administrator account and by the account itself, each checked
-# directly on the server; plus certificate and host key pinning.
+# Rotation over SSH, LDAP (OpenLDAP and Samba AD), Kerberos (MIT and Samba
+# AD) and TACACS+ (tac_plus-ng), by an administrator account and by the
+# account itself, each checked directly on the server; plus certificate and
+# host key pinning.
 
 LDAP_ADMIN_DN="cn=admin,dc=example,dc=org"; LDAP_ADMIN_PASSWORD="LdapAdm1n"
 AD_ADMIN_PASSWORD="AdAdm1n-Pass"
@@ -206,5 +207,43 @@ check "precondition: the KDC advertises the former name's salt" 'salt "AD.EXAMPL
 create_connection SALT_C "{\"name\":\"t2 salt\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"pam-account\",
     \"parameters\":{\"username\":\"t2salt\",\"password\":\"T2-Salt-Start1!\"},\"attributes\":{\"pam-platform\":\"$AD_KRB_SELF\"}}"
 rotate_and_verify "$SALT_C" "Renamed account changing its own password" samba_kinit_accepts t2salt 1
+
+# ---------------------------------------------------------------- TACACS+
+section "TACACS+: tac_plus-ng, its own accounts"
+
+tacacs_set_password t2tac 'T2-Tac-Start1!'
+on_cleanup "tacacs_set_password t2tac 'T2-Tac-Unused1!'"
+check "precondition: test account set" yes "$(tacacs_accepts t2tac 'T2-Tac-Start1!')"
+
+create_platform TACACS_P '{"name":"t2 tacacs","type":"tacacs","settings":{"tacacs-server":"mytacacstest",
+    "tacacs-secret":"TacacsSecr3t"},"policy":{}}'
+create_connection TACACS_C "{\"name\":\"t2 tacacs\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"pam-account\",
+    \"parameters\":{\"username\":\"t2tac\",\"password\":\"T2-Tac-Start1!\"},\"attributes\":{\"pam-platform\":\"$TACACS_P\"}}"
+rotate_and_verify "$TACACS_C" "TACACS+, the account itself" tacacs_accepts t2tac
+
+CURRENT=$(parameter "$TACACS_C" password)
+create_platform TACACS_WRONG '{"name":"t2 tacacs wrong secret","type":"tacacs","settings":{"tacacs-server":"mytacacstest",
+    "tacacs-secret":"not-the-secret"},"policy":{}}'
+use_platform "$TACACS_C" "$TACACS_WRONG"; RESULT=$(rotate "$TACACS_C")
+# tac_plus-ng either closes the connection, or answers what cannot be read
+check_contains "another shared secret: rotation fails, saying why" "check the shared secret" "$RESULT"
+check_contains "...before sending any password" "FAILED: Password unchanged." "$RESULT"
+check "...and the password is unchanged" "yes $CURRENT" "$(tacacs_accepts t2tac "$CURRENT") $(parameter "$TACACS_C" password)"
+
+create_platform TACACS_BACKUP '{"name":"t2 tacacs backup","type":"tacacs","settings":{"tacacs-server":"t2-no-such-host",
+    "tacacs-backup-server":"mytacacstest","tacacs-secret":"TacacsSecr3t"},"policy":{}}'
+use_platform "$TACACS_C" "$TACACS_BACKUP"
+rotate_and_verify "$TACACS_C" "TACACS+, through the backup server" tacacs_accepts t2tac 1
+
+# Its TACACS+ username, rather than its username
+edit_connection "$ADMIN" "$TACACS_C" '{"username":"t2-someone-else"}' "{\"pam-platform\":\"$TACACS_P\",
+    \"pam-tacacs-username\":\"t2tac\"}" >/dev/null
+rotate_and_verify "$TACACS_C" "TACACS+, with a TACACS+ username" tacacs_accepts t2tac 1
+
+# The server refuses a change from a current password it does not hold
+tacacs_set_password t2tac 'T2-Tac-Elsewhere1!'
+RESULT=$(rotate "$TACACS_C")
+check_contains "a stored password changed elsewhere: rotation fails, saying why" "refused the change" "$RESULT"
+check "...and the server keeps the password set elsewhere" yes "$(tacacs_accepts t2tac 'T2-Tac-Elsewhere1!')"
 
 run_cleanup

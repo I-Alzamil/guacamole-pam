@@ -273,6 +273,20 @@ mit_accepts() {
     printf '%s\n' "$2" | podman exec -i mykdctest kinit "$1@EXAMPLE.ORG" >/dev/null 2>&1 && echo yes || echo no
 }
 
+# TACACS+, through tests/tacacs.py (another client than the extension's),
+# run in the server's container: tacacs ACTION USER [PASSWORDS...]
+T2_TACACS_PY="$(dirname "${BASH_SOURCE[0]}")/tacacs.py"
+tacacs() { podman exec -i mytacacstest python3 - 127.0.0.1 49 TacacsSecr3t "$@" < "$T2_TACACS_PY"; }
+tacacs_accepts() { [ "$(tacacs login "$1" "$2")" = PASS ] && echo yes || echo no; }
+
+# Sets the password of an account declared in podman/tacacs/tac_plus-ng.cfg
+tacacs_set_password() {
+    local hash
+    hash=$(podman exec mytacacstest mkpasswd -m sha-512 "$2")
+    podman exec mytacacstest sh -c "grep -v '^$1:' /etc/tacacs/shadow > /tmp/shadow;
+        echo '$1:$hash:$(( $(date +%s) / 86400 )):0:99999:7:::' >> /tmp/shadow; cat /tmp/shadow > /etc/tacacs/shadow"
+}
+
 # The Samba realm, through MIT's kinit (another implementation than the extension's)
 samba_kinit_accepts() {
     podman exec mykdctest sh -c '[ -f /tmp/t2-ad-krb5.conf ] || printf "[libdefaults]\n    default_realm = AD.EXAMPLE.ORG\n    dns_lookup_kdc = false\n    udp_preference_limit = 1\n[realms]\n    AD.EXAMPLE.ORG = {\n        kdc = myadtest\n    }\n" > /tmp/t2-ad-krb5.conf'

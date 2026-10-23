@@ -22,6 +22,7 @@ public final class ManagementTypes {
         register(new LdapManagementType());
         register(new KerberosManagementType());
         register(new WinRmManagementType());
+        register(new TacacsManagementType());
     }
 
     private ManagementTypes() {

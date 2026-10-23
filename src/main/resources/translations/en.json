@@ -30,6 +30,9 @@
         "SECTION_HEADER_PAM_TYPE_WINRM": "WinRM host",
         "FIELD_HEADER_PAM_WINRM_HOSTNAME": "WinRM hostname:",
         "FIELD_HELP_PAM_WINRM_HOSTNAME": "Empty: the connection's hostname.",
+        "SECTION_HEADER_PAM_TYPE_TACACS": "TACACS+ account",
+        "FIELD_HEADER_PAM_TACACS_USERNAME": "TACACS+ username:",
+        "FIELD_HELP_PAM_TACACS_USERNAME": "Empty: the connection's username.",
         "FIELD_HEADER_PAM_WINRM_CERTIFICATE": "Trusted certificate:",
         "FIELD_HELP_PAM_WINRM_CERTIFICATE": "SHA-256 fingerprint of the host's certificate. Empty: the platform's CA certificates decide, or, without any, the first certificate seen is trusted.",
         "SECTION_HEADER_PAM_CHECKOUT": "Access requests",
@@ -102,6 +105,7 @@
         "HELP_TYPE_KERBEROS": "MIT Kerberos, Heimdal and Active Directory domains, over kpasswd (RFC 3244). Changes principal passwords as an admin principal or as the principal itself.",
         "HELP_TYPE_WINRM": "Local Windows accounts only, over HTTPS only. Sets their passwords as an administrator or as the account itself (which must then be an administrator); for domain accounts, use LDAP or Kerberos. Host certificates are trusted on first contact, or checked against your CA's certificates.",
         "HELP_TYPE_LDAP": "OpenLDAP, Active Directory and other directories, over LDAPS or StartTLS. Changes account passwords as an administrator or as the account itself. Active Directory requires encryption.",
+        "HELP_TYPE_TACACS": "Accounts held by a TACACS+ server itself, over its password change dialogue (RFC 8907), with the account's current password. Only where the server allows password changes, such as tac_plus-ng with a backend storing passwords: a server says so only when asked to change one. For accounts the server checks in a directory, use LDAP or Kerberos.",
         "HELP_TYPE_SSH": "Any system reachable over SSH: a send/expect script changes the password, such as passwd on Linux or net user on Windows (OpenSSH). The host key is trusted on first contact, or pinned on the connection.",
         "INFO_ACTIVE": "Active",
         "INFO_ACTIVE_SESSIONS": "{COUNT, plural, one{1 active session} other{# active sessions}}",
@@ -171,6 +175,7 @@
         "TYPE_KERBEROS": "Kerberos",
         "TYPE_LDAP": "LDAP",
         "TYPE_SSH": "SSH",
+        "TYPE_TACACS": "TACACS+",
         "TYPE_WINRM": "WinRM",
         "HOME": {
             "HELP_MANAGE": "Open the request (to release it, or cancel it)",
@@ -317,6 +322,16 @@
         "FIELD_HEADER_WINRM_CA_CERTIFICATES": "CA certificates (PEM):",
         "FIELD_HELP_WINRM_CA_CERTIFICATES": "Empty: each host's first certificate is trusted. Set: hosts' certificates must be issued by one of these and name the host."
     },
+    "PAM_TYPE_TACACS": {
+        "SECTION_HEADER_TACACS_SERVER": "TACACS+ server",
+        "FIELD_HEADER_TACACS_SERVER": "Server:",
+        "FIELD_HEADER_TACACS_PORT": "Port:",
+        "FIELD_HELP_TACACS_PORT": "Empty: 49.",
+        "FIELD_HEADER_TACACS_BACKUP_SERVER": "Backup server:",
+        "FIELD_HELP_TACACS_BACKUP_SERVER": "Tried when the server cannot be reached, on the same port with the same shared secret. Empty: none.",
+        "FIELD_HEADER_TACACS_SECRET": "Shared secret:",
+        "FIELD_HELP_TACACS_SECRET": "The key the server shares with this Guacamole server, which must also be allowed as a client."
+    },
     "PAM_POLICY": {
         "SECTION_HEADER_POLICY": "Rotation policy",
         "FIELD_HEADER_ROTATION_MODE": "Rotate passwords:",
@@ -443,7 +458,7 @@
         "FIELD_HEADER_EXISTING_PLATFORM_MODE": "Update existing platforms",
         "HELP_EXISTING": "Platforms are matched by name. One that already exists refuses the import unless \"Update existing platforms\" is ticked. An update cannot change a platform's type, and keeps the passwords it stores when the file leaves them out, unless a setting deciding where they are sent changes (such as its server or port): the file must then give them.",
         "HELP_EXISTING_PLATFORM_MODE": "Update existing platforms whose names match those in the file, rather than refusing the import. Passwords left out of the file are kept.",
-        "HELP_JSON_DESCRIPTION": "A platform import file is what Export writes on the Platforms tab: an object naming its format and version, with a list of platforms. A bare list of platforms is read as well. Each platform has a name, a type (ssh, ldap, kerberos or winrm), its settings and its rotation policy, and optionally a description.",
+        "HELP_JSON_DESCRIPTION": "A platform import file is what Export writes on the Platforms tab: an object naming its format and version, with a list of platforms. A bare list of platforms is read as well. Each platform has a name, a type (ssh, ldap, kerberos, winrm or tacacs), its settings and its rotation policy, and optionally a description.",
         "HELP_JSON_EXAMPLE": "\\{\n  \"format\": \"guacamole-pam-platforms\",\n  \"version\": 1,\n  \"platforms\": [\n    \\{\n      \"name\": \"Unix\",\n      \"description\": \"The connection account changes its own password with passwd.\",\n      \"type\": \"ssh\",\n      \"settings\": \\{ \"script\": \"passwd\\\\n@expect assword:\\\\n...\" \\},\n      \"policy\": \\{ \"rotation-mode\": \"periodic\", \"rotation-interval\": \"24\" \\}\n    \\},\n    \\{\n      \"name\": \"Windows servers\",\n      \"type\": \"winrm\",\n      \"settings\": \\{\n        \"winrm-admin-username\": \"svc-pam\",\n        \"winrm-admin-password\": \"only when importing, never exported\"\n      \\},\n      \"policy\": \\{\\}\n    \\}\n  ]\n\\}",
         "HELP_JSON_MORE_DETAILS": "Settings are named as the platform type names them, such as \"script\" for SSH, \"hostname\" for LDAP, \"kerberos-realm\" for Kerberos or \"winrm-port\" for WinRM: export a platform of that type to see them. Every platform is checked as when saved in the editor; if any is invalid, nothing is imported, and each invalid platform is listed with why.",
         "HELP_PASSWORDS": "Exports never contain passwords, which never leave the server. A platform imported may give them among its settings, such as \"winrm-admin-password\" or \"ldap-admin-password\". A new platform that needs one is refused without it.",

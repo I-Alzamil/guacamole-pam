@@ -1,9 +1,9 @@
 #!/bin/bash
 # Testing platforms before saving them (the Test button of the Platforms
-# page): LDAP (OpenLDAP and Samba AD) and Kerberos (MIT and Samba AD), with
-# and without a rotation account, each way a test can fail, stored secrets
-# reused only where they were entered for, nothing saved, and only for
-# administrators.
+# page): LDAP (OpenLDAP and Samba AD), Kerberos (MIT and Samba AD) and
+# TACACS+ (tac_plus-ng), with and without a rotation account, each way a test
+# can fail, stored secrets reused only where they were entered for, nothing
+# saved, and only for administrators.
 
 LDAP_ADMIN_DN="cn=admin,dc=example,dc=org"; LDAP_ADMIN_PASSWORD="LdapAdm1n"
 AD_ADMIN_PASSWORD="AdAdm1n-Pass"
@@ -105,6 +105,30 @@ check "Samba AD with its administrator: passed" \
 R=$(summary "$(test_platform "$(kerberos "\"kerberos-realm\":\"AD.EXAMPLE.ORG\",\"kerberos-kdc\":\"myadtest\"")")")
 check_contains "Samba AD without an admin principal: the KDC answers, the realm left to the first rotation" \
     "passed: PASSED The KDC myadtest:88 answers, without saying whether it serves the realm AD.EXAMPLE.ORG." "$R"
+
+# ---------------------------------------------------------------- TACACS+
+section "Testing TACACS+ platforms"
+
+tacacs_platform() { printf '{"name":"t2 test tacacs","type":"tacacs","settings":{%s},"policy":{}}' "$1"; }
+TACACS_SECRET='"tacacs-secret":"TacacsSecr3t"'
+
+R=$(summary "$(test_platform "$(tacacs_platform "\"tacacs-server\":\"mytacacstest\",$TACACS_SECRET")")")
+check "tac_plus-ng: passed, with password changes left to the first rotation" \
+    "passed: PASSED The TACACS+ server mytacacstest:49 answers, accepting the shared secret and this Guacamole server as a client. | INFO Whether the server lets accounts change their password is only known when one is rotated: a TACACS+ server only says so when asked to change one." "$R"
+
+R=$(summary "$(test_platform "$(tacacs_platform '"tacacs-server":"mytacacstest","tacacs-secret":"not-the-secret"')")")
+# tac_plus-ng either closes the connection, or answers what cannot be read
+check_contains "another shared secret: failed, saying to check it" "check the shared secret" "$R"
+check_contains "...as a failed test" "failed: FAILED mytacacstest:49: " "$R"
+
+R=$(summary "$(test_platform "$(tacacs_platform "\"tacacs-server\":\"t2-no-such-host\",$TACACS_SECRET")")")
+check_contains "an unknown server: failed, unreachable" "failed: FAILED t2-no-such-host:49: Unable to reach the TACACS+ server t2-no-such-host:49" "$R"
+
+R=$(summary "$(test_platform "$(tacacs_platform "\"tacacs-server\":\"mytacacstest\",\"tacacs-backup-server\":\"t2-no-such-host\",$TACACS_SECRET")")")
+check_contains "a backup server is tested too" "PASSED The TACACS+ server mytacacstest:49 answers, accepting the shared secret and this Guacamole server as a client. | FAILED t2-no-such-host:49: Unable to reach" "$R"
+
+check_contains "a TACACS+ platform needs a shared secret" "no shared secret" \
+    "$(message_of "$(test_platform "$(tacacs_platform '"tacacs-server":"mytacacstest"')")")$(summary "$(test_platform "$(tacacs_platform '"tacacs-server":"mytacacstest"')")")"
 
 # ---------------------------------------------------------------- stored secrets
 section "Testing a saved platform: stored secrets"
