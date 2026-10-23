@@ -1,7 +1,7 @@
 target/
-podman/db/*
-!podman/db/.gitkeep
-podman/init/guacamole-*.sql
-podman/init/guacamole-auth-jdbc-sqlserver-fixed.jar
+lab/db/*
+!lab/db/.gitkeep
+lab/init/guacamole-*.sql
+lab/init/guacamole-auth-jdbc-sqlserver-fixed.jar
 __pycache__/
-podman/targets/
+lab/targets/

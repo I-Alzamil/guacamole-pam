@@ -8,7 +8,7 @@
 # no key.
 
 if [ -z "$PAM_TEST_KEY" ]; then
-    section "Skipped: build.sh was run without an encryption key"
+    section "Skipped: the lab was started without an encryption key"
     return 0
 fi
 

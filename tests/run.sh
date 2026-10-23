@@ -13,7 +13,7 @@ for container in myguactest myguacdbtest myguacdtest mysshtest myldaptest myadte
     [ "$(podman inspect -f '{{.State.Running}}' "$container" 2>/dev/null)" = true ] || missing+=("$container")
 done
 if [ ${#missing[@]} -gt 0 ]; then
-    echo "Not running: ${missing[*]}. Start them with build.sh, startssh.sh, startldap.sh, startad.sh, startkdc.sh, starttacacs.sh and startdatabases.sh."
+    echo "Not running: ${missing[*]}. Start them with lab/lab.sh guacamole services."
     exit 2
 fi
 wait_for_guacamole

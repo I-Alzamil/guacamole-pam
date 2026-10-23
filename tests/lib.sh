@@ -6,8 +6,8 @@
 # Everything a suite creates is named with the "t2" prefix and removed by its
 # cleanup, which runs even when a check fails.
 
-# The test database (podman/database.sh): its "sql" and Guacamole data source
-source "$(dirname "${BASH_SOURCE[0]}")/../podman/database.sh"
+# The test database (lab/database.sh): its "sql" and Guacamole data source
+source "$(dirname "${BASH_SOURCE[0]}")/../lab/database.sh"
 
 GUAC_URL="${GUAC_URL:-http://localhost:8080}"
 API="$GUAC_URL/api"
@@ -16,9 +16,9 @@ PAM="$API/session/ext/pam"
 GUAC_ADMIN="${GUAC_ADMIN:-guacadmin}"
 GUAC_ADMIN_PASSWORD="${GUAC_ADMIN_PASSWORD:-guacadmin}"
 
-# The key build.sh encrypts stored secrets with, and the jar that decrypts them
+# The key lab.sh encrypts stored secrets with, and the jar that decrypts them
 PAM_TEST_KEY="${PAM_ENCRYPTION_KEY-um/hqZa6cc89CtHmc9vYOuoDd8S1jY8IaASlz5S00iY=}"
-T2_JAR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && ./podman/extension-jar.sh)"
+T2_JAR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && ./lab/extension-jar.sh)"
 
 T2_PASSED=${T2_PASSED:-0}
 T2_FAILED=${T2_FAILED:-0}
@@ -192,7 +192,7 @@ parameter() {
 }
 
 # reveal PURPOSE VALUE: the value, decrypted if the extension encrypted it
-# (with the key build.sh gives the test setup), by the extension's own tool
+# (with the key lab.sh gives the test setup), by the extension's own tool
 reveal() {
     case "$2" in
         pam:v1:*) printf '%s\n' "$2" | PAM_ENCRYPTION_KEY="$PAM_TEST_KEY" java -cp "$T2_JAR" \
@@ -249,7 +249,7 @@ ssh_accepts() {
 }
 
 # known_ssh_password SEEDED-ID -> mysshtest's current password: that of the
-# seeded connection (seed.sh), whose password suites keep in step with the
+# seeded connection (lab/seed.sh), whose password suites keep in step with the
 # account; otherwise the image's, set again on the server if a rotation
 # without a seeded connection to keep it changed it
 known_ssh_password() {
@@ -282,7 +282,7 @@ T2_TACACS_PY="$(dirname "${BASH_SOURCE[0]}")/tacacs.py"
 tacacs() { podman exec -i mytacacstest python3 - 127.0.0.1 49 TacacsSecr3t "$@" < "$T2_TACACS_PY"; }
 tacacs_accepts() { [ "$(tacacs login "$1" "$2")" = PASS ] && echo yes || echo no; }
 
-# Sets the password of an account declared in podman/tacacs/tac_plus-ng.cfg
+# Sets the password of an account declared in lab/tacacs/tac_plus-ng.cfg
 tacacs_set_password() {
     local hash
     hash=$(podman exec mytacacstest mkpasswd -m sha-512 "$2")
@@ -290,7 +290,7 @@ tacacs_set_password() {
         echo '$1:$hash:$(( $(date +%s) / 86400 )):0:99999:7:::' >> /tmp/shadow; cat /tmp/shadow > /etc/tacacs/shadow"
 }
 
-# The test databases (startdatabases.sh), through their own clients, signing
+# The test databases (lab.sh services), through their own clients, signing
 # in over the network (where passwords are checked): db_accepts KIND USER
 # PASSWORD, with KIND postgresql, mysql, mariadb or sqlserver
 db_accepts() {

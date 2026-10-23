@@ -24,7 +24,7 @@
 ##
 
 # Link the PAM extension
-# (mounted under a name without its version by build.sh and startguac2.sh)
+# (mounted under a name without its version by lab.sh)
 ln -s "/opt/guacamole/extensions/guacamole-pam.jar" "$GUACAMOLE_HOME/extensions/guacamole-pam.jar"
 
 # Every JDBC driver the image has, for Database platforms: Guacamole itself

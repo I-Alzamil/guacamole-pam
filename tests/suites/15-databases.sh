@@ -6,7 +6,7 @@
 # administrator needs, passwords kept out of the servers' statement logs,
 # MySQL account hosts, untrusted certificates, and the Test button.
 
-CA_PEM=$(cat "$(dirname "${BASH_SOURCE[0]}")/../../podman/targets/certs/ca.crt")
+CA_PEM=$(cat "$(dirname "${BASH_SOURCE[0]}")/../../lab/targets/certs/ca.crt")
 
 # db_platform NAME KIND HOST [ADMIN PASSWORD] [EXTRA-SETTINGS-JSON]: a
 # Database platform, trusting the test CA unless the extra settings say

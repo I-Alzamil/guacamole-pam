@@ -1,5 +1,5 @@
 #!/bin/bash
-# Two Guacamole servers sharing the database (startguac2.sh): sessions seen
+# Two Guacamole servers sharing the database (lab.sh guacamole --second): sessions seen
 # by every server, checkouts ended on one server closing sessions on the
 # other, one rotation of a connection at a time, and sessions of a server
 # that stopped. Skipped unless the second server runs. About 3 minutes.
@@ -8,7 +8,7 @@ GUAC2_URL="${GUAC2_URL:-http://localhost:8081}"
 PAM2="$GUAC2_URL/api/session/ext/pam"
 
 if [ "$(podman inspect -f '{{.State.Running}}' myguactest2 2>/dev/null)" != true ]; then
-    section "Skipped: no second server (start it with startguac2.sh)"
+    section "Skipped: no second server (start it with lab/lab.sh --second)"
     return 0
 fi
 for i in $(seq 90); do curl -sf "$GUAC2_URL/api/languages" >/dev/null && break; sleep 2; done

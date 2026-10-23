@@ -1,8 +1,7 @@
 #!/bin/bash
 # Fill a fresh database with the test platforms, connections, users and group,
-# through the REST API of the running Guacamole (start it with build.sh, and
-# the test servers with startssh.sh, startldap.sh, startad.sh, startkdc.sh,
-# starttacacs.sh and startdatabases.sh first).
+# through the REST API of the running Guacamole (start it and the test
+# servers with "lab.sh guacamole services" first). Run by "lab.sh seed".
 # Anything that already exists (by name) is left as it is.
 #
 #   Users (password = name + "pass"):
@@ -28,7 +27,7 @@
 #     test              stored-only account, 1 approval
 
 # Guacamole's data source of the test database (PAM_DATA_SOURCE)
-source "$(dirname "$0")/podman/database.sh"
+source "$(dirname "$0")/database.sh"
 
 # SHA-256 fingerprint of a certificate file inside a container, or empty
 fingerprint() {
@@ -39,8 +38,8 @@ export LDAP_FP=$(fingerprint myldaptest /container/service/slapd/assets/certs/ld
 export AD_FP=$(fingerprint myadtest /var/lib/samba/private/tls/cert.pem)
 [ -z "$LDAP_FP" ] && echo "warning: myldaptest is not running, MYTEST_LDAP gets no pinned certificate"
 [ -z "$AD_FP" ] && echo "warning: myadtest is not running, MYTEST_AD gets no pinned certificate"
-export DB_CA="$(cat "$(dirname "$0")/podman/targets/certs/ca.crt" 2>/dev/null)"
-[ -z "$DB_CA" ] && echo "warning: no test CA yet (startdatabases.sh): the database platforms trust Java's CAs only"
+export DB_CA="$(cat "$(dirname "$0")/targets/certs/ca.crt" 2>/dev/null)"
+[ -z "$DB_CA" ] && echo "warning: no test CA yet (lab.sh services): the database platforms trust Java's CAs only"
 
 python3 -I - <<'PY'
 import json, os, sys, time, urllib.error, urllib.parse, urllib.request
@@ -78,25 +77,25 @@ D, E = "/session/data/" + os.environ.get("PAM_DATA_SOURCE", "postgresql"), "/ses
 # Platforms
 platforms = {p["name"]: p["id"] for p in call("GET", E + "/platforms", token=T)}
 for p in [
-    {"name": "MYTEST_LDAP", "description": "OpenLDAP test server (startldap.sh)", "type": "ldap",
+    {"name": "MYTEST_LDAP", "description": "OpenLDAP test server", "type": "ldap",
      "settings": {"hostname": "myldaptest", "ldap-certificate-fingerprint": os.environ["LDAP_FP"],
                   "ldap-admin-dn": "cn=admin,dc=example,dc=org", "ldap-admin-password": "LdapAdm1n"},
      "policy": {"rotation-mode": "never"}},
-    {"name": "MYTEST_AD", "description": "Samba AD test domain ad.example.org (startad.sh)", "type": "ldap",
+    {"name": "MYTEST_AD", "description": "Samba AD test domain ad.example.org", "type": "ldap",
      "settings": {"hostname": "myadtest", "ldap-directory-type": "active-directory",
                   "ldap-certificate-fingerprint": os.environ["AD_FP"],
                   "ldap-admin-dn": "CN=Administrator,CN=Users,DC=ad,DC=example,DC=org",
                   "ldap-admin-password": "AdAdm1n-Pass"},
      "policy": {"rotation-mode": "after-use"}},
-    {"name": "MYTEST_KERBEROS", "description": "MIT Kerberos test realm EXAMPLE.ORG (startkdc.sh)", "type": "kerberos",
+    {"name": "MYTEST_KERBEROS", "description": "MIT Kerberos test realm EXAMPLE.ORG", "type": "kerberos",
      "settings": {"kerberos-realm": "EXAMPLE.ORG", "kerberos-kdc": "mykdctest",
                   "kerberos-admin-principal": "admin/admin", "kerberos-admin-password": "KdcAdm1n-Pass"},
      "policy": {"rotation-mode": "after-use"}},
-    {"name": "MYTEST_TACACS", "description": "tac_plus-ng test server (starttacacs.sh)", "type": "tacacs",
+    {"name": "MYTEST_TACACS", "description": "tac_plus-ng test server", "type": "tacacs",
      "settings": {"tacacs-server": "mytacacstest", "tacacs-secret": "TacacsSecr3t"},
      "policy": {"rotation-mode": "after-use"}},
 ] + [
-    {"name": "MYTEST_" + name.upper(), "description": label + " test database " + host + " (startdatabases.sh)",
+    {"name": "MYTEST_" + name.upper(), "description": label + " test database " + host,
      "type": "database",
      "settings": {"database-type": kind, "database-hostname": host, "database-ca-certificates": os.environ["DB_CA"],
                   "database-admin-username": admin, "database-admin-password": password},

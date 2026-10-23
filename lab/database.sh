@@ -1,11 +1,11 @@
 #!/bin/bash
 # The test database, in the container myguacdbtest: PostgreSQL (the default),
-# MySQL, MariaDB or SQL Server. Sourced by build.sh, reset.sh, startguac2.sh
-# and the test suites.
+# MySQL, MariaDB or SQL Server. Sourced by lab.sh, seed.sh and the test
+# suites.
 #
-# PAM_DB chooses it (postgresql, mysql, mariadb or sqlserver) when build.sh
-# or reset.sh start it; otherwise the running container's image tells.
-# Each keeps its own data: PostgreSQL in podman/db, the others in podman
+# PAM_DB chooses it (postgresql, mysql, mariadb or sqlserver) when lab.sh
+# starts it; otherwise the running container's image tells.
+# Each keeps its own data: PostgreSQL in lab/db, the others in podman
 # volumes (pam-mysql-data, pam-mariadb-data, pam-sqlserver-data), created
 # with Guacamole's schema and its guacadmin user on first start. MySQL,
 # MariaDB and SQL Server run 3 hours ahead of UTC (unlike Guacamole), so

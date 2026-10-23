@@ -77,7 +77,7 @@ these databases:
   of its MyBatis mappers aren't valid XML (`UserGroupPermissionMapper.xml`
   has `<test>` where `<otherwise>` belongs, and `ConnectionRecordMapper.xml`
   `<hen` for `<when`). It needs those two lines fixed in its jar
-  (`podman/database.sh` shows how) until a Guacamole release fixes them.
+  (`lab/database.sh` shows how) until a Guacamole release fixes them.
 - **MySQL and MariaDB**: Guacamole can't delete user groups (its statement
   lacks an `AND`).
 
@@ -387,7 +387,7 @@ Driver for SQL Server), then restart Guacamole. A missing driver is named when
 testing or rotating. The Docker image ships all three in
 `/opt/guacamole/drivers`, but only links its own database's: link the others,
 for example from a script in `/opt/guacamole/entrypoint.d` (as this
-repository's test setup does in `podman/entrypoint.d/855-add-pam.sh`):
+repository's test setup does in `lab/entrypoint.d/855-add-pam.sh`):
 
 ```
 for driver in /opt/guacamole/drivers/*.jar; do
@@ -575,31 +575,28 @@ openssl s_client -connect <host>:5986 </dev/null 2>/dev/null | openssl x509 -noo
 
 ## Development
 
-The scripts at the top of the repository run a test setup with podman, on a
-network named `myguacnet`. They're meant for development only: they use fixed
-test passwords.
+`build.sh` builds the jar. `lab/lab.sh` runs a test lab with podman, on a
+network named `myguacnet`, for development only: it uses fixed test
+passwords. Its commands run in the order given:
 
-The database is PostgreSQL unless `PAM_DB` says `mysql` (MySQL 8.4),
-`mariadb` (MariaDB 11.4) or `sqlserver` (SQL Server 2022) when `build.sh` or
-`reset.sh` starts it, as `PAM_DB=sqlserver ./build.sh`. The other scripts
-and the tests use whichever is running. Each keeps its own data
-(`podman/db` for PostgreSQL, podman volumes for the others), created with
-Guacamole's schema and `guacadmin` / `guacadmin` on first start
-(`podman/database.sh`).
-
-| Script | What it does |
+| Command | What it does |
 |---|---|
-| `reset.sh` | Recreates the Guacamole database, with only Guacamole's schema and `guacadmin` / `guacadmin` |
-| `build.sh` | Builds the jar and (re)starts the database, guacd and Guacamole with the extension, on http://localhost:8080. Stored secrets are encrypted with a fixed test key; run `PAM_ENCRYPTION_KEY= ./build.sh` to store them unencrypted |
-| `startssh.sh` | SSH server `mysshtest` on port 22, user `mysshtest` / `P@ssw0rd` |
-| `startldap.sh` | OpenLDAP server `myldaptest`, test user `uid=ldaptest,ou=people,dc=example,dc=org` |
-| `startad.sh` | Samba Active Directory `myadtest` (LDAPS and Kerberos), test user `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`. Prints the certificate fingerprint to pin |
-| `startkdc.sh` | MIT Kerberos KDC `mykdctest`, realm `EXAMPLE.ORG`, admin `admin/admin`, test user `kdctest` |
-| `startdatabases.sh` | Test databases (not Guacamole's own) over TLS, with certificates of a test CA generated into `podman/targets/certs`: PostgreSQL `mypgtarget` (`postgres`), MySQL `mymysqltarget` and MariaDB `mymariadbtarget` (`root`), SQL Server `mymssqltarget` (`sa`), each with a test account `dbtest` |
-| `starttacacs.sh` | TACACS+ server `mytacacstest` (tac_plus-ng, built from source into `localhost/pam-tacacs-test` the first time), port 49, shared secret `TacacsSecr3t`, test user `tactest` |
-| `startguac2.sh` | A second Guacamole server sharing the database, on http://localhost:8081, for the two-server tests. Stopped by `build.sh`: start it again after a build |
-| `seed.sh` | Adds the test platforms, connections, users and group to a fresh database, through the REST API |
-| `stop.sh` | Stops all of the above |
+| `lab/lab.sh guacamole` | (Re)starts Guacamole's database, guacd and Guacamole with the built jar, on http://localhost:8080. Run it again after each build. Stored secrets are encrypted with a fixed test key; set `PAM_ENCRYPTION_KEY=` to store them unencrypted |
+| `lab/lab.sh guacamole --second` | Also a second Guacamole sharing the database and guacd, on http://localhost:8081, for the two-server tests (`--second` alone starts only that one) |
+| `lab/lab.sh services` | The servers whose accounts the lab manages, keeping those already running: SSH `mysshtest` (user `mysshtest`), OpenLDAP `myldaptest` (`uid=ldaptest,ou=people,dc=example,dc=org`), Samba AD `myadtest` (LDAPS and Kerberos, `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`), MIT Kerberos `mykdctest` (realm `EXAMPLE.ORG`, `kdctest`), TACACS+ `mytacacstest` (tac_plus-ng, built from source into `localhost/pam-tacacs-test` the first time; `tactest`), and databases over TLS with certificates of a test CA generated into `lab/targets/certs`: PostgreSQL `mypgtarget`, MySQL `mymysqltarget`, MariaDB `mymariadbtarget`, SQL Server `mymssqltarget` (`dbtest`). Passwords are listed at the top of `lab/lab.sh` |
+| `lab/lab.sh seed` | Adds the test platforms, connections, users and group to a fresh database, through the REST API (`lab/seed.sh`) |
+| `lab/lab.sh reset` | Recreates Guacamole's database, with only Guacamole's schema and `guacadmin` / `guacadmin` |
+| `lab/lab.sh stop` | Stops every container of the lab |
+
+For example, `./build.sh && lab/lab.sh reset guacamole services seed` starts
+afresh.
+
+Guacamole's database is PostgreSQL unless `PAM_DB` says `mysql` (MySQL 8.4),
+`mariadb` (MariaDB 11.4) or `sqlserver` (SQL Server 2022) when `lab.sh`
+starts it, as `PAM_DB=sqlserver lab/lab.sh guacamole`. Later commands and
+the tests use whichever is running. Each keeps its own data (`lab/db` for
+PostgreSQL, podman volumes for the others), created with Guacamole's schema
+and `guacadmin` / `guacadmin` on first start (`lab/database.sh`).
 
 Tests are described in [tests/README.md](tests/README.md): unit tests run
 with every build, and `tests/run.sh` runs the live suites against this setup.
