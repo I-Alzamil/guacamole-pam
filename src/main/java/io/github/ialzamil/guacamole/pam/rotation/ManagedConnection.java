@@ -45,7 +45,7 @@ public class ManagedConnection {
         this.interval = policy.getIntervalHours();
         this.overridden = target.getAttribute(PamAttributes.ROTATION_MODE) != null
                 || target.getAttribute(PamAttributes.ROTATION_INTERVAL) != null
-                || target.getAttribute(PamAttributes.PASSWORD_LENGTH) != null;
+                || target.getAttribute(PamAttributes.PASSWORD_POLICY) != null;
         this.lastAttempt = toMillis(state.getLastAttempt());
         this.lastSuccess = toMillis(state.getLastSuccess());
         this.status = rotating ? RotationResult.RUNNING : state.getStatus();

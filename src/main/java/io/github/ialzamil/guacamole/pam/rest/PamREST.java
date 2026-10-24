@@ -38,6 +38,9 @@ import io.github.ialzamil.guacamole.pam.checkout.RequestOutcome;
 import io.github.ialzamil.guacamole.pam.management.ManagementType;
 import io.github.ialzamil.guacamole.pam.management.ManagementTypes;
 import io.github.ialzamil.guacamole.pam.management.PlatformTestResult;
+import io.github.ialzamil.guacamole.pam.password.PasswordGenerator;
+import io.github.ialzamil.guacamole.pam.password.PasswordPolicy;
+import io.github.ialzamil.guacamole.pam.password.PasswordRules;
 import io.github.ialzamil.guacamole.pam.platform.Platform;
 import io.github.ialzamil.guacamole.pam.platform.PlatformImport;
 import io.github.ialzamil.guacamole.pam.rotation.ManagedConnection;
@@ -65,6 +68,13 @@ public class PamREST {
      * connection history.
      */
     private static final int CHECKOUT_HISTORY_LIMIT = 1000;
+
+    /**
+     * How many example passwords the password policy editor shows.
+     */
+    private static final int EXAMPLE_PASSWORDS = 3;
+
+    private final PasswordGenerator passwordGenerator = new PasswordGenerator();
 
     private final PamAuthenticationProvider provider;
 
@@ -311,6 +321,87 @@ public class PamREST {
     public void deletePlatform(@PathParam("id") String id) throws GuacamoleException {
         requireAdministrator();
         provider.getPlatforms().delete(parseId(id));
+    }
+
+    /**
+     * All password policies. Any user gets names, for the connection editor;
+     * administrators also get rules, and what uses each.
+     */
+    @GET
+    @Path("password-policies")
+    public List<PasswordPolicy> listPasswordPolicies() throws GuacamoleException {
+        List<PasswordPolicy> policies = provider.getPasswordPolicies().list();
+        if (!provider.isAdministrator(user)) {
+            for (PasswordPolicy policy : policies) {
+                policy.setRules(null);
+                policy.setPlatforms(null);
+                policy.setConnections(null);
+                policy.setDescription(null);
+            }
+        }
+        return policies;
+    }
+
+    /**
+     * The rules of passwords without a password policy, as the editor shows
+     * them.
+     */
+    @GET
+    @Path("password-policies/default")
+    public PasswordRules getDefaultPasswordRules() throws GuacamoleException {
+        requireAdministrator();
+        return PasswordRules.defaults().validate();
+    }
+
+    @POST
+    @Path("password-policies")
+    public PasswordPolicy createPasswordPolicy(PasswordPolicy policy) throws GuacamoleException {
+        requireAdministrator();
+        PasswordPolicy created = provider.getPasswordPolicies().create(policy);
+        logger.info("User \"{}\" created password policy \"{}\".", username(), Values.forLog(created.getName()));
+        return created;
+    }
+
+    @PUT
+    @Path("password-policies/{id}")
+    public PasswordPolicy updatePasswordPolicy(@PathParam("id") String id, PasswordPolicy policy)
+            throws GuacamoleException {
+        requireAdministrator();
+        PasswordPolicy updated = provider.getPasswordPolicies().update(parseId(id), policy);
+        logger.info("User \"{}\" updated password policy \"{}\".", username(), Values.forLog(updated.getName()));
+        return updated;
+    }
+
+    @DELETE
+    @Path("password-policies/{id}")
+    public void deletePasswordPolicy(@PathParam("id") String id) throws GuacamoleException {
+        requireAdministrator();
+        PasswordPolicy policy = provider.getPasswordPolicies().get(parseId(id));
+        if (policy == null)
+            throw new GuacamoleResourceNotFoundException("No such password policy.");
+        provider.getPasswordPolicies().delete(policy.getId());
+        logger.info("User \"{}\" deleted password policy \"{}\".", username(), Values.forLog(policy.getName()));
+    }
+
+    /**
+     * Examples of passwords the given rules make, saved or not, and their
+     * strength: bits of randomness, from how many characters each is drawn
+     * from.
+     */
+    @POST
+    @Path("password-policies/examples")
+    public Map<String, Object> examplePasswords(PasswordRules rules) throws GuacamoleException {
+        requireAdministrator();
+        if (rules == null)
+            throw new GuacamoleClientException("There are no rules.");
+        rules.validate();
+        List<String> examples = new ArrayList<>();
+        for (int i = 0; i < EXAMPLE_PASSWORDS; i++)
+            examples.add(passwordGenerator.generate(rules));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("examples", examples);
+        result.put("bits", PasswordGenerator.strengthBits(rules));
+        return result;
     }
 
     /**

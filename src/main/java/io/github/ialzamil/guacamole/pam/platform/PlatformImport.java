@@ -216,6 +216,7 @@ public class PlatformImport {
                 if (current != null && !current.getType().equals(platform.getType()))
                     throw new GuacamoleClientException("The existing platform of this name is of another type,"
                             + " which cannot be changed.");
+                repository.resolvePasswordPolicy(platform);
                 planned.add(new Planned(PlatformRepository.sanitize(platform, current),
                         current == null ? null : current.getId()));
                 results.add(new Result(shown, current == null ? CREATED : UPDATED, null));

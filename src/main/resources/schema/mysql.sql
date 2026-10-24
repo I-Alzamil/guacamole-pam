@@ -34,6 +34,19 @@ CREATE TABLE IF NOT EXISTS pam_platform (
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS pam_password_policy (
+
+  policy_id     integer       NOT NULL AUTO_INCREMENT,
+  name          varchar(128)  NOT NULL,
+  description   varchar(1024),
+  rules         mediumtext    NOT NULL,
+  last_modified datetime(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+  PRIMARY KEY (policy_id),
+  UNIQUE KEY pam_password_policy_name (name)
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS pam_rotation_state (
 
   connection_id    integer       NOT NULL,

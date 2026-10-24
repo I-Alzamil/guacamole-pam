@@ -36,6 +36,22 @@ CREATE TABLE IF NOT EXISTS pam_platform (
 
 );
 
+-- Password policies, which platforms and connections choose: what their
+-- generated passwords are made of (PasswordRules, as JSON). Without one, the
+-- built-in default applies
+CREATE TABLE IF NOT EXISTS pam_password_policy (
+
+  policy_id     serial        NOT NULL,
+  name          varchar(128)  NOT NULL,
+  description   varchar(1024),
+  rules         text          NOT NULL DEFAULT '{}',
+  last_modified timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (policy_id),
+  CONSTRAINT pam_password_policy_name UNIQUE (name)
+
+);
+
 -- Outcome of the latest rotation of each managed connection
 CREATE TABLE IF NOT EXISTS pam_rotation_state (
 

@@ -40,6 +40,41 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
     };
 
     /**
+     * Password policies: names for anyone, with their rules and what uses
+     * each for administrators.
+     */
+    service.getPasswordPolicies = function getPasswordPolicies() {
+        return request('GET', 'password-policies');
+    };
+
+    /**
+     * The rules of passwords without a password policy.
+     */
+    service.getDefaultPasswordRules = function getDefaultPasswordRules() {
+        return request('GET', 'password-policies/default');
+    };
+
+    service.createPasswordPolicy = function createPasswordPolicy(policy) {
+        return request('POST', 'password-policies', policy);
+    };
+
+    service.updatePasswordPolicy = function updatePasswordPolicy(policy) {
+        return request('PUT', 'password-policies/' + encodeURIComponent(policy.id), policy);
+    };
+
+    service.deletePasswordPolicy = function deletePasswordPolicy(id) {
+        return request('DELETE', 'password-policies/' + encodeURIComponent(id));
+    };
+
+    /**
+     * Example passwords of the given rules, saved or not, with their
+     * strength, as { examples, bits }.
+     */
+    service.getExamplePasswords = function getExamplePasswords(rules) {
+        return request('POST', 'password-policies/examples', rules);
+    };
+
+    /**
      * The settings shared by every server (administrators only).
      */
     service.getSettings = function getSettings() {

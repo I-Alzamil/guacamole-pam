@@ -12,12 +12,12 @@ public final class EffectivePolicy {
 
     private final String mode;
     private final Integer intervalHours;
-    private final int passwordLength;
+    private final String passwordPolicy;
 
-    private EffectivePolicy(String mode, Integer intervalHours, int passwordLength) {
+    private EffectivePolicy(String mode, Integer intervalHours, String passwordPolicy) {
         this.mode = mode;
         this.intervalHours = intervalHours;
-        this.passwordLength = passwordLength;
+        this.passwordPolicy = passwordPolicy;
     }
 
     /**
@@ -27,7 +27,7 @@ public final class EffectivePolicy {
     public static EffectivePolicy of(Platform platform, Target target) {
 
         if (platform == null)
-            return new EffectivePolicy(Platform.MODE_NEVER, null, PasswordGenerator.DEFAULT_LENGTH);
+            return new EffectivePolicy(Platform.MODE_NEVER, null, null);
 
         String mode = first(target.getAttribute(PamAttributes.ROTATION_MODE),
                 platform.getPolicy().get(Platform.POLICY_ROTATION_MODE), Platform.MODE_NEVER);
@@ -35,10 +35,10 @@ public final class EffectivePolicy {
         Integer interval = parse(first(target.getAttribute(PamAttributes.ROTATION_INTERVAL),
                 platform.getPolicy().get(Platform.POLICY_ROTATION_INTERVAL), null));
 
-        Integer length = parse(first(target.getAttribute(PamAttributes.PASSWORD_LENGTH),
-                platform.getPolicy().get(Platform.POLICY_PASSWORD_LENGTH), null));
+        String passwordPolicy = first(target.getAttribute(PamAttributes.PASSWORD_POLICY),
+                platform.getPolicy().get(Platform.POLICY_PASSWORD_POLICY), null);
 
-        return new EffectivePolicy(mode, interval, length == null ? PasswordGenerator.DEFAULT_LENGTH : length);
+        return new EffectivePolicy(mode, interval, passwordPolicy);
 
     }
 
@@ -56,8 +56,12 @@ public final class EffectivePolicy {
         return intervalHours;
     }
 
-    public int getPasswordLength() {
-        return passwordLength;
+    /**
+     * Identifier of the password policy of new passwords, or null for the
+     * default rules.
+     */
+    public String getPasswordPolicy() {
+        return passwordPolicy;
     }
 
     private static String first(String override, String platformValue, String fallback) {

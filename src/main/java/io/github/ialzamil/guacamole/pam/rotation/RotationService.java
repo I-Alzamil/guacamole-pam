@@ -29,6 +29,9 @@ import io.github.ialzamil.guacamole.pam.db.SchemaUnavailableException;
 import io.github.ialzamil.guacamole.pam.management.ManagementType;
 import io.github.ialzamil.guacamole.pam.management.ManagementTypes;
 import io.github.ialzamil.guacamole.pam.management.PasswordChanger;
+import io.github.ialzamil.guacamole.pam.password.PasswordGenerator;
+import io.github.ialzamil.guacamole.pam.password.PasswordPolicyRepository;
+import io.github.ialzamil.guacamole.pam.password.PasswordRules;
 import io.github.ialzamil.guacamole.pam.platform.Platform;
 import io.github.ialzamil.guacamole.pam.platform.PlatformRepository;
 
@@ -92,6 +95,8 @@ public final class RotationService {
 
     private final PlatformRepository platforms;
 
+    private final PasswordPolicyRepository passwordPolicies;
+
     private final ConnectionRepository connections;
 
     private final CheckoutRepository checkouts;
@@ -115,9 +120,10 @@ public final class RotationService {
      */
     private volatile long lastEndedCheck = System.currentTimeMillis();
 
-    public RotationService(PamDatabase database, PlatformRepository platforms, ConnectionRepository connections,
-            CheckoutRepository checkouts) {
+    public RotationService(PamDatabase database, PlatformRepository platforms,
+            PasswordPolicyRepository passwordPolicies, ConnectionRepository connections, CheckoutRepository checkouts) {
         this.platforms = platforms;
+        this.passwordPolicies = passwordPolicies;
         this.connections = connections;
         this.checkouts = checkouts;
         this.locks = new RotationLocks(database);
@@ -621,7 +627,15 @@ public final class RotationService {
             }
         }
 
-        String newPassword = passwordGenerator.generate(policyOf(target).getPasswordLength());
+        PasswordRules rules;
+        try {
+            rules = passwordPolicies.rulesOf(policyOf(target).getPasswordPolicy());
+        }
+        catch (GuacamoleClientException e) {
+            return configurationError(id, e.getMessage());
+        }
+
+        String newPassword = passwordGenerator.generate(rules);
         String oldPassword = changer.getCurrentPassword();
 
         // Store the new password before touching the target, so it can be

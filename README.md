@@ -10,8 +10,9 @@ Privileged access management for [Apache Guacamole](https://guacamole.apache.org
   only), over TACACS+ (accounts a TACACS+ server holds itself, where it
   allows password changes), or as database accounts (PostgreSQL, MySQL,
   MariaDB and SQL Server, over their JDBC drivers): its *type*. It also sets
-  when they're changed: never, after each use, or periodically. The new password
-  is only stored once the target accepts it.
+  when they're changed (never, after each use, or periodically), and the
+  *password policy* new passwords follow. The new password is only stored once
+  the target accepts it.
 - **Accounts.** An "Account" connection type holds a password that users check
   out for a limited time instead of opening a session. Use it for web consoles,
   service accounts and anything else Guacamole can't connect to.
@@ -374,6 +375,35 @@ Some settings stay in each server's `guacamole.properties`, as they're needed
 to reach the database, or protect what it stores: `pam-database`,
 `pam-database-max-connections` and the `pam-encryption-*` keys: keep them
 alike on every server.
+
+### Password policies
+
+New passwords are random, and follow a *password policy*, so they meet each
+target system's requirements. Without one, they have 24 characters, with at
+least one lowercase letter, uppercase letter, digit and symbol, using only
+`- _ = + . , : @` as symbols (no meaning on command lines), and none of the
+characters easily mistaken for others (`l`, `I`, `O`, `0`, `1`).
+
+The **Password Policies** tab (administrators only) holds named policies.
+Each sets:
+
+- the length, from 4 to 128 characters;
+- for lowercase letters, uppercase letters, digits and symbols: whether they
+  are allowed, and at least how many;
+- which symbols, which may be any printable ASCII characters;
+- whether to leave out characters easily mistaken for others, and whether
+  passwords start with a letter.
+
+Rules that can't make a password are refused, such as minimums adding up to
+more than the length. The editor shows examples and how strong the passwords
+are. It warns of symbols with a meaning on command lines (such as `$`, `!`
+or quotes), which break SSH scripts typing the password into a command
+rather than at a prompt; the other platform types pass passwords safely.
+
+A platform chooses a policy in its rotation policy, and a connection may
+choose another in its own (*Password policy*), for a host with its own
+requirements. A policy in use can't be deleted. Exported platforms name
+their policy, which an import must find by that name.
 
 ### Who may approve
 

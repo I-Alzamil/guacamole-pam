@@ -33,6 +33,8 @@ import io.github.ialzamil.guacamole.pam.db.PamDatabase;
 import io.github.ialzamil.guacamole.pam.db.SqlDialect;
 import io.github.ialzamil.guacamole.pam.management.ManagementType;
 import io.github.ialzamil.guacamole.pam.management.ManagementTypes;
+import io.github.ialzamil.guacamole.pam.password.PasswordPolicy;
+import io.github.ialzamil.guacamole.pam.password.PasswordPolicyRepository;
 
 /**
  * Storage of platforms in "pam_platform". Settings, secrets and policy are
@@ -60,10 +62,37 @@ public final class PlatformRepository {
 
     private final Secrets secrets;
 
-    public PlatformRepository(PamDatabase database, Secrets secrets) {
+    private final PasswordPolicyRepository passwordPolicies;
+
+    public PlatformRepository(PamDatabase database, Secrets secrets, PasswordPolicyRepository passwordPolicies) {
         this.database = database;
         this.secrets = secrets;
+        this.passwordPolicies = passwordPolicies;
         database.onFreshInstall(this::insertDefaults);
+    }
+
+    /**
+     * Makes the password policy a platform chooses its identifier, as
+     * stored: an import may name it instead, as exports do, since
+     * identifiers differ between installations.
+     *
+     * @throws GuacamoleClientException
+     *     If no policy has that identifier or name.
+     */
+    public void resolvePasswordPolicy(Platform platform) throws GuacamoleException {
+
+        if (platform == null || platform.getPolicy() == null)
+            return;
+        String reference = Values.trimToNull(platform.getPolicy().get(Platform.POLICY_PASSWORD_POLICY));
+        if (reference == null)
+            return;
+
+        Integer id = Values.parseId(reference);
+        PasswordPolicy policy = id != null ? passwordPolicies.get(id) : passwordPolicies.getByName(reference);
+        if (policy == null)
+            throw new GuacamoleClientException("There is no password policy \"" + reference + "\".");
+        platform.getPolicy().put(Platform.POLICY_PASSWORD_POLICY, Integer.toString(policy.getId()));
+
     }
 
     /**
@@ -186,6 +215,7 @@ public final class PlatformRepository {
 
     public Platform create(Platform platform) throws GuacamoleException {
 
+        resolvePasswordPolicy(platform);
         Platform clean = sanitize(platform, null);
 
         int id;
@@ -249,6 +279,7 @@ public final class PlatformRepository {
         if (platform != null)
             platform.setType(existing.getType());
 
+        resolvePasswordPolicy(platform);
         Platform clean = sanitize(platform, existing);
 
         try (Connection connection = database.getConnection()) {
@@ -473,10 +504,13 @@ public final class PlatformRepository {
         if (Platform.MODE_PERIODIC.equals(mode) && interval == null)
             throw new GuacamoleClientException("Periodic rotation needs an interval.");
 
-        Integer length = parseNumber(policy.get(Platform.POLICY_PASSWORD_LENGTH), 12, 128,
-                "The password length must be between 12 and 128 characters.");
-        if (length != null)
-            clean.put(Platform.POLICY_PASSWORD_LENGTH, length.toString());
+        // Its identifier: see resolvePasswordPolicy
+        String passwordPolicy = Values.trimToNull(policy.get(Platform.POLICY_PASSWORD_POLICY));
+        if (passwordPolicy != null) {
+            if (Values.parseId(passwordPolicy) == null)
+                throw new GuacamoleClientException("Unknown password policy \"" + passwordPolicy + "\".");
+            clean.put(Platform.POLICY_PASSWORD_POLICY, passwordPolicy);
+        }
 
         return clean;
 

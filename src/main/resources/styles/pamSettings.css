@@ -1169,3 +1169,84 @@ a.button.disabled {
     font-size: 0.85em;
     opacity: 0.7;
 }
+
+/* Password Policies tab */
+.pam-password-policies .pam-builtin td {
+    font-style: italic;
+}
+
+.pam-password-policies tr.selected td {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.pam-policy-kinds {
+    width: auto;
+    margin: 1em 0;
+}
+
+.pam-policy-kinds input[type="number"] {
+    width: 5em;
+}
+
+.pam-policy-symbols {
+    margin-left: 0.75em;
+    width: 12em;
+    font-family: monospace;
+}
+
+.pam-policy-option {
+    margin: 0.4em 0;
+}
+
+.pam-policy-warning,
+.pam-policy-error {
+    color: #b45309;
+    max-width: 48em;
+}
+
+.pam-policy-error {
+    color: #c62828;
+}
+
+.pam-policy-preview {
+    margin: 1em 0;
+}
+
+.pam-policy-examples {
+    list-style: none;
+    padding: 0;
+    margin: 0.25em 0 0;
+}
+
+.pam-policy-examples code {
+    font-size: 1.05em;
+    user-select: all;
+}
+
+.pam-strength {
+    font-weight: bold;
+}
+
+.pam-strength-weak {
+    color: #c62828;
+}
+
+.pam-strength-fair {
+    color: #b45309;
+}
+
+.pam-strength-strong {
+    color: #2e7d32;
+}
+
+.pam-policy-users {
+    max-width: 48em;
+    opacity: 0.8;
+}
+
+.pam-policy-fields {
+    border: none;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+}

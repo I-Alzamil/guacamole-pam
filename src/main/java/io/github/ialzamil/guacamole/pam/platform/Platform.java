@@ -33,9 +33,10 @@ public class Platform {
     public static final String POLICY_ROTATION_INTERVAL = "rotation-interval";
 
     /**
-     * Policy key: length of generated passwords.
+     * Policy key: identifier of the password policy of generated passwords,
+     * or none for the default rules.
      */
-    public static final String POLICY_PASSWORD_LENGTH = "password-length";
+    public static final String POLICY_PASSWORD_POLICY = "password-policy";
 
     public static final String MODE_NEVER = "never";
     public static final String MODE_AFTER_USE = "after-use";

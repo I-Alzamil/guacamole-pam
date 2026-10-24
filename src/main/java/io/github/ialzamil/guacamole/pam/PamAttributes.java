@@ -35,7 +35,12 @@ public final class PamAttributes {
      */
     public static final String ROTATION_MODE = "pam-rotation-mode";
     public static final String ROTATION_INTERVAL = "pam-rotation-interval";
-    public static final String PASSWORD_LENGTH = "pam-password-length";
+
+    /**
+     * Identifier of the password policy of the connection's new passwords,
+     * in place of its platform's. Empty means the platform's.
+     */
+    public static final String PASSWORD_POLICY = "pam-password-policy";
 
     /**
      * How long, in minutes, a requested password stays checked out before it
@@ -135,6 +140,11 @@ public final class PamAttributes {
     public static final String PLATFORM_FIELD_TYPE = "PAM_PLATFORM";
 
     /**
+     * Custom field type rendering a drop-down of password policies.
+     */
+    public static final String PASSWORD_POLICY_FIELD_TYPE = "PAM_PASSWORD_POLICY";
+
+    /**
      * Every form of the password management of a connection.
      */
     public static final List<Form> CONNECTION_FORMS;
@@ -158,7 +168,7 @@ public final class PamAttributes {
             new EnumField(ROTATION_MODE, Arrays.asList("", Platform.MODE_NEVER,
                     Platform.MODE_AFTER_USE, Platform.MODE_PERIODIC)),
             new NumericField(ROTATION_INTERVAL),
-            new NumericField(PASSWORD_LENGTH)
+            new Field(PASSWORD_POLICY, PASSWORD_POLICY_FIELD_TYPE)
         )));
 
         forms.addAll(ManagementTypes.getConnectionForms());

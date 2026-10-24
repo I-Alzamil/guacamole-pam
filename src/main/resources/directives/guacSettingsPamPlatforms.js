@@ -57,7 +57,7 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
                 fields : [
                     { name : 'rotation-mode', type : 'ENUM', options : ['never', 'after-use', 'periodic'] },
                     { name : 'rotation-interval', type : 'NUMERIC' },
-                    { name : 'password-length', type : 'NUMERIC' }
+                    { name : 'password-policy', type : 'PAM_PASSWORD_POLICY' }
                 ]
             }];
 
@@ -138,7 +138,18 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
              */
             $scope.filteredPlatformProperties = ['pamFilterText'];
 
+            /**
+             * Names of the password policies by identifier, for exports.
+             */
+            var passwordPolicyNames = {};
+
             var loadPlatforms = function loadPlatforms() {
+                pamService.getPasswordPolicies().then(function policiesRetrieved(policies) {
+                    passwordPolicyNames = {};
+                    angular.forEach(policies, function addName(policy) {
+                        passwordPolicyNames[policy.id] = policy.name;
+                    });
+                });
                 return pamService.getPlatforms().then(function platformsRetrieved(platforms) {
                     angular.forEach(platforms, function addFilterText(platform) {
                         pamFilterText(platform, [
@@ -321,6 +332,16 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
                     fields.description = platform.description;
                 fields.settings = normalize(platform.settings);
                 fields.policy = normalize(platform.policy);
+
+                // Named, as identifiers differ between installations
+                var policyId = fields.policy['password-policy'];
+                if (policyId) {
+                    if (passwordPolicyNames[policyId])
+                        fields.policy['password-policy'] = passwordPolicyNames[policyId];
+                    else
+                        delete fields.policy['password-policy'];
+                }
+
                 return fields;
             };
 

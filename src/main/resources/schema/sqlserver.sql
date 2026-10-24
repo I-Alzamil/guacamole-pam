@@ -40,6 +40,20 @@ CREATE TABLE pam_platform (
 
 );
 
+IF OBJECT_ID(N'pam_password_policy', N'U') IS NULL
+CREATE TABLE pam_password_policy (
+
+  policy_id     int            NOT NULL IDENTITY(1,1),
+  name          nvarchar(128)  NOT NULL,
+  description   nvarchar(1024),
+  rules         nvarchar(max)  NOT NULL DEFAULT '{}',
+  last_modified datetime2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
+
+  CONSTRAINT pam_password_policy_pkey PRIMARY KEY (policy_id),
+  CONSTRAINT pam_password_policy_name UNIQUE (name)
+
+);
+
 IF OBJECT_ID(N'pam_rotation_state', N'U') IS NULL
 CREATE TABLE pam_rotation_state (
 

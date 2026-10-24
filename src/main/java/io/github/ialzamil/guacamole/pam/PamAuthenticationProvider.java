@@ -28,6 +28,7 @@ import io.github.ialzamil.guacamole.pam.crypto.Secrets;
 import io.github.ialzamil.guacamole.pam.db.ConnectionRepository;
 import io.github.ialzamil.guacamole.pam.db.ConnectionSecrets;
 import io.github.ialzamil.guacamole.pam.db.PamDatabase;
+import io.github.ialzamil.guacamole.pam.password.PasswordPolicyRepository;
 import io.github.ialzamil.guacamole.pam.platform.PlatformImport;
 import io.github.ialzamil.guacamole.pam.platform.PlatformRepository;
 import io.github.ialzamil.guacamole.pam.rotation.RotationService;
@@ -55,6 +56,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
 
     private final PlatformRepository platforms;
+
+    private final PasswordPolicyRepository passwordPolicies;
 
     private final PlatformImport platformImport;
 
@@ -111,6 +114,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         if (!active) {
             logger.warn("The PAM extension is inactive: {} Guacamole works as without it.", unavailable);
             platforms = null;
+            passwordPolicies = null;
             platformImport = null;
             connections = null;
             rotationService = null;
@@ -137,11 +141,12 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         settings = new PamSettings(database, environment);
         CheckoutRepository checkouts = new CheckoutRepository(database);
         connectionSecrets = new ConnectionSecrets(database, secrets);
-        platforms = new PlatformRepository(database, secrets);
+        passwordPolicies = new PasswordPolicyRepository(database);
+        platforms = new PlatformRepository(database, secrets, passwordPolicies);
         platformImport = new PlatformImport(platforms);
         connections = new ConnectionRepository(database, secrets, connectionSecrets);
         secretMigration = new SecretMigration(database, platforms, connections, connectionSecrets, secrets);
-        rotationService = new RotationService(database, platforms, connections, checkouts);
+        rotationService = new RotationService(database, platforms, passwordPolicies, connections, checkouts);
         approvals = new ApprovalRepository(database);
         approvers = new ApproverDirectory(database);
         badgePreferences = new BadgePreferences(database);
@@ -261,6 +266,10 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     public BadgePreferences getBadgePreferences() {
         return badgePreferences;
+    }
+
+    public PasswordPolicyRepository getPasswordPolicies() {
+        return passwordPolicies;
     }
 
     public PamSettings getSettings() {
