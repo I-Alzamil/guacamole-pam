@@ -79,8 +79,9 @@ public final class PlatformRepository {
      *     If no policy has that identifier.
      */
     private void requirePasswordPolicy(Platform platform) throws GuacamoleException {
-        String reference = platform == null ? null
-                : Values.trimToNull(platform.getPolicy().get(Platform.POLICY_PASSWORD_POLICY));
+        if (platform == null)
+            return;
+        String reference = Values.trimToNull(platform.getPolicy().get(Platform.POLICY_PASSWORD_POLICY));
         if (reference == null)
             return;
         Integer id = Values.parseId(reference);
@@ -97,8 +98,9 @@ public final class PlatformRepository {
      *     If no policy has that name.
      */
     void namePasswordPolicy(Platform platform) throws GuacamoleException {
-        String name = platform == null ? null
-                : Values.trimToNull(platform.getPolicy().get(Platform.POLICY_PASSWORD_POLICY));
+        if (platform == null)
+            return;
+        String name = Values.trimToNull(platform.getPolicy().get(Platform.POLICY_PASSWORD_POLICY));
         if (name == null)
             return;
         PasswordPolicy policy = passwordPolicies.getByName(name);
