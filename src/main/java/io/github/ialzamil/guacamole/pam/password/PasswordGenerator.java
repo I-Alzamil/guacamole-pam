@@ -20,6 +20,12 @@ public final class PasswordGenerator {
      */
     private static final String AMBIGUOUS = "lIO01";
 
+    /**
+     * Start of a Guacamole token, such as ${GUAC_USERNAME}, which Guacamole
+     * would replace in a password stored in a connection's parameters.
+     */
+    private static final String GUACAMOLE_TOKEN = "${";
+
     private final SecureRandom random = new SecureRandom();
 
     /**
@@ -47,6 +53,23 @@ public final class PasswordGenerator {
 
         while (password.size() < rules.getLength())
             pick(password, all, 1);
+
+        // Never "${", which Guacamole reads as the start of a token: shuffled
+        // again until it is not there, which keeps every minimum (with every
+        // "{" before every "$", it never is)
+        String text;
+        do {
+            text = arrange(password, rules, letters);
+        } while (text.contains(GUACAMOLE_TOKEN));
+        return text;
+
+    }
+
+    /**
+     * The characters in random order, starting with a letter if the rules
+     * say so.
+     */
+    private String arrange(List<Character> password, PasswordRules rules, String letters) {
 
         // Shuffle, so the characters of the minimums are anywhere
         for (int i = password.size() - 1; i > 0; i--) {

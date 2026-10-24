@@ -100,6 +100,30 @@ public class PasswordGeneratorTest {
         assertTrue("Ambiguous characters are allowed when asked", sawZeroOrOne);
     }
 
+    /**
+     * "${" starts a Guacamole token, which Guacamole would replace in a
+     * password stored in a connection's parameters: never made, even when
+     * most characters are "$" and "{".
+     */
+    @Test
+    public void neverStartsAGuacamoleToken() throws GuacamoleClientException {
+        PasswordRules rules = PasswordRules.defaults();
+        rules.setLength(6);
+        rules.setLowercase(false);
+        rules.setUppercase(false);
+        rules.setMinDigits(0);
+        rules.setSymbolSet("${");
+        rules.setMinSymbols(5);
+        rules.validate();
+        boolean sawBoth = false;
+        for (int i = 0; i < ROUNDS * 4; i++) {
+            String password = generator.generate(rules);
+            assertFalse(password, password.contains("${"));
+            sawBoth |= password.contains("$") && password.contains("{");
+        }
+        assertTrue("Both symbols are still used", sawBoth);
+    }
+
     @Test
     public void estimatesStrength() throws GuacamoleClientException {
         // 25 + 24 + 8 + 8 characters (lowercase without l, uppercase without I and O, digits without 0 and 1)
