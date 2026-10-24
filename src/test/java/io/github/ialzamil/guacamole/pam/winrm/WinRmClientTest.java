@@ -117,7 +117,26 @@ public class WinRmClientTest {
         assertEquals("", windows.stdin.toString());
 
         outcome = client.changePassword(target(false, FINGERPRINT), "New-Pw1!");
-        assertEquals("The host refused the account's current password.", outcome.getError());
+        assertTrue(outcome.getError(), outcome.getError().startsWith("The host refused the account's sign-in: its"
+                + " current password is wrong, or it may not use WinRM"));
+    }
+
+    /**
+     * Signed in, but refused the shell, as Windows refuses accounts that
+     * are not administrators: the new password was never sent.
+     */
+    @Test
+    public void refusedShellChangesNothing() {
+        windows.refuseShell = true;
+        ChangeOutcome outcome = client.changePassword(target(false, FINGERPRINT), "New-Pw1!");
+        assertFalse(outcome.isNewPasswordSent());
+        assertTrue(outcome.getError(), outcome.getError().contains("Access is denied"));
+        assertTrue(outcome.getError(), outcome.getError().contains("configure an administrator on the platform"));
+        assertEquals("", windows.stdin.toString());
+
+        outcome = client.changePassword(target(true, FINGERPRINT), "New-Pw1!");
+        assertFalse(outcome.isNewPasswordSent());
+        assertFalse(outcome.getError(), outcome.getError().contains("configure an administrator"));
     }
 
     @Test

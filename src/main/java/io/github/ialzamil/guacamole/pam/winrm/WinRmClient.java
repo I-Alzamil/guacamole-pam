@@ -107,15 +107,23 @@ public class WinRmClient {
             return new ChangeOutcome(true, true, null, null, session.getPresentedCertificate());
 
         }
+        // Windows refuses accounts that may not use WinRM as it refuses wrong
+        // passwords
         catch (WinRmSession.LoginRefusedException e) {
             return new ChangeOutcome(false, false, useAdmin
                     ? "The host refused the administrator's credentials."
-                    : "The host refused the account's current password.", null, session.getPresentedCertificate());
+                    : "The host refused the account's sign-in: its current password is wrong, or it may not use"
+                        + " WinRM, which Windows allows administrators only. Configure an administrator on the"
+                        + " platform to change the passwords of other accounts.", null,
+                    session.getPresentedCertificate());
         }
         catch (IOException | RuntimeException e) {
-            // Once logged in, the script may have run
-            return new ChangeOutcome(false, session.isLoggedIn(), describe(target, e), null,
-                    session.getPresentedCertificate());
+            // Once given its input, the script may have run with the new password
+            String error = describe(target, e);
+            if (!useAdmin && !session.isInputSent() && error.contains("Access is denied"))
+                error += " The account may not use WinRM's remote shell, which Windows allows administrators only"
+                        + " (unless its RootSDDL grants more): configure an administrator on the platform instead.";
+            return new ChangeOutcome(false, session.isInputSent(), error, null, session.getPresentedCertificate());
         }
         finally {
             session.close();

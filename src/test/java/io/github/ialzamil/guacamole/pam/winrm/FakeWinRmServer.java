@@ -42,6 +42,7 @@ final class FakeWinRmServer implements AutoCloseable {
     volatile String stderr = "";
     volatile int exitCode = 0;
     volatile boolean refuseLogin = false;
+    volatile boolean refuseShell = false;
 
     // What the client sent
     final List<String> actions = Collections.synchronizedList(new ArrayList<>());
@@ -150,6 +151,14 @@ final class FakeWinRmServer implements AutoCloseable {
             switch (name) {
 
                 case "Create":
+                    // As Windows answers accounts its RootSDDL leaves out
+                    if (refuseShell) {
+                        respond(out, 500, "", envelope("<s:Fault><s:Code><s:Value>s:Sender</s:Value></s:Code>"
+                                + "<s:Detail><f:WSManFault xmlns:f=\"http://schemas.microsoft.com/wbem/wsman/1/wsmanfault\""
+                                + " Code=\"5\"><f:Message>Access is denied. </f:Message></f:WSManFault></s:Detail>"
+                                + "</s:Fault>"), false);
+                        break;
+                    }
                     respond(out, 200, "", envelope("<rsp:Shell><rsp:ShellId>SHELL-1</rsp:ShellId></rsp:Shell>"), false);
                     break;
 

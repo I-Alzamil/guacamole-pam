@@ -67,6 +67,8 @@ class WinRmSession implements AutoCloseable {
 
     private boolean authenticated;
 
+    private boolean inputSent;
+
     WinRmSession(WinRmTarget target, WinRmTarget.Credentials user, String password) {
         this.user = user;
         this.password = password;
@@ -84,10 +86,11 @@ class WinRmSession implements AutoCloseable {
     }
 
     /**
-     * Whether the host accepted the login, after which commands may have run.
+     * Whether a command was given its input, where passwords are passed:
+     * until then, nothing that runs has them.
      */
-    boolean isLoggedIn() {
-        return authenticated;
+    boolean isInputSent() {
+        return inputSent;
     }
 
     /**
@@ -123,6 +126,7 @@ class WinRmSession implements AutoCloseable {
             if (commandId == null)
                 throw new IOException("The host did not start the command.");
 
+            inputSent = true;
             send(WsMan.SHELL + "Send", shellId, null,
                     "<rsp:Send><rsp:Stream Name=\"stdin\" CommandId=\"" + commandId + "\" End=\"true\">"
                     + Base64.getEncoder().encodeToString(stdin.getBytes(StandardCharsets.UTF_8))
