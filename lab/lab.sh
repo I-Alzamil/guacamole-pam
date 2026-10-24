@@ -133,6 +133,8 @@ start_ldap() {
         -e LDAP_TLS_VERIFY_CLIENT=never \
         docker.io/osixia/openldap:1.5.0 >/dev/null || return 1
 
+    # The image runs slapd once to set itself up, then again for good
+    until podman logs myldaptest 2>&1 | grep -q "Running /container/run/process/slapd/run"; do sleep 1; done
     until podman exec myldaptest ldapsearch -x -H ldap://localhost -b dc=example,dc=org \
         -D cn=admin,dc=example,dc=org -w LdapAdm1n -s base >/dev/null 2>&1; do sleep 1; done
     podman exec -i myldaptest ldapadd -x -H ldap://localhost -D cn=admin,dc=example,dc=org -w LdapAdm1n >/dev/null <<'LDIF'
