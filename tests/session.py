@@ -9,6 +9,7 @@ Prints "open" once the tunnel is connected and "closed" when it ends, from
 either side. Ends the session cleanly on SIGTERM or SIGINT.
 """
 
+import codecs
 import os
 import signal
 import sys
@@ -49,8 +50,32 @@ def write(instructions):
         done.set()
 
 
+def instructions(buffer):
+    """Splits off the complete instructions at the start of buffer, each as
+    its list of elements, returning them with what remains. Elements are
+    prefixed by their length in characters, so may hold "," or ";"."""
+    found = []
+    while True:
+        elements, i = [], 0
+        while True:
+            dot = buffer.find(".", i)
+            if dot < 0:
+                return found, buffer
+            end = dot + 1 + int(buffer[i:dot])
+            if end >= len(buffer):
+                return found, buffer
+            elements.append(buffer[dot + 1:end])
+            i = end + 1
+            if buffer[end] == ";":
+                break
+        found.append(elements)
+        buffer = buffer[i:]
+
+
 def read():
-    """Reads instructions, answering each "sync" so guacd keeps the user."""
+    """Reads instructions as they arrive, answering each "sync" at once, as
+    a browser does. Guacamole streams one read response for as long as no
+    other read takes over, so it is read in pieces rather than whole."""
     n = 0
     while not done.is_set():
         request = urllib.request.Request("%s?read:%s:%d" % (tunnel, uuid, n), headers=dict(headers))
@@ -58,17 +83,23 @@ def read():
             with urllib.request.urlopen(request, timeout=30) as response:
                 if response.headers.get("Guacamole-Status-Code"):
                     break
-                body = response.read().decode(errors="replace")
+                decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+                buffer, received = "", False
+                while not done.is_set():
+                    chunk = response.read1(65536)
+                    if not chunk:
+                        break
+                    received = True
+                    found, buffer = instructions(buffer + decoder.decode(chunk))
+                    for opcode, *args in found:
+                        if opcode == "sync":
+                            write("4.sync,%d.%s;" % (len(args[0]), args[0]))
+                        elif opcode in ("disconnect", "error"):
+                            done.set()
         except Exception:
             break
-        if not body:
+        if not received:
             break
-        for part in body.split(";"):
-            if part.startswith("4.sync,"):
-                timestamp = part.split(",")[1].split(".", 1)[1]
-                write("4.sync,%d.%s;" % (len(timestamp), timestamp))
-            elif part.startswith("10.disconnect") or part.startswith("5.error"):
-                done.set()
         n += 1
     done.set()
 
