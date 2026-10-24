@@ -139,7 +139,7 @@ check "...or a connection" "400 This password policy is still used by connection
 R=$(api PUT "$PAM/platforms/$LDAPS" "$ADMIN" "$(curl -s "$PAM/platforms/$LDAPS?token=$ADMIN" | python3 -I -c "
 import sys,json
 p=json.load(sys.stdin); p['policy']['password-policy']='999999'; print(json.dumps(p))")")
-check "a platform choosing no such policy: refused" "400 There is no password policy \"999999\"." \
+check "a platform choosing no such policy: refused" "400 There is no password policy 999999." \
     "$(status_of "$R") $(message_of "$R")"
 
 # A policy deleted by hand while chosen
@@ -163,6 +163,15 @@ R=$(api POST "$PAM/platforms/import" "$ADMIN" '{"platforms":[{"name":"t28 import
     "settings":{"script":"passwd\n@expect assword\n<NEWPASS>\n"},"policy":{"password-policy":"t28 no such policy"}}]}')
 check "...an unknown one: refused" "False There is no password policy \"t28 no such policy\"." \
     "$(json_get "${R#* }" "str(d['imported']) + ' ' + d['results'][0]['message']")"
+
+# A name that is another policy's identifier is still a name
+create_policy NUMBERED "{\"name\":\"$OWN\",\"rules\":{}}"
+api POST "$PAM/platforms/import" "$ADMIN" "{\"platforms\":[{\"name\":\"t28 imported 3\",\"type\":\"ssh\",
+    \"settings\":{\"script\":\"passwd\\n@expect assword\\n<NEWPASS>\\n\"},\"policy\":{\"password-policy\":\"$OWN\"}}]}" >/dev/null
+IMPORTED3=$(platform_id "t28 imported 3")
+[ -n "$IMPORTED3" ] && on_cleanup "api DELETE '$PAM/platforms/$IMPORTED3' \"\$ADMIN\""
+check "...a policy named as another's identifier: the one of that name" "$NUMBERED" \
+    "$(json_get "$(curl -s "$PAM/platforms/$IMPORTED3?token=$ADMIN")" "d['policy'].get('password-policy')")"
 
 # Back to no policy, so cleanup can delete them
 api PUT "$PAM/platforms/$LDAPS" "$ADMIN" "$(curl -s "$PAM/platforms/$LDAPS?token=$ADMIN" | python3 -I -c "

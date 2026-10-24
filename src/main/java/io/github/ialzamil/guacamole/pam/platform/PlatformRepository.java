@@ -72,27 +72,39 @@ public final class PlatformRepository {
     }
 
     /**
-     * Makes the password policy a platform chooses its identifier, as
-     * stored: an import may name it instead, as exports do, since
-     * identifiers differ between installations.
+     * Requires the password policy a platform chooses, by identifier, to
+     * exist.
      *
      * @throws GuacamoleClientException
-     *     If no policy has that identifier or name.
+     *     If no policy has that identifier.
      */
-    public void resolvePasswordPolicy(Platform platform) throws GuacamoleException {
-
-        if (platform == null || platform.getPolicy() == null)
-            return;
-        String reference = Values.trimToNull(platform.getPolicy().get(Platform.POLICY_PASSWORD_POLICY));
+    private void requirePasswordPolicy(Platform platform) throws GuacamoleException {
+        String reference = platform == null ? null
+                : Values.trimToNull(platform.getPolicy().get(Platform.POLICY_PASSWORD_POLICY));
         if (reference == null)
             return;
-
         Integer id = Values.parseId(reference);
-        PasswordPolicy policy = id != null ? passwordPolicies.get(id) : passwordPolicies.getByName(reference);
-        if (policy == null)
-            throw new GuacamoleClientException("There is no password policy \"" + reference + "\".");
-        platform.getPolicy().put(Platform.POLICY_PASSWORD_POLICY, Integer.toString(policy.getId()));
+        if (id == null || passwordPolicies.get(id) == null)
+            throw new GuacamoleClientException("There is no password policy " + reference + ".");
+    }
 
+    /**
+     * Turns the password policy an imported platform names, as exports name
+     * it (identifiers differing between installations), into its
+     * identifier.
+     *
+     * @throws GuacamoleClientException
+     *     If no policy has that name.
+     */
+    void namePasswordPolicy(Platform platform) throws GuacamoleException {
+        String name = platform == null ? null
+                : Values.trimToNull(platform.getPolicy().get(Platform.POLICY_PASSWORD_POLICY));
+        if (name == null)
+            return;
+        PasswordPolicy policy = passwordPolicies.getByName(name);
+        if (policy == null)
+            throw new GuacamoleClientException("There is no password policy \"" + name + "\".");
+        platform.getPolicy().put(Platform.POLICY_PASSWORD_POLICY, Integer.toString(policy.getId()));
     }
 
     /**
@@ -215,7 +227,7 @@ public final class PlatformRepository {
 
     public Platform create(Platform platform) throws GuacamoleException {
 
-        resolvePasswordPolicy(platform);
+        requirePasswordPolicy(platform);
         Platform clean = sanitize(platform, null);
 
         int id;
@@ -279,7 +291,7 @@ public final class PlatformRepository {
         if (platform != null)
             platform.setType(existing.getType());
 
-        resolvePasswordPolicy(platform);
+        requirePasswordPolicy(platform);
         Platform clean = sanitize(platform, existing);
 
         try (Connection connection = database.getConnection()) {
@@ -504,7 +516,7 @@ public final class PlatformRepository {
         if (Platform.MODE_PERIODIC.equals(mode) && interval == null)
             throw new GuacamoleClientException("Periodic rotation needs an interval.");
 
-        // Its identifier: see resolvePasswordPolicy
+        // Its identifier: see requirePasswordPolicy, and namePasswordPolicy for imports
         String passwordPolicy = Values.trimToNull(policy.get(Platform.POLICY_PASSWORD_POLICY));
         if (passwordPolicy != null) {
             if (Values.parseId(passwordPolicy) == null)
