@@ -15,6 +15,7 @@ import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.net.auth.AuthenticatedUser;
 
 import io.github.ialzamil.guacamole.pam.PamAuthenticationProvider;
+import io.github.ialzamil.guacamole.pam.coordination.Standby;
 import io.github.ialzamil.guacamole.pam.ha.HaAuthenticationProvider;
 import io.github.ialzamil.guacamole.pam.settings.PamSettings;
 
@@ -36,18 +37,19 @@ public class SettingsResource extends PamResource {
     }
 
     /**
-     * How many Guacamole servers run the extension on the database
-     * ("servers"), and whether this one runs the HA module ("ha"), for the
-     * tab to say when several run without it.
+     * Whether this server runs the HA module ("ha"), and why it is on
+     * standby ("standby", or null if PAM works on it), for the tab to say
+     * so.
      */
     @GET
-    @Path("servers")
-    public Map<String, Object> getServers() throws GuacamoleException {
+    @Path("server")
+    public Map<String, Object> getServer() throws GuacamoleException {
         requireAdministrator();
-        Map<String, Object> servers = new LinkedHashMap<>();
-        servers.put("servers", provider.getRotationService().countServers());
-        servers.put("ha", HaAuthenticationProvider.isEnabled());
-        return servers;
+        Standby standby = provider.getRotationService().getCoordination().getStandby();
+        Map<String, Object> server = new LinkedHashMap<>();
+        server.put("ha", HaAuthenticationProvider.isEnabled());
+        server.put("standby", standby == null ? null : standby.name());
+        return server;
     }
 
     /**

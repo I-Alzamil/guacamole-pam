@@ -14,7 +14,8 @@
 # Guacamole's servers listen on localhost: 8090 and 8091 (PostgreSQL), 8092
 # and 8093 (MySQL), 8094 and 8095 (MariaDB), 8096 and 8097 (SQL Server).
 # Build the extension first (build.sh). With HA=off, servers start with the
-# module off, to see tests/ha/run.sh fail as Guacamole alone does. Stopping
+# module off, to see tests/ha/run.sh fail as Guacamole alone does (one of
+# each two then on standby for PAM). Stopping
 # the last database running also removes the recordings.
 
 set -e
@@ -183,5 +184,5 @@ case "$1" in
         podman wait "mypamha-$2-$3" >/dev/null 2>&1 || true
         start_server "$2" "$3";;
     *)
-        sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 1;;
+        sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 1;;
 esac

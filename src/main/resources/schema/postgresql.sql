@@ -221,9 +221,10 @@ CREATE TABLE IF NOT EXISTS pam_user_preference (
 
 );
 
--- Sessions open on managed connections, on every Guacamole server sharing
--- the database, so all servers can tell whether a connection is in use. Each server refreshes the heartbeat of
--- its own rows, and rows no longer refreshed are removed
+-- Sessions open on managed connections, so a server starting finds those a
+-- stopped one left open, and with the HA module so all servers can tell
+-- whether a connection is in use: each then refreshes the heartbeat of its
+-- own rows, and rows no longer refreshed are removed
 CREATE TABLE IF NOT EXISTS pam_session (
 
   session_id    varchar(36)   NOT NULL,
@@ -237,17 +238,6 @@ CREATE TABLE IF NOT EXISTS pam_session (
   CONSTRAINT pam_session_connection
     FOREIGN KEY (connection_id)
     REFERENCES guacamole_connection (connection_id) ON DELETE CASCADE
-
-);
-
--- Guacamole servers running with the extension, each refreshing its row
--- every minute, so a server can tell it shares the database with others
-CREATE TABLE IF NOT EXISTS pam_server (
-
-  server     varchar(128)  NOT NULL,
-  heartbeat  timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-  PRIMARY KEY (server)
 
 );
 

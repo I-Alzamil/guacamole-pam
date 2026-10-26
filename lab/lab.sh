@@ -91,8 +91,17 @@ start_guacamole() {
     run_guacamole myguactest 8080 && echo "Guacamole: http://localhost:8080 ($PAM_DB$ha_note)"
 }
 
+# Waits until the Guacamole server on PORT answers
+wait_up() {
+    for _ in $(seq 120); do curl -sf -o /dev/null "http://localhost:$1/api/languages" && return 0; sleep 1; done
+    echo "Guacamole on port $1 did not start." >&2; return 1
+}
+
 start_second() {
     stop myguactest2
+    # Without the HA module, the first server to start works and the other
+    # is on standby: the first one, as on port 8080
+    [ "$ha_module" = true ] || wait_up 8080 || return 1
     run_guacamole myguactest2 8081 && echo "Second Guacamole: http://localhost:8081${ha_note:+ (${ha_note#, })}"
 }
 
@@ -100,7 +109,7 @@ start_second() {
 # already running
 restart_ha() {
     running myguacdbtest && running myguacdtest || { echo "Start the lab first: lab.sh app --ha." >&2; return 1; }
-    stop myguactest
+    stop myguactest myguactest2
     run_guacamole myguactest 8080 && echo "Guacamole: http://localhost:8080 ($PAM_DB$ha_note)" && start_second
 }
 

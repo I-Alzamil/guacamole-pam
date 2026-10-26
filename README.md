@@ -61,7 +61,9 @@ Privileged access management for [Apache Guacamole](https://guacamole.apache.org
   database as one, active-active: the optional
   [HA module](#high-availability-the-ha-module) shares sessions, connection
   limits, Active Sessions, logins, share links, failed logins, TOTP codes and
-  recordings between them. A single server leaves it off.
+  recordings between them. A single server leaves it off; without it, other
+  servers on the database wait on standby, read-only for PAM, and take over
+  once it stops.
 
 ## Requirements
 
@@ -164,36 +166,38 @@ connections stored in the database can't be opened, as above.
 
 ### Several Guacamole servers
 
-Any number of Guacamole servers may share the database, whether as a
-standby or all active behind a load balancer (with sticky sessions, as
-Guacamole itself needs). Nothing needs configuring:
+Without the [HA module](#high-availability-the-ha-module), PAM runs on one
+Guacamole server at a time. The server working holds a database lock for as
+long as it runs; any other server sharing the database finds it held and
+stays **on standby**:
 
-- **Rotations are claimed in the database**, so only one server rotates a
-  connection at a time. A checkout is refused while any server rotates its
-  password.
-- **Open sessions are recorded in the database** (`pam_session`), so
-  after-use and periodic rotations wait for sessions on every server. A server
-  that stops without closing its sessions leaves records that are ignored
-  after 3 minutes, then removed, and the connections are rotated after use.
-- **When a checkout ends**, by release, revocation or expiry, the server
-  ending it closes the holder's sessions at once. Other servers close theirs
-  within 2 seconds.
-- **Settings are kept in the database** (see [Settings](#settings)), so every
-  server applies the same ones, within 5 seconds of a change.
+- PAM is **read-only** there: it lists connections, requests, checkouts and
+  histories, but refuses checkouts, approvals, rotations, setting changes and
+  sessions of managed connections, saying why. The **PAM Settings** tab says
+  so too, and the server logs it once.
+- It **takes over** within seconds of the other one stopping, even crashing:
+  the database frees a lock once its server or connection is gone. Taking
+  over, it removes the sessions the stopped server left recorded
+  (`pam_session`), and rotates their connections after use.
 
-With encrypted secrets, every server needs the same keys.
+So a standby server can wait behind a load balancer sending it nothing, or
+an upgrade can start the new server before stopping the old one. To run
+several servers at once, turn the HA module on in every server: one without
+it, sharing the database with servers running it, stays on standby, and puts
+them on standby if it was working first.
+
+A single server needs nothing of this: it claims rotations and counts
+sessions in memory, and reads the settings again only after changing them.
 
 Each server keeps its own pool of up to 10 database connections, besides
-Guacamole's own, plus one for each rotation running. Change the limit with
+Guacamole's own, plus one held for the lock and one for each rotation
+running with the HA module. Change the limit with
 `pam-database-max-connections` in `guacamole.properties`, keeping the total
 across servers within the database's own limit (`max_connections` on
-PostgreSQL and MySQL).
-
-This is what PAM itself needs. Guacamole keeps much else on each server
-alone, such as logins, connection limits and Active Sessions: the
-[HA module](#high-availability-the-ha-module) shares those too. Each server
-records itself in `pam_server`, and with several running without the HA
-module, each logs a warning saying so, and the **PAM Settings** tab shows it.
+PostgreSQL and MySQL). The lock needs the database's own locks to reach the
+server holding them: not through a connection pooler sharing database
+sessions (PgBouncer in transaction mode), nor across the nodes of a Galera
+cluster.
 
 ### High availability (the HA module)
 
@@ -217,9 +221,25 @@ its state in memory, so each server only knows its own:
 - **Recordings** are only shown by the server whose guacd wrote them.
 
 The HA module keeps all of that in the database, for every server, on
-every database Guacamole's authentication supports. A single server needs
-none of it: leave it off, and the module creates no tables, starts no
-threads and shows no tab.
+every database Guacamole's authentication supports, and lets PAM work on
+every server at once:
+
+- **Rotations are claimed in the database**, so only one server rotates a
+  connection at a time. A checkout is refused while any server rotates its
+  password.
+- **Open sessions are counted from the database** (`pam_session`), so
+  after-use and periodic rotations wait for sessions on every server. A server
+  that stops without closing its sessions leaves records that are ignored
+  after 3 minutes, then removed, and the connections are rotated after use.
+- **When a checkout ends**, by release, revocation or expiry, the server
+  ending it closes the holder's sessions at once. Other servers close theirs
+  within 2 seconds.
+- **Settings** (see [Settings](#settings)) changed on one server apply to the
+  others within 5 seconds.
+
+With encrypted secrets, every server needs the same keys. A single server
+needs none of this: leave the module off, and it creates no tables, starts
+no threads and shows no tab.
 
 #### Turning it on
 
@@ -787,7 +807,7 @@ passwords. Its commands run in the order given:
 |---|---|
 | `lab/lab.sh app` | (Re)starts Guacamole's database, guacd and Guacamole with the built jar, on http://localhost:8080. Run it again after each build. Stored secrets are encrypted with a fixed test key; set `PAM_ENCRYPTION_KEY=` to store them unencrypted |
 | `lab/lab.sh app --ha` | Also a second Guacamole sharing the database and guacd, on http://localhost:8081, with the [HA module](#high-availability-the-ha-module) on in both, for the two-server tests (`--ha` alone restarts both servers that way, keeping the database and guacd running) |
-| `lab/lab.sh app --ha=off` | The same two servers with the HA module off, as PAM alone shares them (alone, likewise restarts both) |
+| `lab/lab.sh app --ha=off` | The same two servers with the HA module off: the second, started once the first answers, stays on standby (alone, likewise restarts both) |
 | `lab/lab.sh services` | The servers whose accounts the lab manages, keeping those already running: SSH `mysshtest` (user `mysshtest`), OpenLDAP `myldaptest` (`uid=ldaptest,ou=people,dc=example,dc=org`), Samba AD `myadtest` (LDAPS and Kerberos, `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`), MIT Kerberos `mykdctest` (realm `EXAMPLE.ORG`, `kdctest`), TACACS+ `mytacacstest` (tac_plus-ng, built from source into `localhost/pam-tacacs-test` the first time; `tactest`), and databases over TLS with certificates of a test CA generated into `lab/targets/certs`: PostgreSQL `mypgtarget`, MySQL `mymysqltarget`, MariaDB `mymariadbtarget`, SQL Server `mymssqltarget` (`dbtest`). Passwords are listed at the top of `lab/lab.sh` |
 | `lab/lab.sh seed` | Adds the test platforms, connections, users and group to a fresh database, through the REST API (`lab/seed.sh`) |
 | `lab/lab.sh reset` | Recreates Guacamole's database, with only Guacamole's schema and `guacadmin` / `guacadmin` |

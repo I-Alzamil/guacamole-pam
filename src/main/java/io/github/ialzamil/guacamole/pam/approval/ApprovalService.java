@@ -85,6 +85,7 @@ public class ApprovalService {
      */
     public ApprovalRequest approve(int requestId, Approver approver, String remoteHost) throws GuacamoleException {
 
+        checkoutService.requireActive();
         ApprovalRequest pending = requireQualified(requestId, approver);
         if (pending.getUsername().equals(approver.getUsername()))
             throw new GuacamoleClientException("You cannot approve your own request.");
@@ -147,6 +148,7 @@ public class ApprovalService {
      */
     public void deny(int requestId, Approver approver, String reason, String remoteHost) throws GuacamoleException {
 
+        checkoutService.requireActive();
         String trimmed = reason == null ? "" : reason.trim();
         if (trimmed.isEmpty())
             throw new GuacamoleClientException("Please give a reason for the denial.");

@@ -1,14 +1,14 @@
-package io.github.ialzamil.guacamole.pam.rotation;
+package io.github.ialzamil.guacamole.pam.ha;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Set;
 
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
 
+import io.github.ialzamil.guacamole.pam.coordination.Coordination;
 import io.github.ialzamil.guacamole.pam.db.PamDatabase;
 
 /**
@@ -36,7 +36,7 @@ class RotationLocks {
     /**
      * A claim on a connection, released when closed.
      */
-    static final class Claim implements AutoCloseable {
+    private static final class Claim implements Coordination.Claim {
 
         private final Connection connection;
 
@@ -60,7 +60,7 @@ class RotationLocks {
      * Claims the connection, or returns null if it is already claimed, here
      * or by another server.
      */
-    Claim tryClaim(int connectionId) throws GuacamoleException {
+    Coordination.Claim tryClaim(int connectionId) throws GuacamoleException {
 
         Connection connection = database.getDedicatedConnection();
         try {
@@ -75,14 +75,6 @@ class RotationLocks {
         new Claim(connection).close();
         return null;
 
-    }
-
-    /**
-     * Whether a rotation of the connection is running, here or on another
-     * server.
-     */
-    boolean isClaimed(int connectionId) throws GuacamoleException {
-        return getClaimed(Collections.singleton(connectionId)).contains(connectionId);
     }
 
     /**

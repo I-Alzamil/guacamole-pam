@@ -41,14 +41,13 @@ angular.module('guacPam').directive('guacSettingsPamSettings', [function guacSet
             pamService.getSettings().then(show, guacNotification.SHOW_REQUEST_ERROR);
 
             /**
-             * How many servers run the extension on the database, if
-             * several do without the HA module, to say so; null otherwise.
+             * Why this server is on standby, read-only for PAM, such as
+             * "OTHER_SERVER", to say so; null if PAM works on it.
              */
-            $scope.serversWithoutHa = null;
+            $scope.standby = null;
 
-            pamService.getServers().then(function serversRead(servers) {
-                if (servers.servers > 1 && !servers.ha)
-                    $scope.serversWithoutHa = servers.servers;
+            pamService.getServer().then(function serverRead(server) {
+                $scope.standby = server.standby;
             }, angular.noop);
 
             /**

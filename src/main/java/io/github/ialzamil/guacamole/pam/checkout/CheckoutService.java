@@ -22,6 +22,7 @@ import io.github.ialzamil.guacamole.pam.PamAttributes;
 import io.github.ialzamil.guacamole.pam.Values;
 import io.github.ialzamil.guacamole.pam.approval.ApprovalRepository;
 import io.github.ialzamil.guacamole.pam.approval.ApprovalRequest;
+import io.github.ialzamil.guacamole.pam.coordination.Standby;
 import io.github.ialzamil.guacamole.pam.db.ConnectionRepository.Target;
 import io.github.ialzamil.guacamole.pam.db.ConnectionRepository;
 import io.github.ialzamil.guacamole.pam.management.ManagementType;
@@ -198,6 +199,7 @@ public class CheckoutService {
     public RequestOutcome request(UserContext context, String username, String remoteHost, String identifier,
             String reason, Long starts, int periods, boolean administrator) throws GuacamoleException {
 
+        rotationService.requireActive();
         Target target = requireRequestable(context, identifier);
         int id = target.getId();
 
@@ -335,6 +337,7 @@ public class CheckoutService {
     public PasswordGrant revealPassword(UserContext context, String username, String identifier)
             throws GuacamoleException {
 
+        rotationService.requireActive();
         Target target = requireRequestable(context, identifier);
         if (!revealsPassword(target))
             throw new GuacamoleSecurityException("The password of this connection is not shown.");
@@ -365,8 +368,9 @@ public class CheckoutService {
      * Accounts, through {@link #request}.
      *
      * @throws GuacamoleSecurityException
-     *     If the user must request access first: forbidden, which the web
-     *     UI explains when refusing a session.
+     *     If the user must request access first, or the connection is
+     *     managed or needs a request while this server is on standby:
+     *     forbidden, which the web UI explains when refusing a session.
      */
     public void requireAccess(String identifier, String username, boolean administrator)
             throws GuacamoleException {
@@ -376,7 +380,14 @@ public class CheckoutService {
             return;
 
         Target target = connections.load(id);
-        if (target == null || !requiresRequest(target))
+        if (target == null)
+            return;
+
+        // Its sessions are counted by the server working, and rotated after
+        Standby standby = rotationService.getCoordination().getStandby();
+        if (standby != null && (isManaged(target) || requiresRequest(target)))
+            throw new GuacamoleSecurityException(standby.getMessage());
+        if (!requiresRequest(target))
             return;
 
         if (checkouts.getActive(id, username) != null)
@@ -391,6 +402,14 @@ public class CheckoutService {
         throw new GuacamoleSecurityException("You must request access to this connection, and have it approved"
                     + " if needed, before connecting.");
 
+    }
+
+    /**
+     * Refuses a change while this server is on standby (see
+     * {@link RotationService#requireActive}).
+     */
+    public void requireActive() throws GuacamoleClientException {
+        rotationService.requireActive();
     }
 
     /**
@@ -421,6 +440,7 @@ public class CheckoutService {
      * password, or connects, by opening the connection again.
      */
     public Checkout startApprovedCheckout(ApprovalRequest request) throws GuacamoleException {
+        rotationService.requireActive();
         Integer id = Values.parseId(request.getConnectionIdentifier());
         Target target = id == null ? null : connections.load(id);
         if (target == null)
@@ -441,6 +461,7 @@ public class CheckoutService {
      *     alone and someone else holds or reserved it then.
      */
     public void reserve(ApprovalRequest request, String approver) throws GuacamoleException {
+        rotationService.requireActive();
         Integer id = Values.parseId(request.getConnectionIdentifier());
         Target target = id == null ? null : connections.load(id);
         if (target == null)
@@ -473,6 +494,7 @@ public class CheckoutService {
     public PasswordRequest extend(UserContext context, String username, String remoteHost, String identifier,
             String reason, boolean administrator) throws GuacamoleException {
 
+        rotationService.requireActive();
         Target target = requireRequestable(context, identifier);
         if (!allowsExtensions(target))
             throw new GuacamoleClientException("This access cannot be extended.");
@@ -526,6 +548,7 @@ public class CheckoutService {
      *     else's reservation starts as it ends.
      */
     public Checkout grantExtension(ApprovalRequest request, String approver) throws GuacamoleException {
+        rotationService.requireActive();
         rotationService.expireCheckouts();
         Checkout checkout = checkouts.extend(request.getExtendsCheckout(), request.getExtensionMinutes());
         logger.info("Checkout {} of \"{}\" by user \"{}\" was extended by {} minutes, until {} (request {},"
@@ -545,6 +568,7 @@ public class CheckoutService {
     public void cancelExtension(UserContext context, String username, String remoteHost, String identifier)
             throws GuacamoleException {
 
+        rotationService.requireActive();
         Target target = requireRequestable(context, identifier);
         Checkout checkout = checkouts.getActive(target.getId(), username);
         if (checkout == null)
@@ -568,6 +592,7 @@ public class CheckoutService {
     public void cancelRequest(UserContext context, String username, String remoteHost, String identifier)
             throws GuacamoleException {
 
+        rotationService.requireActive();
         Target target = requireRequestable(context, identifier);
         ApprovalRequest pending = approvals.getPending(target.getId(), username);
         if (pending == null)
@@ -588,6 +613,7 @@ public class CheckoutService {
     public void cancelReservation(UserContext context, String username, String remoteHost, String identifier)
             throws GuacamoleException {
 
+        rotationService.requireActive();
         Target target = requireRequestable(context, identifier);
         ApprovalRequest reservation = approvals.getReservation(target.getId(), username);
         if (reservation == null)
@@ -759,6 +785,7 @@ public class CheckoutService {
     public void release(UserContext context, String username, String remoteHost, String identifier)
             throws GuacamoleException {
 
+        rotationService.requireActive();
         Target target = requireRequestable(context, identifier);
         Checkout checkout = checkouts.getActive(target.getId(), username);
         if (checkout == null)
@@ -776,6 +803,7 @@ public class CheckoutService {
      */
     public void revoke(int checkoutId, String administrator, String remoteHost) throws GuacamoleException {
 
+        rotationService.requireActive();
         Checkout checkout = checkouts.get(checkoutId);
         if (checkout == null)
             throw new GuacamoleResourceNotFoundException("No such checkout.");

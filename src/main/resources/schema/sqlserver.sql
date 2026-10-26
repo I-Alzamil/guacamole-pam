@@ -199,16 +199,6 @@ CREATE TABLE pam_session (
 
 );
 
-IF OBJECT_ID(N'pam_server', N'U') IS NULL
-CREATE TABLE pam_server (
-
-  server     nvarchar(128)  NOT NULL,
-  heartbeat  datetime2(3)   NOT NULL DEFAULT SYSUTCDATETIME(),
-
-  CONSTRAINT pam_server_pkey PRIMARY KEY (server)
-
-);
-
 IF OBJECT_ID(N'pam_connection_secret', N'U') IS NULL
 CREATE TABLE pam_connection_secret (
 

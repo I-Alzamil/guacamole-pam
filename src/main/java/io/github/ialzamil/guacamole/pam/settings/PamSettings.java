@@ -23,15 +23,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.github.ialzamil.guacamole.pam.Values;
+import io.github.ialzamil.guacamole.pam.coordination.Coordination;
 import io.github.ialzamil.guacamole.pam.db.PamDatabase;
 import io.github.ialzamil.guacamole.pam.db.SqlDialect;
 
 /**
  * Settings of the extension shared by every Guacamole server using the
  * database, in "pam_setting", so servers sharing it never disagree, and a
- * change applies to all of them without a restart. Each server reads them
- * again after {@link #CACHE_MILLIS}, so a change made on another one applies
- * here within that time.
+ * change applies to all of them without a restart. A server alone on the
+ * database reads them once, and again only after changing them; with the HA
+ * module, or on standby, a server reads them again after
+ * {@link #CACHE_MILLIS}, so a change made on another one applies here within
+ * that time.
  *
  * They were guacamole.properties settings: a value still set there is
  * imported once, by the first server reading the settings, unless the
@@ -69,7 +72,8 @@ public class PamSettings {
             ADMIN_BYPASS_REQUESTS, EXTENSIONS_ENABLED, MAX_EXTENSIONS));
 
     /**
-     * How long values read are used before being read again.
+     * How long values read are used before being read again, unless this
+     * server is alone on the database.
      */
     static final long CACHE_MILLIS = 5000;
 
@@ -190,6 +194,8 @@ public class PamSettings {
 
     private final Environment environment;
 
+    private final Coordination coordination;
+
     private volatile Snapshot snapshot;
 
     /**
@@ -197,9 +203,10 @@ public class PamSettings {
      */
     private volatile boolean imported = false;
 
-    public PamSettings(PamDatabase database, Environment environment) {
+    public PamSettings(PamDatabase database, Environment environment, Coordination coordination) {
         this.database = database;
         this.environment = environment;
+        this.coordination = coordination;
     }
 
     public boolean isAdminBypassRequests() throws GuacamoleException {
@@ -244,12 +251,14 @@ public class PamSettings {
      * their current value, are left as they are.
      *
      * @throws GuacamoleClientException
-     *     If a setting is unknown, or a value invalid.
+     *     If a setting is unknown, or a value invalid, or this server is on
+     *     standby.
      */
     public void update(Map<String, Object> values, String username) throws GuacamoleException {
 
         if (values == null || values.isEmpty())
             return;
+        coordination.requireActive();
 
         Map<String, Setting> byName = new HashMap<>();
         for (Setting setting : ALL)
@@ -317,17 +326,18 @@ public class PamSettings {
 
     /**
      * The rows of the settings, read again once older than
-     * {@link #CACHE_MILLIS}, importing guacamole.properties values first if
-     * this server did not yet.
+     * {@link #CACHE_MILLIS} unless this server is alone, importing
+     * guacamole.properties values first if this server did not yet.
      */
     private Map<String, Row> rows() throws GuacamoleException {
 
         Snapshot current = snapshot;
         long now = System.currentTimeMillis();
-        if (current != null && now - current.read < CACHE_MILLIS)
+        if (current != null && (now - current.read < CACHE_MILLIS || coordination.isAloneSince(current.read)))
             return current.rows;
 
-        if (!imported) {
+        // Not on standby: a server alone would not read it again
+        if (!imported && coordination.getStandby() == null) {
             importProperties();
             imported = true;
         }

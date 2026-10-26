@@ -23,11 +23,15 @@ import io.github.ialzamil.guacamole.pam.approval.ApproverDirectory;
 import io.github.ialzamil.guacamole.pam.approval.BadgePreferences;
 import io.github.ialzamil.guacamole.pam.checkout.CheckoutRepository;
 import io.github.ialzamil.guacamole.pam.checkout.CheckoutService;
+import io.github.ialzamil.guacamole.pam.coordination.Coordination;
+import io.github.ialzamil.guacamole.pam.coordination.SingleServer;
 import io.github.ialzamil.guacamole.pam.crypto.SecretMigration;
 import io.github.ialzamil.guacamole.pam.crypto.Secrets;
 import io.github.ialzamil.guacamole.pam.db.ConnectionRepository;
 import io.github.ialzamil.guacamole.pam.db.ConnectionSecrets;
 import io.github.ialzamil.guacamole.pam.db.PamDatabase;
+import io.github.ialzamil.guacamole.pam.ha.HaAuthenticationProvider;
+import io.github.ialzamil.guacamole.pam.ha.SharedCoordination;
 import io.github.ialzamil.guacamole.pam.password.PasswordPolicyRepository;
 import io.github.ialzamil.guacamole.pam.platform.PlatformImport;
 import io.github.ialzamil.guacamole.pam.platform.PlatformRepository;
@@ -138,7 +142,10 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         managedDataSource = database.getDialect().getName();
         logger.info("The PAM extension manages the connections stored in {}.",
                 database.getDialect().getDisplayName());
-        settings = new PamSettings(database, environment);
+        // Alone on the database unless the HA module runs
+        Coordination coordination = HaAuthenticationProvider.isEnabled() ? new SharedCoordination(database)
+                : new SingleServer(database);
+        settings = new PamSettings(database, environment, coordination);
         CheckoutRepository checkouts = new CheckoutRepository(database);
         connectionSecrets = new ConnectionSecrets(database, secrets);
         passwordPolicies = new PasswordPolicyRepository(database);
@@ -146,7 +153,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         platformImport = new PlatformImport(platforms);
         connections = new ConnectionRepository(database, secrets, connectionSecrets);
         secretMigration = new SecretMigration(database, platforms, connections, connectionSecrets, secrets);
-        rotationService = new RotationService(database, platforms, passwordPolicies, connections, checkouts);
+        rotationService = new RotationService(database, coordination, platforms, passwordPolicies, connections,
+                checkouts);
         approvals = new ApprovalRepository(database);
         approvers = new ApproverDirectory(database);
         badgePreferences = new BadgePreferences(database);

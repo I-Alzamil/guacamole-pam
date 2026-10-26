@@ -1,8 +1,10 @@
 #!/bin/bash
-# Two Guacamole servers sharing the database (lab.sh app --ha): sessions seen
-# by every server, checkouts ended on one server closing sessions on the
-# other, one rotation of a connection at a time, and sessions of a server
-# that stopped. Skipped unless the second server runs. About 3 minutes.
+# Two Guacamole servers sharing the database. With the HA module (lab.sh app
+# --ha): sessions seen by every server, checkouts ended on one server closing
+# sessions on the other, one rotation of a connection at a time, and
+# sessions of a server that stopped. Without it (--ha=off): the second server
+# on standby, read-only for PAM, taking over once the first crashes, then
+# both restarted. Skipped unless the second server runs. About 3 minutes.
 
 GUAC2_URL="${GUAC2_URL:-http://localhost:8081}"
 PAM2="$GUAC2_URL/api/session/ext/pam"
@@ -86,17 +88,76 @@ check "setup: logged in on both servers" yes "$([ -n "$USER1" ] && [ -n "$USER2"
 # ---------------------------------------------------------------- servers
 # Started with lab.sh --ha (the HA module on) or --ha=off
 HA_MODULE=$(podman exec myguactest printenv PAM_HA)
-section "Servers sharing the database (HA module: $HA_MODULE)"
-SERVERS=$(api GET "$PAM/settings/servers" "$ADMIN")
-check "the PAM Settings tab counts both servers" "200 2 $HA_MODULE" \
-    "$(status_of "$SERVERS") $(json_get "${SERVERS#* }" "str(d['servers']) + ' ' + str(d['ha']).lower()")"
-check "...for administrators only" 403 "$(status_of "$(api GET "$PAM/settings/servers" "$USER1")")"
-NO_HA_WARNING=$(podman logs myguactest2 2>&1 | grep -c "share this database without the HA module")
-if [ "$HA_MODULE" = true ]; then
-    check "...and no server warns of the HA module missing" 0 "$NO_HA_WARNING"
-else
-    check "...and the second server warns, once, that the HA module is off" 1 "$NO_HA_WARNING"
+section "How each server works (HA module: $HA_MODULE)"
+# server_state PAM-URL TOKEN: the status, whether the HA module runs, and why
+# the server is on standby ("None" if not)
+server_state() {
+    local response
+    response=$(api GET "$1/settings/server" "$2")
+    printf '%s %s' "$(status_of "$response")" "$(json_get "${response#* }" "str(d['ha']).lower() + ' ' + str(d['standby'])")"
+}
+check "server 1 works, as the PAM Settings tab says" "200 $HA_MODULE None" "$(server_state "$PAM" "$ADMIN")"
+check "...to administrators only" 403 "$(status_of "$(api GET "$PAM/settings/server" "$USER1")")"
+STANDBY_LOGGED=$(podman logs myguactest2 2>&1 | grep -c "so this one is on standby")
+
+if [ "$HA_MODULE" != true ]; then
+
+    section "Without the HA module, the second server is on standby"
+    check "server 2 is on standby, as another server works" "200 false OTHER_SERVER" "$(server_state "$PAM2" "$ADMIN2")"
+    check "...which it logged once" 1 "$STANDBY_LOGGED"
+    check_contains "server 2 refuses a checkout" "on standby" \
+        "$(message_of "$(api POST "$PAM2/requests/$GATED" "$USER2" '{"reason":"T2 standby"}')")"
+    check_contains "...a rotation" "on standby" "$(message_of "$(api POST "$PAM2/connections/$SSH_C/rotate" "$ADMIN2")")"
+    check_contains "...a change of settings" "on standby" \
+        "$(message_of "$(api PUT "$PAM2/settings" "$ADMIN2" '{"pam-max-extensions":3}')")"
+    open_session R2 "$GUAC2_URL" "$ADMIN2" "$SSH_C"
+    check_contains "...and a session of a managed connection" "on standby" "$(session_state "$R2")"
+    check "...but still lists the connections" 200 "$(status_of "$(api GET "$PAM2/connections" "$ADMIN2")")"
+    check "server 1 grants checkouts meanwhile" 200 \
+        "$(status_of "$(api POST "$PAM/requests/$GATED" "$USER1" '{"reason":"T2 standby"}')")"
+    check "...and releases them" 204 "$(status_of "$(api POST "$PAM/requests/$GATED/release" "$USER1")")"
+
+    section "The second server takes over once the first crashes"
+    edit_connection "$ADMIN" "$SSH_C" '' '{"pam-rotation-mode":"after-use"}' >/dev/null
+    PASSWORD=$(parameter "$SSH_C" password)
+    open_session K1 "$GUAC_URL" "$ADMIN" "$SSH_C"
+    check "a session is open through server 1" open "$(session_state "$K1")"
+    check "...and recorded" 1 "$(session_rows "$SSH_C")"
+    server2_works() { [ "$(server_state "$PAM2" "$ADMIN2")" = "200 false None" ] && echo yes || echo no; }
+    podman kill myguactest >/dev/null
+    # Helpers reading connections ask server 2 meanwhile
+    DATA1=$DATA
+    DATA="$GUAC2_URL/api/session/data/$PAM_DATA_SOURCE"
+    ADMIN=$ADMIN2
+    START=$SECONDS
+    check "server 2 works within 10 seconds of server 1 crashing" yes "$(wait_for 10 server2_works)"
+    printf '        (after %d s)\n' $((SECONDS - START))
+    check "...removes the session server 1 left open, and rotates its connection after use" yes \
+        "$(wait_for 30 password_changed "$SSH_C" "$PASSWORD")"
+    check "...and the SSH server accepts the new password" yes "$(ssh_accepts mysshtest "$(parameter "$SSH_C" password)")"
+    check "...and the record is gone" 0 "$(session_rows "$SSH_C")"
+    check "server 2 now grants checkouts" 200 \
+        "$(status_of "$(api POST "$PAM2/requests/$GATED" "$USER2" '{"reason":"T2 took over"}')")"
+    check "...and releases them" 204 "$(status_of "$(api POST "$PAM2/requests/$GATED/release" "$USER2")")"
+    edit_connection "$ADMIN2" "$SSH_C" '' '{"pam-rotation-mode":"never"}' >/dev/null
+    DATA=$DATA1
+
+    section "Both servers started again"
+    ../lab/lab.sh --ha=off >/dev/null
+    wait_for_guacamole
+    ADMIN=$(admin_token)
+    curl -s -o /dev/null "$DATA/connections/0?token=$(admin_token)"
+    for i in $(seq 90); do curl -sf "$GUAC2_URL/api/languages" >/dev/null && break; sleep 2; done
+    ADMIN2=$(token2 "$GUAC_ADMIN" "$GUAC_ADMIN_PASSWORD")
+    check "server 1 works again" "200 false None" "$(server_state "$PAM" "$ADMIN")"
+    check "...and server 2 is on standby" "200 false OTHER_SERVER" "$(server_state "$PAM2" "$ADMIN2")"
+    return 0
+
 fi
+
+check "server 2 works too" "200 true None" "$(server_state "$PAM2" "$ADMIN2")"
+check "...and neither is on standby" "0 0" \
+    "$(podman logs myguactest 2>&1 | grep -c "is on standby") $STANDBY_LOGGED"
 
 # ---------------------------------------------------------------- sessions
 section "Sessions are seen by every server"

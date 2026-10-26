@@ -82,11 +82,12 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
     };
 
     /**
-     * How many Guacamole servers run the extension on the database
-     * ("servers"), and whether this one runs the HA module ("ha").
+     * Whether this server runs the HA module ("ha"), and why it is on
+     * standby ("standby", such as "OTHER_SERVER"), or null if PAM works on
+     * it.
      */
-    service.getServers = function getServers() {
-        return request('GET', 'settings/servers');
+    service.getServer = function getServer() {
+        return request('GET', 'settings/server');
     };
 
     /**

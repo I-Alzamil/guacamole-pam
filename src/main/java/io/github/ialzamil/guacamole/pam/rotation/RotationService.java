@@ -1,6 +1,7 @@
 package io.github.ialzamil.guacamole.pam.rotation;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,8 @@ import io.github.ialzamil.guacamole.pam.PamAttributes;
 import io.github.ialzamil.guacamole.pam.Values;
 import io.github.ialzamil.guacamole.pam.checkout.Checkout;
 import io.github.ialzamil.guacamole.pam.checkout.CheckoutRepository;
+import io.github.ialzamil.guacamole.pam.coordination.Coordination;
+import io.github.ialzamil.guacamole.pam.coordination.Standby;
 import io.github.ialzamil.guacamole.pam.db.ConnectionRepository.Target;
 import io.github.ialzamil.guacamole.pam.db.ConnectionRepository;
 import io.github.ialzamil.guacamole.pam.db.PamDatabase;
@@ -50,14 +53,15 @@ import io.github.ialzamil.guacamole.pam.platform.PlatformRepository;
  * stops working outside Guacamole; a failed rotation is retried as a
  * periodic one would be.
  *
- * Several Guacamole servers may share the database: rotations are claimed
- * through the database ({@link RotationLocks}), so only one server rotates a
- * connection at a time, and sessions are recorded there
- * ({@link SessionRegistry}), so every server knows whether a connection is in
- * use. When a checkout ends, the server ending it closes its own sessions of
- * the holder at once; the other servers close theirs when they next look for
- * ended checkouts. Each server then also closes its sessions whose user lost
- * access to their connection meanwhile (see {@link SessionAccess}).
+ * Rotations are claimed, and sessions counted, as the {@link Coordination}
+ * of this server does it: in memory on a server alone, through the database
+ * with the HA module, so only one server rotates a connection at a time,
+ * and every server knows whether a connection is in use. When a checkout
+ * ends, the server ending it closes its own sessions of the holder at once;
+ * with the HA module, the other servers close theirs when they next look for
+ * ended checkouts. Each server also closes its sessions whose user lost
+ * access to their connection meanwhile (see {@link SessionAccess}). On
+ * standby, a server rotates nothing.
  */
 public final class RotationService {
 
@@ -72,9 +76,10 @@ public final class RotationService {
     private static final long PERIODIC_CHECK_SECONDS = 60;
 
     /**
-     * How often checkouts past their time limit are ended, and this server
-     * closes its sessions of checkouts ended on another server: both cheap,
-     * so a revoked user is cut off on every server within seconds.
+     * How often this server checks its role (see {@link Coordination#check}),
+     * ends checkouts past their time limit, and with the HA module closes its
+     * sessions of checkouts ended on another server: all cheap, so a revoked
+     * user is cut off on every server within seconds.
      */
     private static final long ENDED_CHECK_SECONDS = 2;
 
@@ -83,8 +88,6 @@ public final class RotationService {
      * use their connection: once per session.
      */
     private static final long ACCESS_CHECK_SECONDS = 15;
-
-    private static final long HEARTBEAT_SECONDS = 60;
 
     /**
      * How far back, at least, to look for ended checkouts: well over the
@@ -114,17 +117,15 @@ public final class RotationService {
 
     private final PasswordGenerator passwordGenerator = new PasswordGenerator();
 
-    private final RotationLocks locks;
-
-    private final ServerRegistry servers;
+    private final Coordination coordination;
 
     private final SessionRegistry sessions;
 
     private final ScheduledExecutorService scheduler = newScheduler("pam-rotation", 2);
 
     /**
-     * Expiry, ended checkouts and heartbeats, kept apart so long rotations
-     * never delay the end of a session.
+     * The role of this server, expiry and ended checkouts, kept apart so
+     * long rotations never delay the end of a session.
      */
     private final ScheduledExecutorService housekeeping = newScheduler("pam-housekeeping", 1);
 
@@ -133,25 +134,20 @@ public final class RotationService {
      */
     private volatile long lastEndedCheck = System.currentTimeMillis();
 
-    public RotationService(PamDatabase database, PlatformRepository platforms,
+    public RotationService(PamDatabase database, Coordination coordination, PlatformRepository platforms,
             PasswordPolicyRepository passwordPolicies, ConnectionRepository connections, CheckoutRepository checkouts) {
         this.platforms = platforms;
         this.passwordPolicies = passwordPolicies;
         this.connections = connections;
         this.checkouts = checkouts;
-        this.locks = new RotationLocks(database);
-        this.servers = new ServerRegistry(database);
-        this.sessions = new SessionRegistry(database, servers.getServer());
+        this.coordination = coordination;
+        this.sessions = new SessionRegistry(database);
         scheduler.scheduleWithFixedDelay(this::rotateDueConnections,
                 PERIODIC_CHECK_SECONDS, PERIODIC_CHECK_SECONDS, TimeUnit.SECONDS);
-        housekeeping.scheduleWithFixedDelay(this::endCheckouts,
-                ENDED_CHECK_SECONDS, ENDED_CHECK_SECONDS, TimeUnit.SECONDS);
+        // At once, so this server works, or is on standby, from its start
+        housekeeping.scheduleWithFixedDelay(this::housekeeping, 0, ENDED_CHECK_SECONDS, TimeUnit.SECONDS);
         housekeeping.scheduleWithFixedDelay(this::checkAccess,
                 ACCESS_CHECK_SECONDS, ACCESS_CHECK_SECONDS, TimeUnit.SECONDS);
-        housekeeping.scheduleWithFixedDelay(this::heartbeat,
-                HEARTBEAT_SECONDS, HEARTBEAT_SECONDS, TimeUnit.SECONDS);
-        // At once, so other servers count this one from its start
-        housekeeping.scheduleWithFixedDelay(this::serverHeartbeat, 0, HEARTBEAT_SECONDS, TimeUnit.SECONDS);
     }
 
     private static ScheduledExecutorService newScheduler(String name, int threads) {
@@ -181,8 +177,8 @@ public final class RotationService {
             scheduler.schedule(() -> rotateAfterUse(identifier), AFTER_USE_DELAY_SECONDS, TimeUnit.SECONDS);
         }
         catch (RejectedExecutionException e) {
-            // Shutting down: another server, or this one once restarted,
-            // rotates it when the session's row goes stale
+            // Shutting down: its session's row is gone already, so this
+            // after-use rotation is missed
             logger.debug("After-use rotation of connection {} not scheduled: shutting down.", identifier);
         }
     }
@@ -229,18 +225,30 @@ public final class RotationService {
      * any server.
      */
     public boolean isRotating(int id) throws GuacamoleException {
-        return locks.isClaimed(id);
+        return coordination.getClaimed(Collections.singleton(id)).contains(id);
+    }
+
+    /**
+     * Refuses a change while this server is on standby (see
+     * {@link Coordination}).
+     */
+    public void requireActive() throws GuacamoleClientException {
+        coordination.requireActive();
+    }
+
+    public Coordination getCoordination() {
+        return coordination;
     }
 
     private boolean isInUse(int id) throws GuacamoleException {
-        return sessions.count(id) > 0 || !checkouts.listActive(id).isEmpty();
+        return coordination.countSessions(sessions).getOrDefault(id, 0) > 0 || !checkouts.listActive(id).isEmpty();
     }
 
     private void rotateAfterUse(String identifier) {
         try {
 
             Integer id = Values.parseId(identifier);
-            if (id == null || isInUse(id))
+            if (id == null || coordination.getStandby() != null || isInUse(id))
                 return;
 
             Target target = connections.load(id);
@@ -264,8 +272,54 @@ public final class RotationService {
     }
 
     private void endCheckouts() {
+        if (coordination.getStandby() != null)
+            return;
         expireCheckouts();
-        closeSessionsOfEndedCheckouts();
+        if (coordination.isShared())
+            closeSessionsOfEndedCheckouts();
+    }
+
+    /**
+     * Brings this server's role up to date, rotating after use the
+     * connections whose sessions ended on a server that stopped, then ends
+     * checkouts.
+     */
+    private void housekeeping() {
+        try {
+            for (int id : coordination.check(sessions))
+                scheduleAfterUse(Integer.toString(id));
+            Standby standby = coordination.getStandby();
+            if (standby != null && standby.isOtherServerWorking() && sessions.hasLocal())
+                closeManagedSessions();
+        }
+        catch (Exception e) {
+            logger.error("Unable to check the other servers: {}", e.getMessage());
+            logger.debug("Unable to check the other servers.", e);
+        }
+        endCheckouts();
+    }
+
+    /**
+     * Closes this server's sessions of managed connections, opened before it
+     * went on standby: the server working instead neither counts them nor
+     * knows their connections in use, and could rotate their passwords.
+     */
+    private void closeManagedSessions() throws GuacamoleException {
+        for (SessionRegistry.Session session : sessions.getAllLocal()) {
+            Integer id = Values.parseId(session.getIdentifier());
+            Target target = id == null ? null : connections.load(id);
+            if (target == null || target.getAttribute(PamAttributes.PLATFORM) == null)
+                continue;
+            try {
+                logger.info("Closing the session of \"{}\" on connection {}: this server is on standby.",
+                        session.getUsername(), session.getIdentifier());
+                session.getTunnel().close();
+            }
+            catch (Exception e) {
+                logger.warn("Unable to close a session of \"{}\" on connection {}: {}", session.getUsername(),
+                        session.getIdentifier(), e.getMessage());
+            }
+        }
     }
 
     /**
@@ -319,6 +373,8 @@ public final class RotationService {
      * not stand in the way.
      */
     public void expireCheckouts() {
+        if (coordination.getStandby() != null)
+            return;
         try {
             for (Checkout checkout : checkouts.expireDue()) {
                 logger.info("Checkout {} of connection \"{}\" by user \"{}\" expired.", checkout.getId(),
@@ -367,40 +423,6 @@ public final class RotationService {
 
     }
 
-    private void heartbeat() {
-        try {
-            for (int id : sessions.heartbeat())
-                scheduleAfterUse(Integer.toString(id));
-        }
-        catch (SchemaUnavailableException e) {
-            logger.debug("Session heartbeat skipped: {}", e.getMessage());
-        }
-        catch (Exception e) {
-            logger.error("Session heartbeat failed: {}", e.getMessage());
-            logger.debug("Session heartbeat failed.", e);
-        }
-    }
-
-    private void serverHeartbeat() {
-        try {
-            servers.heartbeat();
-        }
-        catch (SchemaUnavailableException e) {
-            logger.debug("Server heartbeat skipped: {}", e.getMessage());
-        }
-        catch (Exception e) {
-            logger.error("Server heartbeat failed: {}", e.getMessage());
-            logger.debug("Server heartbeat failed.", e);
-        }
-    }
-
-    /**
-     * How many Guacamole servers run the extension on the database.
-     */
-    public int countServers() throws GuacamoleException {
-        return servers.count();
-    }
-
     /**
      * Whether a checkout showed the connection's password since its last
      * rotation.
@@ -410,6 +432,8 @@ public final class RotationService {
     }
 
     private void rotateDueConnections() {
+        if (coordination.getStandby() != null)
+            return;
         try {
 
             Map<String, Platform> all = platforms.getAll();
@@ -417,7 +441,7 @@ public final class RotationService {
 
             // Read once for every connection; a rotation checks again for
             // checkouts once it claims its connection
-            Map<Integer, Integer> sessionCounts = sessions.countAll();
+            Map<Integer, Integer> sessionCounts = coordination.countSessions(sessions);
             Set<Integer> held = new HashSet<>();
             for (Checkout checkout : checkouts.listActive())
                 held.add(Values.parseId(checkout.getConnectionIdentifier()));
@@ -509,13 +533,13 @@ public final class RotationService {
     public List<ManagedConnection> listManaged() throws GuacamoleException {
 
         Map<String, Platform> all = platforms.getAll();
-        Map<Integer, Integer> counts = sessions.countAll();
+        Map<Integer, Integer> counts = coordination.countSessions(sessions);
         List<Target> targets = connections.listManaged();
 
         List<Integer> ids = new ArrayList<>();
         for (Target target : targets)
             ids.add(target.getId());
-        Set<Integer> rotating = locks.getClaimed(ids);
+        Set<Integer> rotating = coordination.getClaimed(ids);
 
         List<ManagedConnection> managed = new ArrayList<>();
         for (Target target : targets) {
@@ -573,11 +597,12 @@ public final class RotationService {
      *
      * @throws GuacamoleClientException
      *     If a rotation of the connection is running, here or on another
-     *     server, or it is checked out.
+     *     server, it is checked out, or this server is on standby.
      */
     private RotationResult rotate(Target target, String reason, Wanted wanted) throws GuacamoleException {
 
-        try (RotationLocks.Claim claim = locks.tryClaim(target.getId())) {
+        coordination.requireActive();
+        try (Coordination.Claim claim = coordination.tryClaim(target.getId())) {
 
             if (claim == null)
                 throw new GuacamoleClientException("A rotation of this connection is already running.");
@@ -748,7 +773,7 @@ public final class RotationService {
     public void shutdown() {
         housekeeping.shutdownNow();
         scheduler.shutdownNow();
-        servers.remove();
+        coordination.shutdown();
     }
 
 }

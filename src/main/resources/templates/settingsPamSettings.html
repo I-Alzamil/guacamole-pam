@@ -2,8 +2,8 @@
 
     <div class="settings section">
         <p>{{ 'PAM_SETTINGS.HELP_SHARED' | translate }}</p>
-        <p class="pam-settings-notice" ng-if="serversWithoutHa">
-            {{ 'PAM_SETTINGS.WARNING_NO_HA' | translate:{ SERVERS: serversWithoutHa } }}
+        <p class="pam-settings-notice" ng-if="standby">
+            {{ 'PAM_SETTINGS.STANDBY_' + standby | translate }}
         </p>
 
         <form name="settingsForm" ng-submit="save()" novalidate>

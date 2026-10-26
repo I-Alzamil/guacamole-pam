@@ -1,5 +1,6 @@
 package io.github.ialzamil.guacamole.pam.rotation;
 
+import java.net.InetAddress;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -23,39 +24,29 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.github.ialzamil.guacamole.pam.Values;
+import io.github.ialzamil.guacamole.pam.coordination.Coordination;
 import io.github.ialzamil.guacamole.pam.db.PamDatabase;
 import io.github.ialzamil.guacamole.pam.db.SqlDialect;
 
 /**
- * Open sessions of managed connections, on every Guacamole server sharing
- * the database. Each server keeps the tunnels of its own sessions, which only
- * it can close, and records them in "pam_session" so all servers can tell
- * whether a connection is in use. A server refreshes the heartbeat of its
- * rows every minute; rows of a server that stopped without removing them are
- * ignored once stale, then removed.
+ * Open sessions of managed connections on this Guacamole server, whose
+ * tunnels only it can close. Each is recorded in "pam_session" too, so a
+ * server taking over from one that stopped finds those it left open, and
+ * with the HA module so every server can tell whether a connection is in
+ * use (see {@link Coordination}).
  */
-class SessionRegistry {
+class SessionRegistry implements Coordination.Sessions {
 
     private static final Logger logger = LoggerFactory.getLogger(SessionRegistry.class);
-
-    /**
-     * Age after which a row is no longer trusted: three missed heartbeats.
-     */
-    static final int STALE_SECONDS = 180;
 
     private final PamDatabase database;
 
     private final SqlDialect dialect;
 
     /**
-     * The condition that a row is not stale.
+     * Identifies this server's rows: its host name, made unique per start.
      */
-    private final String fresh;
-
-    /**
-     * Identifies this server's rows (see {@link ServerRegistry}).
-     */
-    private final String server;
+    private final String server = hostName() + "/" + UUID.randomUUID().toString().substring(0, 8);
 
     /**
      * A session open on this server.
@@ -107,11 +98,18 @@ class SessionRegistry {
 
     private final ConcurrentMap<GuacamoleTunnel, Session> local = new ConcurrentHashMap<>();
 
-    SessionRegistry(PamDatabase database, String server) {
+    SessionRegistry(PamDatabase database) {
         this.database = database;
         this.dialect = database.getDialect();
-        this.server = server;
-        this.fresh = " heartbeat > " + dialect.plusSeconds(dialect.now(), Integer.toString(-STALE_SECONDS));
+    }
+
+    private static String hostName() {
+        try {
+            return InetAddress.getLocalHost().getHostName();
+        }
+        catch (Exception e) {
+            return "guacamole";
+        }
     }
 
     void started(String identifier, String username, GuacamoleTunnel tunnel, SessionAccess access) {
@@ -126,7 +124,7 @@ class SessionRegistry {
             record(connection, session);
         }
         catch (GuacamoleException | SQLException e) {
-            // The next heartbeat records it
+            // Recorded again by the next heartbeat, with the HA module
             logger.warn("Unable to record the session of \"{}\" on connection {}: {}", username, identifier,
                     e.getMessage());
         }
@@ -221,25 +219,61 @@ class SessionRegistry {
         return new ArrayList<>(local.values());
     }
 
-    /**
-     * Open sessions of the connection on every server.
-     */
-    int count(int connectionId) throws GuacamoleException {
-        Integer count = countAll().get(connectionId);
-        return count == null ? 0 : count;
+    @Override
+    public Map<Integer, Integer> countLocal() {
+        Map<Integer, Integer> counts = new HashMap<>();
+        for (Session session : local.values()) {
+            Integer id = Values.parseId(session.identifier);
+            if (id != null)
+                counts.merge(id, 1, Integer::sum);
+        }
+        return counts;
     }
 
-    /**
-     * Open sessions per connection id on every server, leaving out
-     * connections with none.
-     */
-    Map<Integer, Integer> countAll() throws GuacamoleException {
+    @Override
+    public void refresh() throws GuacamoleException {
+        try (Connection connection = database.getConnection()) {
+
+            // Each recorded on its own: one of a connection just deleted,
+            // whose session closes shortly, cannot be, and must not keep
+            // the others from being. Rows this server failed to remove are
+            // not refreshed, and go stale like those of a stopped server
+            for (Session session : local.values()) {
+                if (Values.parseId(session.identifier) == null)
+                    continue;
+                try {
+                    record(connection, session);
+                }
+                catch (SQLException e) {
+                    logger.debug("Unable to record the session of \"{}\" on connection {}: {}", session.username,
+                            session.identifier, e.getMessage());
+                }
+            }
+
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to refresh the open sessions.", e);
+        }
+    }
+
+    @Override
+    public Set<Integer> removeOthers() throws GuacamoleException {
+        return remove("server <> ?", server, "which stopped");
+    }
+
+    @Override
+    public Set<Integer> removeStale(int seconds) throws GuacamoleException {
+        return remove("NOT" + fresh(seconds), null, "which stopped refreshing it");
+    }
+
+    @Override
+    public Map<Integer, Integer> countRecorded(int seconds) throws GuacamoleException {
 
         Map<Integer, Integer> counts = new HashMap<>();
 
         try (Connection connection = database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                 "SELECT connection_id, count(*) FROM pam_session WHERE" + fresh + " GROUP BY connection_id");
+             PreparedStatement statement = connection.prepareStatement("SELECT connection_id, count(*)"
+                     + " FROM pam_session WHERE" + fresh(seconds) + " GROUP BY connection_id");
              ResultSet results = statement.executeQuery()) {
             while (results.next())
                 counts.put(results.getInt(1), results.getInt(2));
@@ -253,62 +287,57 @@ class SessionRegistry {
     }
 
     /**
-     * Refreshes this server's rows, recording any it is missing, and removes
-     * stale rows of servers that stopped. Returns the ids of connections
-     * whose sessions were removed, as their after-use rotation was never
-     * triggered.
+     * The condition that a row was refreshed within the given seconds.
      */
-    Set<Integer> heartbeat() throws GuacamoleException {
+    private String fresh(int seconds) {
+        return " heartbeat > " + dialect.plusSeconds(dialect.now(), Integer.toString(-seconds));
+    }
 
-        Set<Integer> abandoned = new HashSet<>();
+    /**
+     * Removes the rows matching the given condition, of at most one
+     * parameter, logging each as recorded by a server that did as said.
+     * Returns the ids of their connections.
+     */
+    private Set<Integer> remove(String condition, String parameter, String what) throws GuacamoleException {
+
+        Set<Integer> removed = new HashSet<>();
 
         try (Connection connection = database.getConnection()) {
 
-            // Rows this server failed to remove are not refreshed, and go
-            // stale like those of a stopped server. Each is recorded on its
-            // own: one of a connection just deleted, whose session closes
-            // shortly, cannot be, and must not keep the others from being
-            for (Session session : local.values()) {
-                if (Values.parseId(session.identifier) == null)
-                    continue;
-                try {
-                    record(connection, session);
-                }
-                catch (SQLException e) {
-                    logger.debug("Unable to record the session of \"{}\" on connection {}: {}", session.username,
-                            session.identifier, e.getMessage());
-                }
-            }
-
-            List<String[]> stale = new ArrayList<>();
+            List<String[]> rows = new ArrayList<>();
             try (PreparedStatement statement = connection.prepareStatement(
-                    "SELECT session_id, connection_id, username, server FROM pam_session WHERE NOT" + fresh);
-                 ResultSet results = statement.executeQuery()) {
-                while (results.next())
-                    stale.add(new String[] { results.getString(1), results.getString(2), results.getString(3),
-                            results.getString(4) });
+                    "SELECT session_id, connection_id, username, server FROM pam_session WHERE " + condition)) {
+                if (parameter != null)
+                    statement.setString(1, parameter);
+                try (ResultSet results = statement.executeQuery()) {
+                    while (results.next())
+                        rows.add(new String[] { results.getString(1), results.getString(2), results.getString(3),
+                                results.getString(4) });
+                }
             }
 
             // Each removed once, here or by another server, unless
             // refreshed meanwhile
             try (PreparedStatement statement = connection.prepareStatement(
-                    "DELETE FROM pam_session WHERE session_id = ? AND NOT" + fresh)) {
-                for (String[] row : stale) {
+                    "DELETE FROM pam_session WHERE session_id = ? AND " + condition)) {
+                for (String[] row : rows) {
                     statement.setString(1, row[0]);
+                    if (parameter != null)
+                        statement.setString(2, parameter);
                     if (statement.executeUpdate() == 0)
                         continue;
-                    abandoned.add(Integer.valueOf(row[1]));
-                    logger.info("Removed the stale session of \"{}\" on connection {}, recorded by server"
-                            + " \"{}\", which stopped refreshing it.", row[2], row[1], row[3]);
+                    removed.add(Integer.valueOf(row[1]));
+                    logger.info("Removed the session of \"{}\" on connection {}, recorded by server \"{}\", {}.",
+                            row[2], row[1], row[3], what);
                 }
             }
 
         }
         catch (SQLException e) {
-            throw new GuacamoleServerException("Unable to refresh the open sessions.", e);
+            throw new GuacamoleServerException("Unable to remove the sessions of stopped servers.", e);
         }
 
-        return abandoned;
+        return removed;
 
     }
 
