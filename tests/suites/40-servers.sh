@@ -112,6 +112,9 @@ check_contains "...because the checkout ended" "its checkout ended on another se
 
 # ---------------------------------------------------------------- after use
 section "After-use rotation waits for sessions on every server"
+# Each session's end looks for an after-use rotation 5 seconds later: let
+# those of the sessions above pass before after-use is turned on
+sleep 6
 edit_connection "$ADMIN" "$SSH_C" '' '{"pam-rotation-mode":"after-use"}' >/dev/null
 PASSWORD=$(parameter "$SSH_C" password)
 open_session A2 "$GUAC2_URL" "$ADMIN2" "$SSH_C"

@@ -213,7 +213,7 @@ check "...kept with where they revoked it from" "$GUAC_ADMIN yes" \
         FROM pam_checkout WHERE checkout_id = $ACTIVE")" ] && echo yes)"
 check_contains "...and the connection refuses a new session" "403 You must request access" "$(tunnel "$REQUESTER" "$GATED" c)"
 
-# The periodic check ends expired checkouts every 15 seconds; until then,
+# The periodic check ends expired checkouts every 2 seconds; until then,
 # they must not count
 section "A checkout past its time limit, not ended yet"
 check "the requester checks out the gated connection again" 200 \

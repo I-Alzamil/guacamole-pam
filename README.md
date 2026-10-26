@@ -167,7 +167,7 @@ Guacamole itself needs). Nothing needs configuring:
   after 3 minutes, then removed, and the connections are rotated after use.
 - **When a checkout ends**, by release, revocation or expiry, the server
   ending it closes the holder's sessions at once. Other servers close theirs
-  within 15 seconds.
+  within 2 seconds.
 - **Settings are kept in the database** (see [Settings](#settings)), so every
   server applies the same ones, within 5 seconds of a change.
 

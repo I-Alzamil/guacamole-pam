@@ -71,7 +71,18 @@ public final class RotationService {
 
     private static final long PERIODIC_CHECK_SECONDS = 60;
 
-    private static final long EXPIRY_CHECK_SECONDS = 15;
+    /**
+     * How often checkouts past their time limit are ended, and this server
+     * closes its sessions of checkouts ended on another server: both cheap,
+     * so a revoked user is cut off on every server within seconds.
+     */
+    private static final long ENDED_CHECK_SECONDS = 2;
+
+    /**
+     * How often this server checks that the users of its sessions may still
+     * use their connection: once per session.
+     */
+    private static final long ACCESS_CHECK_SECONDS = 15;
 
     private static final long HEARTBEAT_SECONDS = 60;
 
@@ -131,7 +142,9 @@ public final class RotationService {
         scheduler.scheduleWithFixedDelay(this::rotateDueConnections,
                 PERIODIC_CHECK_SECONDS, PERIODIC_CHECK_SECONDS, TimeUnit.SECONDS);
         housekeeping.scheduleWithFixedDelay(this::endCheckouts,
-                EXPIRY_CHECK_SECONDS, EXPIRY_CHECK_SECONDS, TimeUnit.SECONDS);
+                ENDED_CHECK_SECONDS, ENDED_CHECK_SECONDS, TimeUnit.SECONDS);
+        housekeeping.scheduleWithFixedDelay(this::closeSessionsNoLongerAllowed,
+                ACCESS_CHECK_SECONDS, ACCESS_CHECK_SECONDS, TimeUnit.SECONDS);
         housekeeping.scheduleWithFixedDelay(this::heartbeat,
                 HEARTBEAT_SECONDS, HEARTBEAT_SECONDS, TimeUnit.SECONDS);
     }
@@ -248,7 +261,6 @@ public final class RotationService {
     private void endCheckouts() {
         expireCheckouts();
         closeSessionsOfEndedCheckouts();
-        closeSessionsNoLongerAllowed();
     }
 
     /**
