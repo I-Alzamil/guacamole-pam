@@ -193,7 +193,23 @@ public class SshClient {
     }
 
     private static PinnedHostKeyRepository hostKeys(SshTarget target) {
-        return new PinnedHostKeyRepository(target.getPinnedHostKey(), target.isTrustFirstKey());
+        return new PinnedHostKeyRepository(target.getPinnedHostKey(), target.isTrustFirstKey(),
+                target.getHostname(), target.getPort(), target.getAuthorities());
+    }
+
+    /**
+     * The host key algorithms JSch offers: host certificates first if
+     * certificate authorities are trusted, so a host presents one if it
+     * has one, otherwise plain keys only, as no certificate could be
+     * trusted.
+     */
+    private static String hostKeyAlgorithms(boolean certificates) {
+        List<String> algorithms = new ArrayList<>();
+        for (String algorithm : JSch.getConfig("server_host_key").split(",")) {
+            if (certificates || !algorithm.contains("-cert-"))
+                algorithms.add(algorithm);
+        }
+        return String.join(",", algorithms);
     }
 
     private Session openSession(SshTarget target, String password, boolean allowKey,
@@ -212,6 +228,10 @@ public class SshClient {
 
         Session session = jsch.getSession(target.getUsername(), target.getHostname(), target.getPort());
         session.setConfig("StrictHostKeyChecking", "yes");
+        session.setConfig("server_host_key", hostKeyAlgorithms(hostKeys.hasAuthorities()));
+        // A certificate the authorities do not vouch for is refused, saying
+        // why, not checked as a plain key
+        session.setConfig("host_certificate_to_key_fallback", "no");
         session.setConfig("PreferredAuthentications", useKey
                 ? "publickey,password,keyboard-interactive" : "password,keyboard-interactive");
         if (password != null && !password.isEmpty())
@@ -249,6 +269,15 @@ public class SshClient {
         String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
         String lower = message.toLowerCase();
 
+        if (hostKeys.isUntrusted() && hostKeys.hasAuthorities())
+            return "The host presented the key " + hostKeys.getPresentedFingerprint()
+                    + describeType(hostKeys.getPresentedType()) + ", not a host certificate signed by one of"
+                    + " the platform's SSH CA keys. No credentials were sent. Give the host a certificate"
+                    + " (HostCertificate in sshd_config), or check its key on the host"
+                    + hostKeyFileHint(hostKeys.getPresentedType()) + " and paste it into the connection's"
+                    + " \"Trusted SSH host key\" field.";
+        if (lower.contains("rejected certificate") || lower.contains("rejected hostkey: "))
+            return "The host's certificate is not trusted: " + message + ". No credentials were sent.";
         if (hostKeys.isUntrusted())
             return "The host key " + hostKeys.getPresentedFingerprint() + describeType(hostKeys.getPresentedType())
                     + " is not trusted yet. No credentials were sent. Check it on the host"

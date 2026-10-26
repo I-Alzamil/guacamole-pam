@@ -121,7 +121,7 @@ create_platform() {
 }
 
 # The fingerprint of mysshtest's host key, as the extension reads it
-MYSSH_HOST_KEY=$(podman exec mysshtest ssh-keygen -lf /config/ssh_host_keys/ssh_host_ecdsa_key.pub 2>/dev/null \
+MYSSH_HOST_KEY=$(podman exec mysshtest ssh-keygen -lf /config/ssh_host_keys/ssh_host_ed25519_key.pub 2>/dev/null \
     | awk '{print $2}')
 
 # create_connection VARIABLE JSON: likewise for a connection

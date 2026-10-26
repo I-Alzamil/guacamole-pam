@@ -22,7 +22,7 @@
         "FIELD_HEADER_PAM_SSH_PORT": "SSH port:",
         "FIELD_HELP_PAM_SSH_PORT": "Empty: the SSH connection's port, or else the platform's.",
         "FIELD_HEADER_PAM_SSH_HOST_KEY": "Trusted SSH host key:",
-        "FIELD_HELP_PAM_SSH_HOST_KEY": "SHA256 fingerprint of the host key, as ssh-keygen -l prints it. Empty: the host is refused, its key shown in the error to check and pin here, unless the platform trusts new host keys.",
+        "FIELD_HELP_PAM_SSH_HOST_KEY": "SHA256 fingerprint of the host key, as ssh-keygen -l prints it. Empty: the platform's SSH CA keys decide; without any, the host is refused, its key shown in the error to check and pin here, unless the platform trusts new host keys.",
         "SECTION_HEADER_PAM_TYPE_LDAP": "Directory account",
         "FIELD_HEADER_PAM_LDAP_DN": "Account DN:",
         "SECTION_HEADER_PAM_TYPE_KERBEROS": "Kerberos account",
@@ -116,7 +116,7 @@
         "HELP_TYPE_WINRM": "Local Windows accounts only, over HTTPS only. Sets their passwords as an administrator or as the account itself (which must then be an administrator); for domain accounts, use LDAP or Kerberos. Host certificates are checked against your CA's certificates, or pinned on each connection.",
         "HELP_TYPE_LDAP": "OpenLDAP, Active Directory and other directories, over LDAPS or StartTLS. Changes account passwords as an administrator or as the account itself. Active Directory requires encryption.",
         "HELP_TYPE_TACACS": "Accounts held by a TACACS+ server itself, over its password change dialogue (RFC 8907), with the account's current password. Only where the server allows password changes, such as tac_plus-ng with a backend storing passwords: a server says so only when asked to change one. For accounts the server checks in a directory, use LDAP or Kerberos.",
-        "HELP_TYPE_SSH": "Any system reachable over SSH: a send/expect script changes the password, such as passwd on Linux or net user on Windows (OpenSSH). The host key is pinned on the connection, or trusted on first contact if the platform allows it.",
+        "HELP_TYPE_SSH": "Any system reachable over SSH: a send/expect script changes the password, such as passwd on Linux or net user on Windows (OpenSSH). The host key is pinned on the connection, certified by your SSH CA, or trusted on first contact if the platform allows it.",
         "INFO_ACTIVE": "Active",
         "INFO_ACTIVE_SESSIONS": "{COUNT, plural, one{1 active session} other{# active sessions}}",
         "INFO_APPROVED_BY": "Approved by {USERS}",
@@ -287,8 +287,10 @@
         "FIELD_HEADER_SCRIPT": "Sequence:",
         "FIELD_HEADER_PORT": "Default SSH port:",
         "FIELD_HELP_PORT": "Used when a connection gives no SSH port. Empty: 22.",
+        "FIELD_HEADER_SSH_CA_KEYS": "SSH CA keys:",
+        "FIELD_HELP_SSH_CA_KEYS": "Public keys of the certificate authorities that sign your hosts' SSH host certificates, one per line, as in the CA's .pub file. A host presenting a certificate one of them signed, naming the host and valid now, is trusted without a pinned key. Empty: host keys are pinned on each connection.",
         "FIELD_HEADER_TRUST_FIRST_KEY": "Trust new host keys:",
-        "FIELD_HELP_TRUST_FIRST_KEY": "Accept the key a host presents at the first contact, when its connection pins none, and require it from then on, as ssh does with known_hosts. Unchecked: such a host is refused until its key is pinned on the connection."
+        "FIELD_HELP_TRUST_FIRST_KEY": "Without SSH CA keys, accept the key a host presents at the first contact, when its connection pins none, and require it from then on, as ssh does with known_hosts. Unchecked: such a host is refused until its key is pinned on the connection."
     },
     "PAM_TYPE_LDAP": {
         "SECTION_HEADER_LDAP_SERVER": "Directory (LDAP / Active Directory)",

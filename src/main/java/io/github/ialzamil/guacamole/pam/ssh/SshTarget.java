@@ -1,5 +1,7 @@
 package io.github.ialzamil.guacamole.pam.ssh;
 
+import java.util.List;
+
 /**
  * Where and as whom to log in over SSH to rotate a password.
  */
@@ -13,9 +15,11 @@ public final class SshTarget {
     private final String passphrase;
     private final String pinnedHostKey;
     private final boolean trustFirstKey;
+    private final List<byte[]> authorities;
 
     public SshTarget(String hostname, int port, String username, String password,
-            String privateKey, String passphrase, String pinnedHostKey, boolean trustFirstKey) {
+            String privateKey, String passphrase, String pinnedHostKey, boolean trustFirstKey,
+            List<byte[]> authorities) {
         this.hostname = hostname;
         this.port = port;
         this.username = username;
@@ -24,6 +28,7 @@ public final class SshTarget {
         this.passphrase = passphrase;
         this.pinnedHostKey = pinnedHostKey;
         this.trustFirstKey = trustFirstKey;
+        this.authorities = authorities;
     }
 
     /**
@@ -31,7 +36,7 @@ public final class SshTarget {
      */
     public SshTarget withPassword(String newPassword) {
         return new SshTarget(hostname, port, username, newPassword, privateKey, passphrase, pinnedHostKey,
-                trustFirstKey);
+                trustFirstKey, authorities);
     }
 
     public String getHostname() {
@@ -75,6 +80,14 @@ public final class SshTarget {
      */
     public boolean isTrustFirstKey() {
         return trustFirstKey;
+    }
+
+    /**
+     * Keys of the certificate authorities whose host certificates are
+     * trusted, unless a host key is pinned; empty if none.
+     */
+    public List<byte[]> getAuthorities() {
+        return authorities;
     }
 
 }

@@ -3,6 +3,7 @@ package io.github.ialzamil.guacamole.pam.management;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -10,6 +11,7 @@ import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.form.BooleanField;
 import org.apache.guacamole.form.Field;
 import org.apache.guacamole.form.Form;
+import org.apache.guacamole.form.MultilineField;
 import org.apache.guacamole.form.NumericField;
 import org.apache.guacamole.form.TextField;
 
@@ -17,6 +19,7 @@ import io.github.ialzamil.guacamole.pam.Values;
 import io.github.ialzamil.guacamole.pam.db.ConnectionRepository.Target;
 import io.github.ialzamil.guacamole.pam.platform.Platform;
 import io.github.ialzamil.guacamole.pam.ssh.SequenceScript;
+import io.github.ialzamil.guacamole.pam.ssh.SshAuthorities;
 import io.github.ialzamil.guacamole.pam.ssh.SshClient;
 import io.github.ialzamil.guacamole.pam.ssh.SshTarget;
 
@@ -39,10 +42,20 @@ public class SshManagementType implements ManagementType {
 
     /**
      * Platform setting: whether a host's key is trusted at the first
-     * contact, while none is pinned or recorded ("true"). Otherwise such a
-     * host is refused until its key is pinned on the connection.
+     * contact, while none is pinned or recorded ("true"), on a platform
+     * trusting no certificate authority. Otherwise such a host is refused
+     * until its key is pinned on the connection.
      */
     public static final String TRUST_FIRST_KEY = "trust-first-key";
+
+    /**
+     * Platform setting: public keys of the certificate authorities whose
+     * host certificates are trusted, one per line (see
+     * {@link SshAuthorities}). A host presenting a certificate one of them
+     * signed, naming the host and valid now, is trusted without a pinned
+     * key, so a host given a new key and certificate keeps working.
+     */
+    public static final String CA_KEYS = "ssh-ca-keys";
 
     /**
      * Field type of the script, rendered with the script editor.
@@ -79,6 +92,7 @@ public class SshManagementType implements ManagementType {
         return Collections.singletonList(new Form("ssh", Arrays.<Field>asList(
             new Field(SCRIPT, SCRIPT_FIELD_TYPE),
             new NumericField(PORT),
+            new MultilineField(CA_KEYS),
             new BooleanField(TRUST_FIRST_KEY, "true")
         )));
     }
@@ -106,6 +120,13 @@ public class SshManagementType implements ManagementType {
 
         if (platform.get(PORT) != null && Values.toPort(platform.get(PORT)) == null)
             throw new GuacamoleClientException("The SSH port must be a number between 1 and 65535.");
+
+        try {
+            SshAuthorities.parse(platform.get(CA_KEYS));
+        }
+        catch (IllegalArgumentException e) {
+            throw new GuacamoleClientException(e.getMessage());
+        }
 
     }
 
@@ -154,23 +175,27 @@ public class SshManagementType implements ManagementType {
         if (password == null && privateKey == null)
             throw new IllegalArgumentException("The connection has neither a password nor a private key.");
 
+        List<byte[]> authorities = SshAuthorities.parse(platform.get(CA_KEYS));
         return new SshTarget(hostname, port, username, password, privateKey,
-                Values.emptyToNull(parameters.get("passphrase")), trustedHostKey(target),
-                "true".equals(platform.get(TRUST_FIRST_KEY)));
+                Values.emptyToNull(parameters.get("passphrase")), trustedHostKey(target, !authorities.isEmpty()),
+                "true".equals(platform.get(TRUST_FIRST_KEY)) && authorities.isEmpty(), authorities);
 
     }
 
     /**
-     * The host key to require: the one pinned on the connection, or else the
-     * one recorded at the first contact with the host (trust on first use,
-     * as with SSH's known_hosts, if the platform allows it). Only a first
-     * contact may accept any key.
+     * The host key to require: the one pinned on the connection, or else
+     * (unless the platform trusts certificate authorities, so a host given
+     * a new key keeps working) the one recorded at the first contact with
+     * the host (trust on first use, as with SSH's known_hosts, if the
+     * platform allows it). Only a first contact may accept any key.
      */
-    private static String trustedHostKey(Target target) {
+    private static String trustedHostKey(Target target, boolean byAuthority) {
 
         String pinned = Values.emptyToNull(target.getAttribute(SSH_HOST_KEY));
         if (pinned != null)
             return pinned;
+        if (byAuthority)
+            return null;
 
         // Only an SSH key counts: the same state records the certificate of
         // an LDAP target, should the connection have been managed over LDAP

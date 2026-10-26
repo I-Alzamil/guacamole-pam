@@ -45,7 +45,7 @@ sql "UPDATE pam_rotation_state SET host_key = NULL WHERE connection_id = $SSH_C"
 RESULT=$(rotate "$SSH_C")
 check "SSH: with no key trusted, the host is refused" "FAILED" "${RESULT%%:*}"
 check_contains "SSH: ...before any credentials are sent, showing its key to check and pin" \
-    "The host key $MYSSH_HOST_KEY (ecdsa-sha2-nistp256) is not trusted yet. No credentials were sent." "$RESULT"
+    "The host key $MYSSH_HOST_KEY (ssh-ed25519) is not trusted yet. No credentials were sent." "$RESULT"
 check "SSH: ...and the password still works" yes "$(ssh_accepts mysshtest "$(parameter "$SSH_C" password)")"
 TRUSTING=$(python3 -I -c 'import json,sys; d=json.loads(sys.argv[1]); print(json.dumps({"name": "t2 ssh trusting",
     "type": "ssh", "settings": dict(d["settings"], **{"trust-first-key": "true"}), "policy": {}}))' \
@@ -57,6 +57,28 @@ check "SSH: ...recording the key, which is trusted from then on" "$MYSSH_HOST_KE
     "$(sql "SELECT host_key FROM pam_rotation_state WHERE connection_id = $SSH_C")"
 use_platform "$SSH_C" "$LINUX"
 check "SSH: ...also by the platform trusting no new key" "SUCCESS" "$(rotate "$SSH_C" | cut -d: -f1)"
+
+# mysshtest presents a host certificate of the lab's test SSH CA (lab.sh)
+SSH_CA=$(cat ../lab/targets/certs/ssh_ca.pub)
+CA_PLATFORM=$(python3 -I -c 'import json,sys; d=json.loads(sys.argv[1]); print(json.dumps({"name": "t2 ssh ca",
+    "type": "ssh", "settings": dict(d["settings"], **{"ssh-ca-keys": sys.argv[2]}), "policy": {}}))' \
+    "$(api GET "$PAM/platforms/$LINUX" "$ADMIN" | cut -d' ' -f2-)" "$SSH_CA")
+create_platform CA_P "$CA_PLATFORM"
+check "SSH: a platform refuses an SSH CA key that is not one" 400 \
+    "$(status_of "$(api POST "$PAM/platforms" "$ADMIN" '{"name":"t2 ssh bad ca","type":"ssh","settings":{"script":"passwd","ssh-ca-keys":"ssh-ed25519 nope"},"policy":{}}')")"
+edit_connection "$ADMIN" "$SSH_C" '' "{\"pam-platform\":\"$CA_P\",\"pam-ssh-host-key\":null}" >/dev/null
+sql "UPDATE pam_rotation_state SET host_key = NULL WHERE connection_id = $SSH_C" >/dev/null
+check "SSH: with no key pinned or recorded, a host certificate of the platform's CA is trusted" "SUCCESS" \
+    "$(rotate "$SSH_C" | cut -d: -f1)"
+check "SSH: ...and the server accepts the new password" yes "$(ssh_accepts mysshtest "$(parameter "$SSH_C" password)")"
+SSH_IP=$(podman inspect -f '{{.NetworkSettings.Networks.myguacnet.IPAddress}}' mysshtest)
+edit_connection "$ADMIN" "$SSH_C" "{\"hostname\":\"$SSH_IP\"}" >/dev/null
+RESULT=$(rotate "$SSH_C")
+check "SSH: a certificate not naming the host as reached is refused" "FAILED" "${RESULT%%:*}"
+check_contains "SSH: ...before any credentials are sent, saying why" "invalid principal '$SSH_IP'" "$RESULT"
+check_contains "SSH: ...before any credentials are sent" "No credentials were sent" "$RESULT"
+edit_connection "$ADMIN" "$SSH_C" '{"hostname":"mysshtest"}' "{\"pam-platform\":\"$LINUX\",\"pam-ssh-host-key\":\"$MYSSH_HOST_KEY\"}" >/dev/null
+check "SSH: a platform without CA keys still requires the pinned key" "SUCCESS" "$(rotate "$SSH_C" | cut -d: -f1)"
 
 section "SSH: a script choosing by the prompt, as the account and as root"
 

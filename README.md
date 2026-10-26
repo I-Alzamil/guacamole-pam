@@ -769,7 +769,13 @@ openssl s_client -connect <host>:5986 </dev/null 2>/dev/null | openssl x509 -noo
   host (such as `ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub`) and paste. With
   **Trust new host keys** on the platform, the key seen first is trusted
   instead and required from then on, like SSH's `known_hosts`. If a host's key
-  changes on purpose, paste the new fingerprint likewise.
+  changes on purpose, paste the new fingerprint likewise. With **SSH CA keys**
+  on the platform (the public keys of the CAs that sign your hosts' SSH host
+  certificates, as in the CA's `.pub` file), a host presenting a certificate
+  one of them signed, valid now and naming the host as the connection reaches
+  it, is trusted without a pinned key, like `@cert-authority` in
+  `known_hosts`; a host presenting none is refused unless its key is pinned.
+  A pinned key is required instead, if set. Revocation isn't checked.
 - **LDAP must be encrypted with a rotation account.** LDAP platforms with a
   rotation account require LDAPS or StartTLS. Pin the server certificate's
   fingerprint, or use a certificate the JVM trusts that matches the hostname.
@@ -825,7 +831,7 @@ passwords. Its commands run in the order given:
 | `lab/lab.sh app` | (Re)starts Guacamole's database, guacd and Guacamole with the built jar, on http://localhost:8080. Run it again after each build. Stored secrets are encrypted with a fixed test key; set `PAM_ENCRYPTION_KEY=` to store them unencrypted |
 | `lab/lab.sh app --ha` | Also a second Guacamole sharing the database and guacd, on http://localhost:8081, with the [HA module](#high-availability-the-ha-module) on in both, for the two-server tests (`--ha` alone restarts both servers that way, keeping the database and guacd running) |
 | `lab/lab.sh app --ha=off` | The same two servers with the HA module off: the second, started once the first answers, stays on standby (alone, likewise restarts both) |
-| `lab/lab.sh services` | The servers whose accounts the lab manages, keeping those already running: SSH `mysshtest` (user `mysshtest`), OpenLDAP `myldaptest` (`uid=ldaptest,ou=people,dc=example,dc=org`), Samba AD `myadtest` (LDAPS and Kerberos, `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`), MIT Kerberos `mykdctest` (realm `EXAMPLE.ORG`, `kdctest`), TACACS+ `mytacacstest` (tac_plus-ng, built from source into `localhost/pam-tacacs-test` the first time; `tactest`), and databases over TLS with certificates of a test CA generated into `lab/targets/certs`: PostgreSQL `mypgtarget`, MySQL `mymysqltarget`, MariaDB `mymariadbtarget`, SQL Server `mymssqltarget` (`dbtest`). Passwords are listed at the top of `lab/lab.sh` |
+| `lab/lab.sh services` | The servers whose accounts the lab manages, keeping those already running: SSH `mysshtest` (user `mysshtest`; its ECDSA host key has a certificate of a test SSH CA, `lab/targets/certs/ssh_ca.pub`), OpenLDAP `myldaptest` (`uid=ldaptest,ou=people,dc=example,dc=org`), Samba AD `myadtest` (LDAPS and Kerberos, `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`), MIT Kerberos `mykdctest` (realm `EXAMPLE.ORG`, `kdctest`), TACACS+ `mytacacstest` (tac_plus-ng, built from source into `localhost/pam-tacacs-test` the first time; `tactest`), and databases over TLS with certificates of a test CA generated into `lab/targets/certs`: PostgreSQL `mypgtarget`, MySQL `mymysqltarget`, MariaDB `mymariadbtarget`, SQL Server `mymssqltarget` (`dbtest`). Passwords are listed at the top of `lab/lab.sh` |
 | `lab/lab.sh seed` | Adds the test platforms, connections, users and group to a fresh database, through the REST API (`lab/seed.sh`) |
 | `lab/lab.sh reset` | Recreates Guacamole's database, with only Guacamole's schema and `guacadmin` / `guacadmin` |
 | `lab/lab.sh stop` | Stops every container of the lab |

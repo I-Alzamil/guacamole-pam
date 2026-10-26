@@ -40,7 +40,7 @@ export AD_FP=$(fingerprint myadtest /var/lib/samba/private/tls/cert.pem)
 [ -z "$AD_FP" ] && echo "warning: myadtest is not running, MYTEST_AD gets no pinned certificate"
 # mysshtest's host key, pinned on its connection: SSH platforms trust no key
 # on first contact by default
-export SSH_HOST_KEY=$(podman exec mysshtest ssh-keygen -lf /config/ssh_host_keys/ssh_host_ecdsa_key.pub \
+export SSH_HOST_KEY=$(podman exec mysshtest ssh-keygen -lf /config/ssh_host_keys/ssh_host_ed25519_key.pub \
     2>/dev/null | awk '{print $2}')
 export DB_CA="$(cat "$(dirname "$0")/targets/certs/ca.crt" 2>/dev/null)"
 [ -z "$DB_CA" ] && echo "warning: no test CA yet (lab.sh services): the database platforms trust Java's CAs only"

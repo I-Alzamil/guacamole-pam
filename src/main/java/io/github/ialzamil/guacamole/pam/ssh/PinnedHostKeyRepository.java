@@ -3,17 +3,24 @@ package io.github.ialzamil.guacamole.pam.ssh;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.List;
 
 import com.jcraft.jsch.HostKey;
 import com.jcraft.jsch.HostKeyRepository;
+import com.jcraft.jsch.JSchException;
 import com.jcraft.jsch.UserInfo;
 
 /**
  * Host key check run by JSch before authenticating, so credentials are never
  * sent to a host whose key does not match the pinned fingerprint. Without a
- * pin, any key is accepted only if asked to (trust on first use); either
- * way, the fingerprint presented is kept for display.
+ * pin, a host certificate signed by one of the given certificate
+ * authorities is trusted, which JSch checks with the authorities this
+ * lists (as known_hosts "@cert-authority" lines); otherwise any key is
+ * accepted only if asked to (trust on first use). Either way, the
+ * fingerprint of a key presented is kept for display.
  */
 class PinnedHostKeyRepository implements HostKeyRepository {
 
@@ -21,13 +28,49 @@ class PinnedHostKeyRepository implements HostKeyRepository {
 
     private final boolean acceptAny;
 
+    /**
+     * The authorities, as JSch reads them, for the host as JSch looks it up.
+     */
+    private final HostKey[] authorities;
+
     private volatile String presented;
 
     private volatile String presentedType;
 
     PinnedHostKeyRepository(String pinnedFingerprint, boolean acceptAny) {
+        this(pinnedFingerprint, acceptAny, null, 0, Collections.<byte[]>emptyList());
+    }
+
+    /**
+     * @param authorities
+     *     Keys of the certificate authorities trusted for the given host and
+     *     port, unless a fingerprint is pinned.
+     */
+    PinnedHostKeyRepository(String pinnedFingerprint, boolean acceptAny, String host, int port,
+            List<byte[]> authorities) {
         this.pinned = normalize(pinnedFingerprint);
         this.acceptAny = acceptAny;
+        List<HostKey> keys = new ArrayList<>();
+        if (pinned == null) {
+            // As JSch names the host it looks up
+            String lookup = port == 22 ? host : "[" + host + "]:" + port;
+            for (byte[] key : authorities) {
+                try {
+                    keys.add(new HostKey("@cert-authority", lookup, HostKey.GUESS, key, null));
+                }
+                catch (JSchException e) {
+                    throw new IllegalArgumentException("Unsupported SSH CA key: " + e.getMessage(), e);
+                }
+            }
+        }
+        this.authorities = keys.toArray(new HostKey[0]);
+    }
+
+    /**
+     * Whether host certificates of certificate authorities are trusted.
+     */
+    boolean hasAuthorities() {
+        return authorities.length > 0;
     }
 
     /**
@@ -74,7 +117,7 @@ class PinnedHostKeyRepository implements HostKeyRepository {
 
     @Override
     public HostKey[] getHostKey() {
-        return new HostKey[0];
+        return authorities.clone();
     }
 
     @Override

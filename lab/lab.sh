@@ -13,7 +13,9 @@
 #   lab.sh services
 #       Starts the servers seed.sh and the suites manage accounts on, keeping
 #       those already running:
-#         mysshtest        SSH, user "mysshtest" / "P@ssw0rd"
+#         mysshtest        SSH, user "mysshtest" / "P@ssw0rd", with a host
+#                          certificate of a test SSH CA (lab/targets/certs/
+#                          ssh_ca.pub)
 #         myldaptest       OpenLDAP, "uid=ldaptest,ou=people,dc=example,dc=org"
 #                          / "P@ssw0rd", admin "cn=admin,dc=example,dc=org" /
 #                          "LdapAdm1n"
@@ -123,7 +125,7 @@ reset() {
 # container is allowed to bind ports below 1024 (in its own network
 # namespace only)
 start_ssh() {
-    running mysshtest && return 0
+    running mysshtest && { certify_ssh; return; }
     podman run --rm -d \
         --name mysshtest \
         --hostname mysshtest \
@@ -135,7 +137,28 @@ start_ssh() {
         -e LISTEN_PORT=22 \
         -e USER_NAME=mysshtest \
         -e USER_PASSWORD=P@ssw0rd \
-        docker.io/linuxserver/openssh-server:version-10.2_p1-r0 >/dev/null
+        docker.io/linuxserver/openssh-server:version-10.2_p1-r0 >/dev/null || return 1
+    certify_ssh
+}
+
+# A host certificate for mysshtest's ECDSA key, which it then presents to
+# clients asking for one, signed by a test SSH CA generated the first time
+# into lab/targets/certs (ssh_ca.pub there)
+certify_ssh() {
+    local certs=targets/certs keys=/config/ssh_host_keys
+    mkdir -p "$certs"
+    [ -s "$certs/ssh_ca" ] || ssh-keygen -q -t ed25519 -N '' -C "guacamole-pam test SSH CA" -f "$certs/ssh_ca" \
+        || return 1
+    podman exec mysshtest test -s "$keys/ssh_host_ecdsa_key-cert.pub" && return 0
+    # The image generates its host keys as it starts
+    for _ in $(seq 30); do podman exec mysshtest test -s /config/sshd.pid && break; sleep 1; done
+    podman cp "mysshtest:$keys/ssh_host_ecdsa_key.pub" "$certs/mysshtest_ecdsa.pub" || return 1
+    ssh-keygen -q -s "$certs/ssh_ca" -I mysshtest -h -n mysshtest "$certs/mysshtest_ecdsa.pub" || return 1
+    podman cp "$certs/mysshtest_ecdsa-cert.pub" "mysshtest:$keys/ssh_host_ecdsa_key-cert.pub" || return 1
+    podman exec mysshtest sh -c "chmod 644 $keys/ssh_host_ecdsa_key-cert.pub
+        grep -q '^HostCertificate' /config/sshd/sshd_config \
+            || echo 'HostCertificate $keys/ssh_host_ecdsa_key-cert.pub' >> /config/sshd/sshd_config
+        kill -HUP \$(cat /config/sshd.pid)"
 }
 
 # OpenLDAP server, port 389 (StartTLS) and 636 (LDAPS) with a self-signed
