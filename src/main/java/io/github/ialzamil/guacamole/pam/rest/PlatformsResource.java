@@ -1,6 +1,8 @@
 package io.github.ialzamil.guacamole.pam.rest;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.TreeSet;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.DELETE;
@@ -90,11 +92,26 @@ public class PlatformsResource extends PamResource {
         if (type == null || !type.isTestable())
             throw new GuacamoleClientException("Platforms of this type cannot be tested.");
 
+        // The test connects from this server, wherever the platform says
         PlatformTestResult result = type.test(prepared);
-        logger.info("User \"{}\" tested platform \"{}\": {}.", username(), Values.forLog(prepared.getName()),
-                result.isSuccess() ? "passed" : "failed");
+        logger.info("User \"{}\" tested platform \"{}\" ({}): {}.", username(), Values.forLog(prepared.getName()),
+                destination(type, prepared), result.isSuccess() ? "passed" : "failed");
         return result;
 
+    }
+
+    /**
+     * Where a test of the platform connects, for the log: its settings
+     * deciding where its secrets go, but for certificates.
+     */
+    private static String destination(ManagementType type, Platform platform) {
+        List<String> parts = new ArrayList<>();
+        for (String name : new TreeSet<>(type.getDestinationFields())) {
+            String value = platform.getSettings().get(name);
+            if (value != null && !value.isEmpty() && value.indexOf('\n') < 0)
+                parts.add(name + "=" + Values.forLog(value));
+        }
+        return String.join(", ", parts);
     }
 
     @GET

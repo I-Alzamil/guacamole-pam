@@ -532,7 +532,11 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   accounts' passwords). A database platform without an administrator signs in
   as an account that doesn't exist, `guacamole-pam-test`, which the server
   must refuse and may log as a failed login. Each step's outcome
-  is listed, and the test is logged. Stored passwords, shown masked, are the
+  is listed, and the test is logged, with the servers it reached. The test
+  connects from the Guacamole server, to whatever host and port the
+  administrator gives, and its errors tell whether they answered: like
+  connections themselves, which reach any host through guacd, it is for
+  administrators only. Stored passwords, shown masked, are the
   ones tested, unless where they are sent changed: enter them again then.
   Without an admin principal, Active Directory and some KDCs don't say
   whether they serve the realm: the first rotation checks it. Likewise, a
