@@ -17,7 +17,9 @@ Privileged access management for [Apache Guacamole](https://guacamole.apache.org
   the target accepts it.
 - **Accounts.** An "Account" connection type holds a password that users check
   out for a limited time instead of opening a session. Use it for web consoles,
-  service accounts and anything else Guacamole can't connect to.
+  service accounts and anything else Guacamole can't connect to. Users see the
+  account's username; LDAP platforms can also show them its DN (*Show the DN
+  to requesters*, off by default).
 - **Access requests.** Users must request access to a connection, or an
   Account's password, giving a reason. They get a time-limited checkout, and
   their sessions are closed when it ends. Connections can require approval by

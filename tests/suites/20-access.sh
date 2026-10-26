@@ -41,6 +41,18 @@ LISTED=$(curl -s "$PAM/requests?token=$REQUESTER" | python3 -I -c "import sys,js
 check "listed: the Account and the gated connection, not the open one" "['t2 account', 't2 gated ssh']" "$LISTED"
 check "an outsider cannot see the Account's request" 403 "$(status_of "$(api GET "$PAM/requests/$ACCOUNT" "$OUTSIDER")")"
 
+section "An LDAP account's DN, shown only if its platform says so"
+LDAP_PLATFORM_JSON='{"name":"t2 access ldap","type":"ldap","settings":{"hostname":"myldaptest","ldap-encryption":"none"%s},"policy":{"rotation-mode":"never"}}'
+create_platform DN_PLATFORM "$(printf "$LDAP_PLATFORM_JSON" '')"
+create_connection DN_ACCOUNT "{\"name\":\"t2 dn account\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"pam-account\",
+    \"parameters\":{\"username\":\"t2-dn\",\"password\":\"x\"},
+    \"attributes\":{\"pam-platform\":\"$DN_PLATFORM\",\"pam-ldap-dn\":\"uid=t2-dn,ou=people,dc=example,dc=org\"}}"
+grant_read t2-requester "$DN_ACCOUNT"
+account_dn() { json_get "$(api GET "$PAM/requests/$DN_ACCOUNT" "$REQUESTER" | cut -d' ' -f2-)" "d.get('accountName') + ' ' + str(d.get('accountDn'))"; }
+check "by default, the requester sees the username only" "t2-dn None" "$(account_dn)"
+api PUT "$PAM/platforms/$DN_PLATFORM" "$ADMIN" "$(printf "$LDAP_PLATFORM_JSON" ',"ldap-show-dn":"true"')" >/dev/null
+check "...and its DN too once the platform shows it" "t2-dn uid=t2-dn,ou=people,dc=example,dc=org" "$(account_dn)"
+
 # ---------------------------------------------------------------- approvals
 section "Two approvals by distinct approvers"
 R=$(api POST "$PAM/requests/$ACCOUNT" "$REQUESTER" '{}')

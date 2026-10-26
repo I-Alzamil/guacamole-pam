@@ -975,7 +975,7 @@ public class CheckoutService {
      */
     private static String accountDetail(Target target, Platform platform) {
         ManagementType type = platform == null ? null : ManagementTypes.get(platform.getType());
-        return type == null ? null : type.getAccountDetail(target);
+        return type == null ? null : type.getAccountDetail(target, platform);
     }
 
     /**

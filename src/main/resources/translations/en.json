@@ -304,7 +304,10 @@
         "FIELD_OPTION_LDAP_DIRECTORY_TYPE_ACTIVE_DIRECTORY": "Active Directory",
         "FIELD_HEADER_LDAP_ADMIN_DN": "Rotation account DN:",
         "FIELD_HELP_LDAP_ADMIN_DN": "Empty: each account changes its own password.",
-        "FIELD_HEADER_LDAP_ADMIN_PASSWORD": "Rotation account password:"
+        "FIELD_HEADER_LDAP_ADMIN_PASSWORD": "Rotation account password:",
+        "SECTION_HEADER_LDAP_REQUESTS": "Access requests",
+        "FIELD_HEADER_LDAP_SHOW_DN": "Show the DN to requesters:",
+        "FIELD_HELP_LDAP_SHOW_DN": "Whether users checking out an account see its DN beside its username. Unchecked: the username only."
     },
     "PAM_TYPE_KERBEROS": {
         "SECTION_HEADER_KERBEROS_SERVER": "Realm",

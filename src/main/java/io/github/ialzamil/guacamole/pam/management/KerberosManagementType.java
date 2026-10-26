@@ -122,7 +122,7 @@ public class KerberosManagementType implements ManagementType {
     }
 
     @Override
-    public String getAccountDetail(Target target) {
+    public String getAccountDetail(Target target, Platform platform) {
         return target.getAttribute(PRINCIPAL);
     }
 

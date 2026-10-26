@@ -93,8 +93,11 @@ public interface ManagementType {
     /**
      * Extra identification of the account shown to users requesting its
      * password, such as an LDAP DN, or null.
+     *
+     * @param platform
+     *     The connection's platform, of this type, without its secrets.
      */
-    default String getAccountDetail(Target target) {
+    default String getAccountDetail(Target target, Platform platform) {
         return null;
     }
 

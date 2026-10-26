@@ -140,7 +140,7 @@ public class DatabaseManagementType implements ManagementType {
      * databases' accounts, which their name alone identifies.
      */
     @Override
-    public String getAccountDetail(Target target) {
+    public String getAccountDetail(Target target, Platform platform) {
         String host = target.getAttribute(ACCOUNT_HOST);
         return host == null ? null : target.getParameters().get("username") + "@" + host;
     }

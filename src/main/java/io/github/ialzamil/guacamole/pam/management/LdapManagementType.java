@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.guacamole.GuacamoleClientException;
+import org.apache.guacamole.form.BooleanField;
 import org.apache.guacamole.form.EnumField;
 import org.apache.guacamole.form.Field;
 import org.apache.guacamole.form.Form;
@@ -40,6 +41,13 @@ public class LdapManagementType implements ManagementType {
     public static final String ADMIN_PASSWORD = LdapTarget.ADMIN_PASSWORD;
 
     /**
+     * Whether users requesting an account's password see its DN ("true"),
+     * or only its username. A DN can tell more of the directory's layout
+     * than administrators want to show.
+     */
+    public static final String SHOW_DN = "ldap-show-dn";
+
+    /**
      * Where the administrator password is sent, and how safely.
      */
     private static final Set<String> DESTINATION_FIELDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
@@ -70,6 +78,9 @@ public class LdapManagementType implements ManagementType {
             new Form("ldap-rotation", Arrays.<Field>asList(
                 new TextField(ADMIN_DN),
                 new PasswordField(ADMIN_PASSWORD)
+            )),
+            new Form("ldap-requests", Collections.<Field>singletonList(
+                new BooleanField(SHOW_DN, "true")
             ))
         );
     }
@@ -128,9 +139,12 @@ public class LdapManagementType implements ManagementType {
         }
     }
 
+    /**
+     * The account's DN, if the platform shows it to requesters.
+     */
     @Override
-    public String getAccountDetail(Target target) {
-        return target.getAttribute(LDAP_DN);
+    public String getAccountDetail(Target target, Platform platform) {
+        return "true".equals(platform.getSettings().get(SHOW_DN)) ? target.getAttribute(LDAP_DN) : null;
     }
 
     /**
