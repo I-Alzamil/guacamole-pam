@@ -1,0 +1,79 @@
+<div class="settings section pam-ha" ng-class="{loading: !isLoaded()}">
+
+    <p>{{'PAM_HA.HELP_HA' | translate}}</p>
+
+    <p class="pam-ha-error" ng-show="error">
+        {{error.translatableMessage ? (error.translatableMessage.key | translate:error.translatableMessage.variables) : error.message}}
+    </p>
+    <p class="pam-ha-error" ng-show="status.error">{{status.error}}</p>
+
+    <ul class="pam-ha-warnings" ng-show="warnings.length">
+        <li ng-repeat="warning in warnings">{{warning | translate}}</li>
+    </ul>
+
+    <div class="action-buttons">
+        <button ng-click="check()" ng-disabled="checking || !status || status.error">
+            {{(checking ? 'PAM_HA.ACTION_CHECKING' : 'PAM_HA.ACTION_CHECK') | translate}}
+        </button>
+    </div>
+
+    <h3>{{'PAM_HA.SECTION_HEADER_SERVERS' | translate}}</h3>
+    <table class="pam-ha-servers" ng-show="status.servers.length">
+        <thead>
+            <tr>
+                <th>{{'PAM_HA.TABLE_HEADER_STATE' | translate}}</th>
+                <th>{{'PAM_HA.TABLE_HEADER_SERVER' | translate}}</th>
+                <th>{{'PAM_HA.TABLE_HEADER_URL' | translate}}</th>
+                <th>{{'PAM_HA.TABLE_HEADER_VERSION' | translate}}</th>
+                <th>{{'PAM_HA.TABLE_HEADER_STARTED' | translate}}</th>
+                <th>{{'PAM_HA.TABLE_HEADER_LAST_SEEN' | translate}}</th>
+                <th>{{'PAM_HA.TABLE_HEADER_SESSIONS' | translate}}</th>
+                <th>{{'PAM_HA.TABLE_HEADER_RECORDINGS' | translate}}</th>
+                <th>{{'PAM_HA.TABLE_HEADER_REACH' | translate}}</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr ng-repeat="server in status.servers" ng-class="{self: server.self, stale: !server.alive}">
+                <td><span class="pam-ha-state" ng-class="server.alive ? 'running' : 'stale'">
+                    {{(server.alive ? 'PAM_HA.STATE_RUNNING' : 'PAM_HA.STATE_STALE') | translate}}
+                </span></td>
+                <td>
+                    <span class="pam-ha-hostname">{{server.hostname || server.id}}</span>
+                    <span class="pam-ha-self" ng-show="server.self">{{'PAM_HA.INFO_THIS_SERVER' | translate}}</span>
+                    <div class="pam-ha-id">{{server.id}}</div>
+                </td>
+                <td>{{server.url || ('PAM_HA.INFO_NOT_SET' | translate)}}</td>
+                <td>{{server.version || '?'}}</td>
+                <td>{{server.started | date:'medium'}}</td>
+                <td>{{'PAM_HA.INFO_SECONDS_AGO' | translate:{SECONDS: server.lastSeenSeconds} }}</td>
+                <td>{{server.sessions}}</td>
+                <td>{{server.recordings}}</td>
+                <td><span class="pam-ha-reach" ng-show="reach[server.id]" ng-class="reach[server.id] === 'OK' ? 'ok' : 'failed'">
+                    {{'PAM_HA.REACH_' + reach[server.id] | translate}}
+                </span></td>
+            </tr>
+        </tbody>
+    </table>
+    <p class="placeholder" ng-show="status && !status.servers.length">{{'PAM_HA.INFO_NO_SERVERS' | translate}}</p>
+
+    <h3>{{'PAM_HA.SECTION_HEADER_SHARED' | translate}}</h3>
+    <table class="pam-ha-features" ng-show="status">
+        <tbody>
+            <tr ng-repeat="feature in features track by feature.name">
+                <th>{{'PAM_HA.FEATURE_' + feature.name | translate}}</th>
+                <td><span class="pam-ha-state" ng-class="feature.shared ? 'running' : (feature.applies ? 'stale' : 'off')">
+                    {{(feature.shared ? 'PAM_HA.INFO_SHARED' : (feature.applies ? 'PAM_HA.INFO_NOT_SHARED' : 'PAM_HA.INFO_NOT_INSTALLED')) | translate}}
+                </span></td>
+            </tr>
+            <tr>
+                <th>{{'PAM_HA.FIELD_GUACD_HOSTNAME' | translate}}</th>
+                <td>{{status.settings.guacdHostname || ('PAM_HA.INFO_NOT_SET' | translate)}}</td>
+            </tr>
+            <tr>
+                <th>{{'PAM_HA.FIELD_SECRET' | translate}}</th>
+                <td>{{(status.settings.secret ? 'PAM_HA.INFO_SET' : 'PAM_HA.INFO_NOT_SET') | translate}}</td>
+            </tr>
+        </tbody>
+    </table>
+
+</div>

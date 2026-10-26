@@ -19,6 +19,7 @@ import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.net.auth.AuthenticatedUser;
 
 import io.github.ialzamil.guacamole.pam.PamAuthenticationProvider;
+import io.github.ialzamil.guacamole.pam.ha.HaAuthenticationProvider;
 import io.github.ialzamil.guacamole.pam.management.ManagementType;
 import io.github.ialzamil.guacamole.pam.management.ManagementTypes;
 import io.github.ialzamil.guacamole.pam.ssh.SequenceScript;
@@ -90,8 +91,8 @@ public class PamREST extends PamResource {
 
     /**
      * Whether the current user may manage platforms and rotations, whether
-     * they are an approver, and which notification badges they want
-     * ("badges", by name).
+     * they are an approver, which notification badges they want ("badges",
+     * by name), and whether the HA module runs ("ha").
      */
     @GET
     @Path("access")
@@ -100,6 +101,7 @@ public class PamREST extends PamResource {
         access.put("administrator", isAdministrator());
         access.put("approver", provider.getApprover(user).isApprover());
         access.put("badges", provider.getBadgePreferences().get(username()));
+        access.put("ha", HaAuthenticationProvider.isEnabled());
         return access;
     }
 

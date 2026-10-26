@@ -85,6 +85,21 @@
 
         <plugins>
 
+            <!-- The version of the jar, which each server shows the others
+                 on the HA module's status tab -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.5.1</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+
             <!-- JS/CSS Minification Plugin -->
             <plugin>
                 <groupId>com.github.buckelieg</groupId>
@@ -223,11 +238,19 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- JAX-RS annotations for the REST resource -->
+        <!-- The REST and servlet APIs of Guacamole's web application: PAM's
+             REST resources, and the HA module's (logins are found in the
+             web application, and recordings served from it) -->
         <dependency>
             <groupId>javax.ws.rs</groupId>
-            <artifactId>jsr311-api</artifactId>
-            <version>1.1.1</version>
+            <artifactId>javax.ws.rs-api</artifactId>
+            <version>2.1.1</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>javax.servlet</groupId>
+            <artifactId>servlet-api</artifactId>
+            <version>2.5</version>
             <scope>provided</scope>
         </dependency>
 

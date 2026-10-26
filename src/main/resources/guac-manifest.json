@@ -3,7 +3,11 @@
     "name": "Privileged Access Management",
     "namespace": "pam",
     "authProviders": [
+        "io.github.ialzamil.guacamole.pam.ha.HaAuthenticationProvider",
         "io.github.ialzamil.guacamole.pam.PamAuthenticationProvider"
+    ],
+    "listeners": [
+        "io.github.ialzamil.guacamole.pam.ha.HaListener"
     ],
     "js": [
         "pam.min.js"
@@ -42,6 +46,7 @@
         "templates/pamScriptField.html": "text/html",
         "templates/settingsPamHistory.html": "text/html",
         "templates/settingsPamApprovals.html": "text/html",
+        "templates/settingsPamHa.html": "text/html",
         "templates/settingsPamSettings.html": "text/html",
         "templates/pamApprovalPermissions.html": "text/html",
         "templates/pamSessionPassword.html": "text/html",
