@@ -3,12 +3,13 @@
 # podman containers on the network "myguacnet". For development only: every
 # password is a fixed test one. Build the jar first with build.sh.
 #
-#   lab.sh app [--ha]
+#   lab.sh app [--ha|--ha=off]
 #       (Re)starts Guacamole's database, guacd and Guacamole with the built
 #       jar, on http://localhost:8080. --ha also starts a second Guacamole
 #       sharing them, on http://localhost:8081, with the HA module on in
-#       both (tests/suites/40-servers.sh); given alone, --ha restarts both
-#       servers that way, keeping the database and guacd running.
+#       both (tests/suites/40-servers.sh); --ha=off starts both with it off,
+#       as PAM alone shares them. Given alone, either restarts both servers
+#       that way, keeping the database and guacd running.
 #   lab.sh services
 #       Starts the servers seed.sh and the suites manage accounts on, keeping
 #       those already running:
@@ -92,10 +93,10 @@ start_guacamole() {
 
 start_second() {
     stop myguactest2
-    run_guacamole myguactest2 8081 && echo "Second Guacamole: http://localhost:8081${ha_note:+ (HA module on)}"
+    run_guacamole myguactest2 8081 && echo "Second Guacamole: http://localhost:8081${ha_note:+ (${ha_note#, })}"
 }
 
-# Both servers again, with the HA module on, on the database and guacd
+# Both servers again, as --ha or --ha=off says, on the database and guacd
 # already running
 restart_ha() {
     running myguacdbtest && running myguacdtest || { echo "Start the lab first: lab.sh app --ha." >&2; return 1; }
@@ -342,18 +343,19 @@ usage() {
 }
 
 [ $# -eq 0 ] && usage
-ha=no
+ha=no ha_module=false
 for arg in "$@"; do
     case "$arg" in
-        --ha) ha=yes;;
+        --ha) ha=yes ha_module=true;;
+        --ha=off) ha=yes ha_module=false;;
         app|services|seed|reset|stop) ;;
         *) usage;;
     esac
 done
 
-# The HA module's "pam-ha" of the servers started
-ha_module=false ha_note=
-[ $ha = yes ] && ha_module=true ha_note=", HA module on"
+# Said of the servers started, with two of them
+ha_note=
+[ $ha = yes ] && ha_note=", HA module $([ $ha_module = true ] && echo on || echo off)"
 
 app=no
 for arg in "$@"; do
@@ -366,6 +368,6 @@ for arg in "$@"; do
         stop) stop $LAB_CONTAINERS; echo "Lab stopped.";;
     esac
 done
-# --ha without "app": both servers again, with the HA module on
+# --ha or --ha=off without "app": both servers again
 [ $ha = yes ] && [ $app = no ] && { restart_ha || exit 1; }
 exit 0
