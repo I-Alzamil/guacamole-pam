@@ -143,7 +143,7 @@ public final class RotationService {
                 PERIODIC_CHECK_SECONDS, PERIODIC_CHECK_SECONDS, TimeUnit.SECONDS);
         housekeeping.scheduleWithFixedDelay(this::endCheckouts,
                 ENDED_CHECK_SECONDS, ENDED_CHECK_SECONDS, TimeUnit.SECONDS);
-        housekeeping.scheduleWithFixedDelay(this::closeSessionsNoLongerAllowed,
+        housekeeping.scheduleWithFixedDelay(this::checkAccess,
                 ACCESS_CHECK_SECONDS, ACCESS_CHECK_SECONDS, TimeUnit.SECONDS);
         housekeeping.scheduleWithFixedDelay(this::heartbeat,
                 HEARTBEAT_SECONDS, HEARTBEAT_SECONDS, TimeUnit.SECONDS);
@@ -261,6 +261,16 @@ public final class RotationService {
     private void endCheckouts() {
         expireCheckouts();
         closeSessionsOfEndedCheckouts();
+    }
+
+    /**
+     * Closes the sessions whose user may no longer use their connection,
+     * after those of checkouts ended: a session whose checkout just ended or
+     * expired is closed for that, and logged so, not as access revoked.
+     */
+    private void checkAccess() {
+        endCheckouts();
+        closeSessionsNoLongerAllowed();
     }
 
     /**
