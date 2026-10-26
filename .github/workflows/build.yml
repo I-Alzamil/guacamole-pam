@@ -8,6 +8,9 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # Weekly too, for vulnerabilities found since in the libraries bundled
+  schedule:
+    - cron: '0 6 * * 1'
 
 permissions:
   contents: read
@@ -42,6 +45,19 @@ jobs:
           path: target/guacamole-pam-*.jar
           if-no-files-found: error
 
+  dependencies:
+    name: Known vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: maven
+      - name: Check the libraries against osv.dev
+        run: ./check-dependencies.sh
+
   scripts:
     name: Lab and test scripts
     runs-on: ubuntu-latest
@@ -49,6 +65,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check shell syntax
         run: |
-          find build.sh lab tests -name '*.sh' -print0 | xargs -0 -n1 bash -n
+          find build.sh check-dependencies.sh lab tests -name '*.sh' -print0 | xargs -0 -n1 bash -n
       - name: Check Python syntax
         run: python3 -m py_compile tests/*.py

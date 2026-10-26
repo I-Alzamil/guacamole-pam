@@ -809,7 +809,10 @@ openssl s_client -connect <host>:5986 </dev/null 2>/dev/null | openssl x509 -noo
 
 ## Development
 
-`build.sh` builds the jar. `lab/lab.sh` runs a test lab with podman, on a
+`build.sh` builds the jar. `check-dependencies.sh` checks the libraries it
+bundles against [osv.dev](https://osv.dev)'s known vulnerabilities, sending
+their names and versions only, and fails if one is affected; CI runs it on
+every push and weekly, and Dependabot proposes library updates. `lab/lab.sh` runs a test lab with podman, on a
 network named `myguacnet`, for development only: it uses fixed test
 passwords. Its commands run in the order given:
 
