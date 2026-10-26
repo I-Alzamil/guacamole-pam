@@ -13,7 +13,7 @@
         "FIELD_OPTION_PAM_ROTATION_MODE_AFTER_USE": "After each use",
         "FIELD_OPTION_PAM_ROTATION_MODE_PERIODIC": "Periodically",
         "FIELD_HEADER_PAM_ROTATION_INTERVAL": "Interval (hours):",
-        "FIELD_HELP_PAM_ROTATION_INTERVAL": "For periodic rotation only.",
+        "FIELD_HELP_PAM_ROTATION_INTERVAL": "Empty: the platform's interval.",
         "FIELD_HEADER_PAM_PASSWORD_POLICY": "Password policy:",
         "FIELD_HELP_PAM_PASSWORD_POLICY": "The rules of this connection's new passwords, in place of its platform's, for a host with its own requirements. Policies are set on the Password Policies tab.",
         "SECTION_HEADER_PAM_TYPE_SSH": "SSH login",
@@ -374,7 +374,6 @@
         "FIELD_OPTION_ROTATION_MODE_AFTER_USE": "After each use",
         "FIELD_OPTION_ROTATION_MODE_PERIODIC": "Periodically",
         "FIELD_HEADER_ROTATION_INTERVAL": "Interval (hours):",
-        "FIELD_HELP_ROTATION_INTERVAL": "For periodic rotation only.",
         "FIELD_HEADER_PASSWORD_POLICY": "Password policy:",
         "FIELD_HELP_PASSWORD_POLICY": "The rules of new passwords, as the platform's systems require: set on the Password Policies tab. Default: 24 characters of every kind."
     },

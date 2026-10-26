@@ -6,6 +6,9 @@
  * PAM_PASSWORD_POLICY - drop-down of password policies, for the policy of
  *                       platforms and the "pam-password-policy" connection
  *                       attribute.
+ * PAM_ROTATION_INTERVAL - hours between rotations, shown only while they
+ *                       are periodic, for the policy of platforms and the
+ *                       "pam-rotation-interval" connection attribute.
  * PAM_SCRIPT   - sequence script editor with live validation, for the
  *                settings of SSH platforms.
  */
@@ -19,6 +22,12 @@ angular.module('guacPam').config(['formServiceProvider', function pamFieldTypeCo
         module      : 'guacPam',
         controller  : 'pamPasswordPolicyFieldController',
         templateUrl : 'app/ext/pam/templates/pamPasswordPolicyField.html'
+    });
+
+    formServiceProvider.registerFieldType('PAM_ROTATION_INTERVAL', {
+        module      : 'guacPam',
+        controller  : 'pamRotationIntervalFieldController',
+        templateUrl : 'app/ext/pam/templates/pamRotationIntervalField.html'
     });
 
     formServiceProvider.registerFieldType('PAM_SCRIPT', {

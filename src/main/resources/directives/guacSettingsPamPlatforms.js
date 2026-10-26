@@ -56,7 +56,7 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
                 name   : 'policy',
                 fields : [
                     { name : 'rotation-mode', type : 'ENUM', options : ['never', 'after-use', 'periodic'] },
-                    { name : 'rotation-interval', type : 'NUMERIC' },
+                    { name : 'rotation-interval', type : 'PAM_ROTATION_INTERVAL' },
                     { name : 'password-policy', type : 'PAM_PASSWORD_POLICY' }
                 ]
             }];

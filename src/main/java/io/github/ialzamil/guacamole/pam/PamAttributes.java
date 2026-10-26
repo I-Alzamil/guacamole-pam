@@ -145,6 +145,12 @@ public final class PamAttributes {
     public static final String PASSWORD_POLICY_FIELD_TYPE = "PAM_PASSWORD_POLICY";
 
     /**
+     * Custom field type rendering hours between rotations, shown only while
+     * they are periodic.
+     */
+    public static final String ROTATION_INTERVAL_FIELD_TYPE = "PAM_ROTATION_INTERVAL";
+
+    /**
      * Every form of the password management of a connection.
      */
     public static final List<Form> CONNECTION_FORMS;
@@ -167,7 +173,7 @@ public final class PamAttributes {
         forms.add(new Form("pam-policy", Arrays.<Field>asList(
             new EnumField(ROTATION_MODE, Arrays.asList("", Platform.MODE_NEVER,
                     Platform.MODE_AFTER_USE, Platform.MODE_PERIODIC)),
-            new NumericField(ROTATION_INTERVAL),
+            new Field(ROTATION_INTERVAL, ROTATION_INTERVAL_FIELD_TYPE),
             new Field(PASSWORD_POLICY, PASSWORD_POLICY_FIELD_TYPE)
         )));
 

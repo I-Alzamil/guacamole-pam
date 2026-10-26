@@ -36,6 +36,7 @@
         "templates/pamRequestDialog.html": "text/html",
         "templates/pamPlatformField.html": "text/html",
         "templates/pamPasswordPolicyField.html": "text/html",
+        "templates/pamRotationIntervalField.html": "text/html",
         "templates/settingsPamPasswordPolicies.html": "text/html",
         "templates/pamPlatformPicker.html": "text/html",
         "templates/pamScriptField.html": "text/html",
