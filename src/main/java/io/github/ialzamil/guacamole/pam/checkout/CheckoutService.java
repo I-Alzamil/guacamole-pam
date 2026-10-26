@@ -19,6 +19,9 @@ import io.github.ialzamil.guacamole.pam.approval.ApprovalRequest;
 import io.github.ialzamil.guacamole.pam.coordination.Standby;
 import io.github.ialzamil.guacamole.pam.db.ConnectionRepository.Target;
 import io.github.ialzamil.guacamole.pam.db.ConnectionRepository;
+import io.github.ialzamil.guacamole.pam.notification.Event;
+import io.github.ialzamil.guacamole.pam.notification.EventType;
+import io.github.ialzamil.guacamole.pam.notification.Events;
 import io.github.ialzamil.guacamole.pam.platform.PlatformRepository;
 import io.github.ialzamil.guacamole.pam.rotation.RotationService;
 import io.github.ialzamil.guacamole.pam.settings.PamSettings;
@@ -46,9 +49,12 @@ public class CheckoutService {
 
     private final CheckoutRules rules;
 
+    private final Events events;
+
     public CheckoutService(ConnectionRepository connections, CheckoutRepository checkouts,
             PlatformRepository platforms, ApprovalRepository approvals, RotationService rotationService,
-            PamSettings settings) {
+            PamSettings settings, Events events) {
+        this.events = events;
         this.connections = connections;
         this.checkouts = checkouts;
         this.approvals = approvals;
@@ -96,10 +102,19 @@ public class CheckoutService {
             throw new GuacamoleClientException("Your access has ended.");
         logger.info("User \"{}\" viewed the password of \"{}\" (checkout {}).",
                 username, Values.forLog(target.getName()), checkout.getId());
+        passwordRevealed(checkout, target);
 
         String user = Values.trimToNull(target.getParameters().get(USERNAME_PARAMETER));
         return new PasswordGrant(checkout, user == null || user.contains("${") ? null : user, null, password);
 
+    }
+
+    /**
+     * Reports the holder of a checkout seeing its password.
+     */
+    void passwordRevealed(Checkout checkout, Target target) {
+        events.publish(Event.of(EventType.PASSWORD_REVEALED).user(checkout.getUsername())
+                .connection(Integer.toString(target.getId()), target.getName()).checkout(checkout.getId()));
     }
 
     /**
@@ -197,6 +212,9 @@ public class CheckoutService {
             for (ApprovalRequest request : pending) {
                 try {
                     approvals.decide(request.getId(), ApprovalRequest.CANCELLED, username, null);
+                    events.publish(Event.of(EventType.REQUEST_CANCELLED).user(request.getUsername()).actor(username)
+                            .connection(request.getConnectionIdentifier(), request.getConnectionName())
+                            .request(request.getId()).detail("The connection was deleted."));
                 }
                 catch (GuacamoleClientException e) {
                     // Decided meanwhile
@@ -205,6 +223,10 @@ public class CheckoutService {
             for (ApprovalRequest request : reservations) {
                 try {
                     approvals.cancelReservation(request.getId(), username, null);
+                    events.publish(Event.of(EventType.REQUEST_CANCELLED).user(request.getUsername()).actor(username)
+                            .connection(request.getConnectionIdentifier(), request.getConnectionName())
+                            .request(request.getId()).period(request.getStarts(), request.getEnds())
+                            .detail("The connection was deleted."));
                 }
                 catch (GuacamoleClientException e) {
                     // Used or over meanwhile
@@ -258,6 +280,10 @@ public class CheckoutService {
                 username, Values.forLog(target.getName()), checkout.getId(),
                 checkout.isExclusive() ? ", exclusive" : "",
                 Values.forLog(reason));
+        events.publish(Event.of(EventType.CHECKOUT_STARTED).user(username)
+                .connection(Integer.toString(id), target.getName()).checkout(checkout.getId())
+                .period(checkout.getCheckedOut(), checkout.getExpires()).reason(reason).remoteHost(remoteHost)
+                .detail(revealCount > 0 ? "The password was shown." : null));
 
         return checkout;
 
@@ -367,6 +393,11 @@ public class CheckoutService {
         if (checkouts.release(checkout.getId(), releaseReason, releasedBy, releasedHost)) {
             logger.info("Checkout {} of \"{}\" by user \"{}\" ended: {} by \"{}\".", checkout.getId(),
                     Values.forLog(checkout.getConnectionName()), checkout.getUsername(), releaseReason, releasedBy);
+            events.publish(Event.of(Checkout.RELEASED.equals(releaseReason) ? EventType.CHECKOUT_RELEASED
+                    : EventType.CHECKOUT_REVOKED).user(checkout.getUsername()).actor(releasedBy)
+                    .connection(checkout.getConnectionIdentifier(), checkout.getConnectionName())
+                    .checkout(checkout.getId()).remoteHost(releasedHost)
+                    .detail(Checkout.DELETED.equals(releaseReason) ? "The connection was deleted." : null));
             rotationService.checkoutEnded(checkout);
         }
     }

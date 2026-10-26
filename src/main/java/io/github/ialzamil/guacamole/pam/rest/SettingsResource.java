@@ -1,13 +1,16 @@
 package io.github.ialzamil.guacamole.pam.rest;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.GET;
+import javax.ws.rs.POST;
 import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 
@@ -50,6 +53,17 @@ public class SettingsResource extends PamResource {
         server.put("ha", HaAuthenticationProvider.isEnabled());
         server.put("standby", standby == null ? null : standby.name());
         return server;
+    }
+
+    /**
+     * Sends a test through an output of events ("syslog", "email"), as
+     * saved, returning what was sent ("message").
+     */
+    @POST
+    @Path("test/{output}")
+    public Map<String, String> test(@PathParam("output") String output) throws GuacamoleException {
+        requireAdministrator();
+        return Collections.singletonMap("message", provider.getEvents().test(output, username()));
     }
 
     /**

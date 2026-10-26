@@ -23,6 +23,9 @@ import io.github.ialzamil.guacamole.pam.approval.ApprovalRepository;
 import io.github.ialzamil.guacamole.pam.approval.ApprovalRequest;
 import io.github.ialzamil.guacamole.pam.db.ConnectionRepository.Target;
 import io.github.ialzamil.guacamole.pam.db.ConnectionRepository;
+import io.github.ialzamil.guacamole.pam.notification.Event;
+import io.github.ialzamil.guacamole.pam.notification.EventType;
+import io.github.ialzamil.guacamole.pam.notification.Events;
 import io.github.ialzamil.guacamole.pam.platform.Platform;
 import io.github.ialzamil.guacamole.pam.platform.PlatformRepository;
 import io.github.ialzamil.guacamole.pam.rotation.RotationService;
@@ -59,9 +62,12 @@ public class RequestService {
 
     private final CheckoutRules rules;
 
+    private final Events events;
+
     public RequestService(ConnectionRepository connections, PlatformRepository platforms,
             CheckoutRepository checkouts, ApprovalRepository approvals, RotationService rotationService,
-            CheckoutService checkoutService) {
+            CheckoutService checkoutService, Events events) {
+        this.events = events;
         this.connections = connections;
         this.platforms = platforms;
         this.checkouts = checkouts;
@@ -221,6 +227,7 @@ public class RequestService {
                 throw new GuacamoleClientException("This checkout has ended.");
             logger.info("User \"{}\" viewed the password of \"{}\" (checkout {}).",
                     username, Values.forLog(target.getName()), checkout.getId());
+            checkoutService.passwordRevealed(checkout, target);
         }
         return RequestOutcome.granted(checkoutService.toGrant(checkout, target));
     }
@@ -263,6 +270,10 @@ public class RequestService {
         logger.info("User \"{}\" requested \"{}\" (request {}, {} approvals needed{}{}). Reason: {}",
                 username, Values.forLog(target.getName()), pending.getId(), approvalsRequired, when,
                 periods == 1 ? "" : ", " + periods + " times its time limit", Values.forLog(trimmed));
+        events.publish(Event.of(EventType.REQUEST_SUBMITTED).user(username)
+                .connection(Integer.toString(target.getId()), target.getName()).request(pending.getId())
+                .period(starts, ends).reason(trimmed).remoteHost(remoteHost)
+                .detail(approvalsRequired + " approval(s) needed."));
 
     }
 
@@ -323,9 +334,16 @@ public class RequestService {
         if (target == null)
             throw new GuacamoleResourceNotFoundException("The connection no longer exists.");
         rotationService.expireCheckouts();
-        for (Integer rejected : approvals.markReserved(request, approver, CheckoutRules.isExclusive(target)))
+        for (Integer rejected : approvals.markReserved(request, approver, CheckoutRules.isExclusive(target))) {
             logger.info("Request {} for \"{}\" was rejected: it overlaps request {} of \"{}\", approved by \"{}\".",
                     rejected, Values.forLog(target.getName()), request.getId(), request.getUsername(), approver);
+            ApprovalRequest overlapping = approvals.get(rejected);
+            if (overlapping != null)
+                events.publish(Event.of(EventType.REQUEST_DENIED).user(overlapping.getUsername()).actor(approver)
+                        .connection(request.getConnectionIdentifier(), target.getName()).request(rejected)
+                        .period(overlapping.getStarts(), overlapping.getEnds())
+                        .reason("It overlaps access reserved for someone else."));
+        }
     }
 
     /**
@@ -380,6 +398,12 @@ public class RequestService {
         logger.info("User \"{}\" asked to extend checkout {} of \"{}\" by {} minutes (request {}, {} approvals"
                 + " needed). Reason: {}", username, checkout.getId(), Values.forLog(target.getName()), minutes,
                 request.getId(), approvalsRequired, Values.forLog(trimmed));
+        if (approvalsRequired > 0)
+            events.publish(Event.of(EventType.REQUEST_SUBMITTED).user(username)
+                    .connection(Integer.toString(target.getId()), target.getName()).request(request.getId())
+                    .checkout(checkout.getId()).reason(trimmed).remoteHost(remoteHost)
+                    .detail("To extend the checkout by " + minutes + " minutes; " + approvalsRequired
+                            + " approval(s) needed."));
 
         if (approvalsRequired == 0) {
             try {
@@ -411,6 +435,11 @@ public class RequestService {
                 + " approved by \"{}\").", checkout.getId(), Values.forLog(checkout.getConnectionName()),
                 checkout.getUsername(), request.getExtensionMinutes(), Instant.ofEpochMilli(checkout.getExpires()),
                 request.getId(), approver);
+        events.publish(Event.of(EventType.CHECKOUT_EXTENDED).user(checkout.getUsername()).actor(approver)
+                .connection(checkout.getConnectionIdentifier(), checkout.getConnectionName())
+                .checkout(checkout.getId()).request(request.getId())
+                .period(checkout.getCheckedOut(), checkout.getExpires())
+                .detail("Extended by " + request.getExtensionMinutes() + " minutes."));
         return checkout;
     }
 
@@ -436,6 +465,7 @@ public class RequestService {
         approvals.decide(extension.getId(), ApprovalRequest.CANCELLED, username, remoteHost);
         logger.info("User \"{}\" cancelled request {} to extend checkout {}.", username, extension.getId(),
                 checkout.getId());
+        cancelled(extension, username, target);
 
     }
 
@@ -457,6 +487,7 @@ public class RequestService {
         approvals.decide(pending.getId(), ApprovalRequest.CANCELLED, username, remoteHost);
         logger.info("User \"{}\" cancelled request {} for \"{}\".", username, pending.getId(),
                 Values.forLog(target.getName()));
+        cancelled(pending, username, target);
 
     }
 
@@ -478,6 +509,7 @@ public class RequestService {
         approvals.cancelReservation(reservation.getId(), username, remoteHost);
         logger.info("User \"{}\" cancelled their reservation {} of \"{}\".", username, reservation.getId(),
                 Values.forLog(target.getName()));
+        cancelled(reservation, username, target);
 
     }
 
@@ -548,6 +580,15 @@ public class RequestService {
             .withExtensions(rules.getMaxPeriods(target), CheckoutRules.getExtensionMinutes(target), own,
                 own == null ? null : approvals.getLatestExtension(own.getId()));
 
+    }
+
+    /**
+     * Reports the user cancelling their own request.
+     */
+    private void cancelled(ApprovalRequest request, String username, Target target) {
+        events.publish(Event.of(EventType.REQUEST_CANCELLED).user(username)
+                .connection(Integer.toString(target.getId()), target.getName()).request(request.getId())
+                .checkout(request.getExtendsCheckout()).period(request.getStarts(), request.getEnds()));
     }
 
 }

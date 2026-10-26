@@ -33,6 +33,7 @@ import io.github.ialzamil.guacamole.pam.db.ConnectionSecrets;
 import io.github.ialzamil.guacamole.pam.db.PamDatabase;
 import io.github.ialzamil.guacamole.pam.ha.HaAuthenticationProvider;
 import io.github.ialzamil.guacamole.pam.ha.SharedCoordination;
+import io.github.ialzamil.guacamole.pam.notification.Events;
 import io.github.ialzamil.guacamole.pam.password.PasswordPolicyRepository;
 import io.github.ialzamil.guacamole.pam.platform.PlatformImport;
 import io.github.ialzamil.guacamole.pam.platform.PlatformRepository;
@@ -90,6 +91,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     private final PamSettings settings;
 
+    private final Events events;
+
     /**
      * Identifier of the auth provider whose connections are managed
      * ("postgresql", "mysql" or "sqlserver"), or null while inactive. The
@@ -135,6 +138,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             connectionSecrets = null;
             database = null;
             settings = null;
+            events = null;
             managedDataSource = null;
             return;
         }
@@ -149,24 +153,25 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         // Alone on the database unless the HA module runs
         Coordination coordination = HaAuthenticationProvider.isEnabled() ? new SharedCoordination(database)
                 : new SingleServer(database);
-        settings = new PamSettings(database, environment, coordination);
+        events = new Events();
+        settings = new PamSettings(database, environment, coordination, secrets, events);
         CheckoutRepository checkouts = new CheckoutRepository(database);
         connectionSecrets = new ConnectionSecrets(database, secrets);
         passwordPolicies = new PasswordPolicyRepository(database);
         platforms = new PlatformRepository(database, secrets, passwordPolicies);
         platformImport = new PlatformImport(platforms);
         connections = new ConnectionRepository(database, secrets, connectionSecrets);
-        secretMigration = new SecretMigration(database, platforms, connections, connectionSecrets, secrets);
+        secretMigration = new SecretMigration(database, platforms, connections, connectionSecrets, settings, secrets);
         rotationService = new RotationService(database, coordination, platforms, passwordPolicies, connections,
-                checkouts);
+                checkouts, events);
         approvals = new ApprovalRepository(database);
         approvers = new ApproverDirectory(database);
         badgePreferences = new BadgePreferences(database);
         checkoutService = new CheckoutService(connections, checkouts, platforms, approvals, rotationService,
-                settings);
+                settings, events);
         requestService = new RequestService(connections, platforms, checkouts, approvals, rotationService,
-                checkoutService);
-        approvalService = new ApprovalService(approvals, requestService);
+                checkoutService, events);
+        approvalService = new ApprovalService(approvals, requestService, events);
 
         // Offer the Account connection type in the connection editor
         environment.getProtocols().putIfAbsent(AccountProtocol.NAME, AccountProtocol.PROTOCOL);
@@ -294,6 +299,10 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         return settings;
     }
 
+    public Events getEvents() {
+        return events;
+    }
+
     /**
      * Returns the user as an approver: whether they are an administrator,
      * and the connections their approval permission covers.
@@ -328,6 +337,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             rotationService.shutdown();
         if (secretMigration != null)
             secretMigration.shutdown();
+        if (events != null)
+            events.shutdown();
         if (database != null)
             database.close();
     }

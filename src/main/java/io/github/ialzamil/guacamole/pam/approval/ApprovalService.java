@@ -12,6 +12,9 @@ import org.slf4j.LoggerFactory;
 import io.github.ialzamil.guacamole.pam.Values;
 import io.github.ialzamil.guacamole.pam.checkout.Checkout;
 import io.github.ialzamil.guacamole.pam.checkout.RequestService;
+import io.github.ialzamil.guacamole.pam.notification.Event;
+import io.github.ialzamil.guacamole.pam.notification.EventType;
+import io.github.ialzamil.guacamole.pam.notification.Events;
 
 /**
  * Decisions on requests by approvers: users whose approval
@@ -35,9 +38,12 @@ public class ApprovalService {
 
     private final RequestService requestService;
 
-    public ApprovalService(ApprovalRepository approvals, RequestService requestService) {
+    private final Events events;
+
+    public ApprovalService(ApprovalRepository approvals, RequestService requestService, Events events) {
         this.approvals = approvals;
         this.requestService = requestService;
+        this.events = events;
     }
 
     /**
@@ -95,8 +101,12 @@ public class ApprovalService {
                 requestId, request.getUsername(), Values.forLog(request.getConnectionName()),
                 request.getApprovers().size(), request.getApprovalsRequired());
 
-        if (request.getApprovers().size() < request.getApprovalsRequired())
+        if (request.getApprovers().size() < request.getApprovalsRequired()) {
+            events.publish(decision(EventType.REQUEST_APPROVED, request, approver, remoteHost)
+                    .detail(request.getApprovers().size() + " of " + request.getApprovalsRequired()
+                            + " approval(s) given."));
             return request;
+        }
 
         // Another approver completing it at the same time does the rest;
         // this approval stays
@@ -126,6 +136,11 @@ public class ApprovalService {
 
         if (checkout != null)
             approvals.markApproved(requestId, checkout.getId(), approver.getUsername());
+        events.publish(decision(EventType.REQUEST_GRANTED, request, approver, remoteHost)
+                .detail(request.getExtendsCheckout() != null ? "The checkout is extended by "
+                        + request.getExtensionMinutes() + " minutes."
+                        : request.getStarts() != null ? "The access is reserved for the time asked."
+                        : "The access starts now."));
         return approvals.get(requestId);
 
     }
@@ -162,7 +177,18 @@ public class ApprovalService {
         approvals.decide(requestId, ApprovalRequest.DENIED, approver.getUsername(), remoteHost, trimmed);
         logger.info("User \"{}\" denied request {} of \"{}\" for \"{}\".", approver.getUsername(), requestId,
                 request.getUsername(), Values.forLog(request.getConnectionName()));
+        events.publish(decision(EventType.REQUEST_DENIED, request, approver, remoteHost).reason(trimmed));
 
+    }
+
+    /**
+     * An approver's decision on a request, to report.
+     */
+    private static Event decision(EventType type, ApprovalRequest request, Approver approver, String remoteHost) {
+        return Event.of(type).user(request.getUsername()).actor(approver.getUsername())
+                .connection(request.getConnectionIdentifier(), request.getConnectionName())
+                .request(request.getId()).checkout(request.getExtendsCheckout())
+                .period(request.getStarts(), request.getEnds()).remoteHost(remoteHost);
     }
 
     /**

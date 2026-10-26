@@ -33,6 +33,9 @@ import io.github.ialzamil.guacamole.pam.db.SchemaUnavailableException;
 import io.github.ialzamil.guacamole.pam.management.ManagementType;
 import io.github.ialzamil.guacamole.pam.management.ManagementTypes;
 import io.github.ialzamil.guacamole.pam.management.PasswordChanger;
+import io.github.ialzamil.guacamole.pam.notification.Event;
+import io.github.ialzamil.guacamole.pam.notification.EventType;
+import io.github.ialzamil.guacamole.pam.notification.Events;
 import io.github.ialzamil.guacamole.pam.password.PasswordGenerator;
 import io.github.ialzamil.guacamole.pam.password.PasswordPolicyRepository;
 import io.github.ialzamil.guacamole.pam.password.PasswordRules;
@@ -122,6 +125,14 @@ public final class RotationService {
 
     private final SessionRegistry sessions;
 
+    private final Events events;
+
+    /**
+     * Why this server was on standby when last checked, or null if it
+     * worked, so going on standby and back is reported once.
+     */
+    private Standby lastStandby = Standby.STARTING;
+
     private final ScheduledExecutorService scheduler = newScheduler("pam-rotation", 2);
 
     /**
@@ -136,12 +147,14 @@ public final class RotationService {
     private volatile long lastEndedCheck = System.currentTimeMillis();
 
     public RotationService(PamDatabase database, Coordination coordination, PlatformRepository platforms,
-            PasswordPolicyRepository passwordPolicies, ConnectionRepository connections, CheckoutRepository checkouts) {
+            PasswordPolicyRepository passwordPolicies, ConnectionRepository connections, CheckoutRepository checkouts,
+            Events events) {
         this.platforms = platforms;
         this.passwordPolicies = passwordPolicies;
         this.connections = connections;
         this.checkouts = checkouts;
         this.coordination = coordination;
+        this.events = events;
         this.sessions = new SessionRegistry(database);
         scheduler.scheduleWithFixedDelay(this::rotateDueConnections,
                 PERIODIC_CHECK_SECONDS, PERIODIC_CHECK_SECONDS, TimeUnit.SECONDS);
@@ -164,8 +177,10 @@ public final class RotationService {
      * with every look for ended checkouts, and the session closed once it
      * is no longer allowed.
      */
-    public void sessionStarted(String identifier, String username, GuacamoleTunnel tunnel, SessionAccess access) {
+    public void sessionStarted(String identifier, String name, String username, GuacamoleTunnel tunnel,
+            SessionAccess access) {
         sessions.started(identifier, username, tunnel, access);
+        events.publish(Event.of(EventType.SESSION_STARTED).user(username).connection(identifier, name));
     }
 
     /**
@@ -174,10 +189,11 @@ public final class RotationService {
      * meanwhile, the server working next finds it, and rotates the
      * connection instead.
      */
-    public void sessionEnded(String identifier, GuacamoleTunnel tunnel) {
+    public void sessionEnded(String identifier, String name, GuacamoleTunnel tunnel) {
         SessionRegistry.Session session = sessions.ended(tunnel);
         if (session == null)
             return;
+        events.publish(Event.of(EventType.SESSION_ENDED).user(session.getUsername()).connection(identifier, name));
         try {
             scheduler.schedule(() -> {
                 sessions.removeRow(session);
@@ -323,6 +339,7 @@ public final class RotationService {
             for (int id : coordination.check(sessions))
                 scheduleAfterUse(Integer.toString(id));
             Standby standby = coordination.getStandby();
+            reportStandby(standby);
             if (standby != null && standby.isOtherServerWorking() && sessions.hasLocal())
                 closeManagedSessions();
         }
@@ -331,6 +348,20 @@ public final class RotationService {
             logger.debug("Unable to check the other servers.", e);
         }
         endCheckouts();
+    }
+
+    /**
+     * Reports this server going on standby, and working again after one.
+     * Not while it starts: it works, or is on standby, from then.
+     */
+    private void reportStandby(Standby standby) {
+        if (standby == lastStandby || standby == Standby.STARTING)
+            return;
+        if (standby != null)
+            events.publish(Event.of(EventType.SERVER_STANDBY).detail(standby.getMessage()));
+        else if (lastStandby != Standby.STARTING)
+            events.publish(Event.of(EventType.SERVER_ACTIVE).detail("PAM works on this server again."));
+        lastStandby = standby;
     }
 
     /**
@@ -413,6 +444,9 @@ public final class RotationService {
             for (Checkout checkout : checkouts.expireDue()) {
                 logger.info("Checkout {} of connection \"{}\" by user \"{}\" expired.", checkout.getId(),
                         Values.forLog(checkout.getConnectionName()), checkout.getUsername());
+                events.publish(Event.of(EventType.CHECKOUT_EXPIRED).user(checkout.getUsername())
+                        .connection(checkout.getConnectionIdentifier(), checkout.getConnectionName())
+                        .checkout(checkout.getId()).period(checkout.getCheckedOut(), checkout.getExpires()));
                 checkoutEnded(checkout);
             }
         }
@@ -656,6 +690,11 @@ public final class RotationService {
             logger.info("Rotation ({}) of connection \"{}\" ({}): {} {}", reason, Values.forLog(current.getName()),
                     current.getId(), result.getStatus(),
                     result.getMessage() == null ? "" : Values.forLog(result.getMessage()));
+            boolean succeeded = RotationResult.SUCCESS.equals(result.getStatus());
+            events.publish(Event.of(succeeded ? EventType.ROTATION_SUCCEEDED : EventType.ROTATION_FAILED)
+                    .connection(Integer.toString(current.getId()), current.getName())
+                    .detail("Rotation (" + reason + "): " + result.getStatus()
+                            + (result.getMessage() == null ? "" : ": " + result.getMessage())));
             return result;
 
         }

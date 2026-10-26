@@ -16,7 +16,7 @@ public class SettingTest {
 
     @Test
     public void readsYesNo() throws GuacamoleClientException {
-        Setting setting = Setting.bool("t-bool", true);
+        Setting setting = Setting.bool(Setting.Section.GENERAL, "t-bool", true);
         assertEquals("false", setting.normalize(false));
         assertEquals("true", setting.normalize(" TRUE "));
         assertNull(setting.normalize(null));
@@ -29,7 +29,7 @@ public class SettingTest {
 
     @Test
     public void readsNumbersWithinBounds() throws GuacamoleClientException {
-        Setting setting = Setting.integer("t-int", 2, 0, 20);
+        Setting setting = Setting.integer(Setting.Section.GENERAL, "t-int", 2, 0, 20);
         assertEquals("0", setting.normalize(0));
         assertEquals("20", setting.normalize("20"));
         assertEquals("7", setting.normalize(" 07 "));
@@ -41,14 +41,51 @@ public class SettingTest {
         refuses(setting, true, "\"t-int\" must be a whole number.");
     }
 
+    @Test
+    public void readsTextWithinItsLength() throws GuacamoleClientException {
+        Setting setting = Setting.string(Setting.Section.SYSLOG, "t-text", 5, value -> {
+            if (value.contains(" "))
+                throw new IllegalArgumentException("no spaces.");
+        });
+        assertEquals("abc", setting.normalize(" abc "));
+        assertNull(setting.normalize(""));
+        assertNull(setting.parse(null));
+        refuses(setting, "abcdef", "\"t-text\" is limited to 5 characters.");
+        refuses(setting, "a b", "\"t-text\": no spaces.");
+        refuses(setting, "a\nb", "\"t-text\" must be a single line.");
+        assertEquals("a\nb", Setting.text(Setting.Section.SYSLOG, "t-lines", 5, null).normalize("a\nb\n"));
+    }
+
+    @Test
+    public void readsOneOfTheOptions() throws GuacamoleClientException {
+        Setting setting = Setting.options(Setting.Section.SYSLOG, "t-choice", "tls", "tcp", "udp");
+        assertEquals("tls", setting.getDefaultValue());
+        assertEquals("udp", setting.normalize("udp"));
+        assertEquals("tls", setting.parse("other"));
+        refuses(setting, "UDP", "\"t-choice\" must be one of tls, tcp, udp.");
+    }
+
+    /**
+     * Secrets are kept as given, spaces included, and read back as stored
+     * (encrypted): PamSettings decrypts them.
+     */
+    @Test
+    public void keepsSecretsAsGiven() throws GuacamoleClientException {
+        Setting setting = Setting.secret(Setting.Section.EMAIL, "t-secret", 8);
+        assertEquals(" pass ", setting.normalize(" pass "));
+        assertEquals("$enc$", setting.parse("$enc$"));
+        assertNull(setting.parse(""));
+        refuses(setting, "123456789", "\"t-secret\" is limited to 8 characters.");
+    }
+
     /**
      * A value stored by hand, or by another version, no longer valid: the
      * default applies, as for none.
      */
     @Test
     public void usesTheDefaultForInvalidStoredValues() {
-        assertEquals(2, Setting.integer("t-int", 2, 0, 20).parse("99"));
-        assertEquals(Boolean.TRUE, Setting.bool("t-bool", true).parse("maybe"));
+        assertEquals(2, Setting.integer(Setting.Section.GENERAL, "t-int", 2, 0, 20).parse("99"));
+        assertEquals(Boolean.TRUE, Setting.bool(Setting.Section.GENERAL, "t-bool", true).parse("maybe"));
     }
 
     @Test

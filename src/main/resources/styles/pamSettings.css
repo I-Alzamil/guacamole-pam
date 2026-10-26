@@ -1159,6 +1159,35 @@ a.button.disabled {
     width: 6em;
 }
 
+.pam-setting-table input[type="text"],
+.pam-setting-table input[type="password"] {
+    width: 24em;
+    max-width: 100%;
+}
+
+.pam-setting-table textarea {
+    width: 36em;
+    max-width: 100%;
+    font-family: monospace;
+    font-size: 0.85em;
+}
+
+.pam-setting-secret label {
+    margin-left: 0.75em;
+    white-space: nowrap;
+}
+
+.pam-setting-section h3 {
+    margin: 2em 0 0.5em;
+    padding-bottom: 0.35em;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.pam-setting-section-actions {
+    text-align: left;
+    margin-bottom: 1em;
+}
+
 .pam-setting-help,
 .pam-setting-meta {
     margin: 0.25em 0 0;

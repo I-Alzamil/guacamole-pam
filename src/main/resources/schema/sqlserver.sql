@@ -217,7 +217,7 @@ IF OBJECT_ID(N'pam_setting', N'U') IS NULL
 CREATE TABLE pam_setting (
 
   name          nvarchar(64)    NOT NULL,
-  value         nvarchar(1024),
+  value         nvarchar(max),
   modified      datetime2(3)    NOT NULL DEFAULT SYSUTCDATETIME(),
   modified_by   nvarchar(128),
 

@@ -44,6 +44,12 @@ public final class Secrets {
      */
     public static final String CONNECTION_SECRET = "connection-secret";
 
+    /**
+     * Followed by ":" and the setting's name: a secret of the settings page
+     * is bound to its setting.
+     */
+    public static final String SETTING_SECRET = "setting-secret";
+
     private static final StringGuacamoleProperty KEY = new StringGuacamoleProperty() {
         @Override
         public String getName() { return "pam-encryption-key"; }

@@ -17,6 +17,7 @@ import io.github.ialzamil.guacamole.pam.db.ConnectionSecrets;
 import io.github.ialzamil.guacamole.pam.db.PamDatabase;
 import io.github.ialzamil.guacamole.pam.db.SchemaUnavailableException;
 import io.github.ialzamil.guacamole.pam.platform.PlatformRepository;
+import io.github.ialzamil.guacamole.pam.settings.PamSettings;
 
 /**
  * Brings stored secrets to the form {@link Secrets} requires: encrypts
@@ -49,6 +50,8 @@ public final class SecretMigration {
 
     private final ConnectionSecrets connectionSecrets;
 
+    private final PamSettings settings;
+
     private final Secrets secrets;
 
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
@@ -58,11 +61,12 @@ public final class SecretMigration {
     });
 
     public SecretMigration(PamDatabase database, PlatformRepository platforms, ConnectionRepository connections,
-            ConnectionSecrets connectionSecrets, Secrets secrets) {
+            ConnectionSecrets connectionSecrets, PamSettings settings, Secrets secrets) {
         this.database = database;
         this.platforms = platforms;
         this.connections = connections;
         this.connectionSecrets = connectionSecrets;
+        this.settings = settings;
         this.secrets = secrets;
         scheduler.schedule(this::migrate, FIRST_RUN_SECONDS, TimeUnit.SECONDS);
     }
@@ -83,6 +87,7 @@ public final class SecretMigration {
             platforms.migrateSecrets(report);
             connections.migrateSecrets(report);
             connectionSecrets.migrate(report);
+            settings.migrateSecrets(report);
             return report;
 
         }

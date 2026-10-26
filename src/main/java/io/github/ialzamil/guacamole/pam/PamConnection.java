@@ -133,6 +133,7 @@ public class PamConnection extends DelegatingConnection {
         // Not opened at all while its password is being rotated
         final String identifier = getIdentifier();
         final String username = context.self().getIdentifier();
+        final String name = getName();
         boolean managed = super.getAttributes().get(PamAttributes.PLATFORM) != null;
         if (managed)
             rotationService.requireNotRotating(identifier);
@@ -170,13 +171,14 @@ public class PamConnection extends DelegatingConnection {
                 }
                 finally {
                     if (closed.compareAndSet(false, true))
-                        rotationService.sessionEnded(identifier, this);
+                        rotationService.sessionEnded(identifier, name, this);
                 }
             }
 
         };
 
-        rotationService.sessionStarted(identifier, username, tracked, () -> context.mayStillUse(identifier));
+        rotationService.sessionStarted(identifier, name, username, tracked,
+                () -> context.mayStillUse(identifier));
 
         // A rotation may have claimed the connection meanwhile
         if (managed) {

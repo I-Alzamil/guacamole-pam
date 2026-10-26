@@ -99,6 +99,14 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
     };
 
     /**
+     * Sends a test through an output of events ("syslog", "email"), as
+     * saved. Resolves with what was sent ("message").
+     */
+    service.testSettings = function testSettings(output) {
+        return request('POST', 'settings/test/' + encodeURIComponent(output));
+    };
+
+    /**
      * Number of managed connections whose last rotation failed or could not
      * be confirmed (administrators only).
      */

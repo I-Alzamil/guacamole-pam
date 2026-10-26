@@ -24,8 +24,13 @@ import org.slf4j.LoggerFactory;
 
 import io.github.ialzamil.guacamole.pam.Values;
 import io.github.ialzamil.guacamole.pam.coordination.Coordination;
+import io.github.ialzamil.guacamole.pam.crypto.MigrationReport;
+import io.github.ialzamil.guacamole.pam.crypto.Secrets;
 import io.github.ialzamil.guacamole.pam.db.PamDatabase;
 import io.github.ialzamil.guacamole.pam.db.SqlDialect;
+import io.github.ialzamil.guacamole.pam.notification.Event;
+import io.github.ialzamil.guacamole.pam.notification.EventType;
+import io.github.ialzamil.guacamole.pam.notification.Events;
 
 /**
  * Settings of the extension shared by every Guacamole server using the
@@ -40,7 +45,8 @@ import io.github.ialzamil.guacamole.pam.db.SqlDialect;
  * imported once, by the first server reading the settings, unless the
  * setting was decided in the database already; it is ignored from then on,
  * which is logged. Settings needed to reach the database, or protecting its
- * contents (the encryption keys), stay in guacamole.properties.
+ * contents (the encryption keys), stay in guacamole.properties. Secrets
+ * are encrypted as other stored secrets are, and never shown again.
  */
 public class PamSettings {
 
@@ -51,19 +57,19 @@ public class PamSettings {
      * request. Otherwise they only skip approvals, and give a reason like
      * anyone else.
      */
-    public static final Setting ADMIN_BYPASS_REQUESTS = Setting.bool("pam-admin-bypass-requests", false);
+    public static final Setting ADMIN_BYPASS_REQUESTS = Setting.bool(Setting.Section.GENERAL, "pam-admin-bypass-requests", false);
 
     /**
      * Whether holders may extend their checkouts, unless a connection says
      * otherwise.
      */
-    public static final Setting EXTENSIONS_ENABLED = Setting.bool("pam-extensions-enabled", true);
+    public static final Setting EXTENSIONS_ENABLED = Setting.bool(Setting.Section.GENERAL, "pam-extensions-enabled", true);
 
     /**
      * How many times a checkout may be extended, unless a connection says
      * otherwise.
      */
-    public static final Setting MAX_EXTENSIONS = Setting.integer("pam-max-extensions", 2, 0, 20);
+    public static final Setting MAX_EXTENSIONS = Setting.integer(Setting.Section.GENERAL, "pam-max-extensions", 2, 0, 20);
 
     /**
      * Every setting, in the order the settings page shows them.
@@ -105,15 +111,20 @@ public class PamSettings {
             return setting.getName();
         }
 
+        public Setting.Section getSection() {
+            return setting.getSection();
+        }
+
         public Setting.Type getType() {
             return setting.getType();
         }
 
         /**
-         * The value in effect: the one set, or the default.
+         * The value in effect: the one set, or the default; null for a
+         * secret, never shown again.
          */
         public Object getValue() {
-            return value;
+            return setting.getType() == Setting.Type.SECRET ? null : value;
         }
 
         public Object getDefaultValue() {
@@ -133,6 +144,18 @@ public class PamSettings {
 
         public Integer getMaximum() {
             return setting.getMaximum();
+        }
+
+        public List<String> getOptions() {
+            return setting.getOptions();
+        }
+
+        /**
+         * The name of the yes/no that, while on, needs this setting to have
+         * a value, or null.
+         */
+        public String getRequiredWhen() {
+            return setting.getRequiredWhen() == null ? null : setting.getRequiredWhen().getName();
         }
 
         /**
@@ -196,6 +219,10 @@ public class PamSettings {
 
     private final Coordination coordination;
 
+    private final Secrets secrets;
+
+    private final Events events;
+
     private volatile Snapshot snapshot;
 
     /**
@@ -203,10 +230,13 @@ public class PamSettings {
      */
     private volatile boolean imported = false;
 
-    public PamSettings(PamDatabase database, Environment environment, Coordination coordination) {
+    public PamSettings(PamDatabase database, Environment environment, Coordination coordination, Secrets secrets,
+            Events events) {
         this.database = database;
         this.environment = environment;
         this.coordination = coordination;
+        this.secrets = secrets;
+        this.events = events;
     }
 
     public boolean isAdminBypassRequests() throws GuacamoleException {
@@ -227,6 +257,31 @@ public class PamSettings {
     public Object get(Setting setting) throws GuacamoleException {
         Row row = rows().get(setting.getName());
         return setting.parse(row == null ? null : row.value);
+    }
+
+    /**
+     * The value of a secret, decrypted, or null if none is set.
+     *
+     * @throws GuacamoleException
+     *     If it is encrypted with a key not configured here.
+     */
+    public String getSecret(Setting setting) throws GuacamoleException {
+        return secrets.reveal(purpose(setting), (String) get(setting));
+    }
+
+    /**
+     * What the encryption of a secret is bound to: the setting it belongs
+     * to.
+     */
+    private static String purpose(Setting setting) {
+        return Secrets.SETTING_SECRET + ":" + setting.getName();
+    }
+
+    /**
+     * The value of a setting, as stored: a secret encrypted.
+     */
+    private String store(Setting setting, String value) throws GuacamoleException {
+        return setting.getType() == Setting.Type.SECRET ? secrets.protect(purpose(setting), value) : value;
     }
 
     /**
@@ -274,6 +329,7 @@ public class PamSettings {
 
         snapshot = null;
         Map<String, Row> current = rows();
+        requireValues(normalized, current);
         String by = username.length() > MAX_USERNAME_LENGTH ? username.substring(0, MAX_USERNAME_LENGTH) : username;
 
         SqlDialect dialect = database.getDialect();
@@ -283,6 +339,7 @@ public class PamSettings {
         columns.put("modified", dialect.now());
         columns.put("modified_by", "?");
 
+        List<String> changed = new ArrayList<>();
         try (Connection connection = database.getConnection()) {
 
             connection.setAutoCommit(false);
@@ -296,11 +353,13 @@ public class PamSettings {
                     if (row != null && Objects.equals(row.value, change.getValue()))
                         continue;
                     statement.setString(1, setting.getName());
-                    statement.setString(2, change.getValue());
+                    statement.setString(2, store(setting, change.getValue()));
                     statement.setString(3, by);
                     statement.executeUpdate();
-                    logger.info("User \"{}\" set \"{}\" to {} (was {}).", by, setting.getName(),
-                            describe(setting, change.getValue()), describe(setting, row == null ? null : row.value));
+                    String was = describe(setting, row == null ? null : row.value);
+                    String now = describe(setting, change.getValue());
+                    logger.info("User \"{}\" set \"{}\" to {} (was {}).", by, setting.getName(), now, was);
+                    changed.add(setting.getName() + ": " + now + " (was " + was + ")");
                 }
                 connection.commit();
 
@@ -318,10 +377,49 @@ public class PamSettings {
             snapshot = null;
         }
 
+        if (!changed.isEmpty())
+            events.publish(Event.of(EventType.SETTINGS_CHANGED).actor(by).detail(String.join("; ", changed)));
+
+    }
+
+    /**
+     * Refuses changes leaving a setting without a value while the yes/no
+     * needing it is on.
+     *
+     * @throws GuacamoleClientException
+     *     If one is missing.
+     */
+    private static void requireValues(Map<Setting, String> changes, Map<String, Row> current)
+            throws GuacamoleClientException {
+        for (Setting setting : ALL) {
+            Setting toggle = setting.getRequiredWhen();
+            if (toggle == null || !Boolean.TRUE.equals(toggle.parse(valueAfter(toggle, changes, current))))
+                continue;
+            if (valueAfter(setting, changes, current) == null)
+                throw new GuacamoleClientException("\"" + setting.getName() + "\" is needed while \""
+                        + toggle.getName() + "\" is on.");
+        }
+    }
+
+    /**
+     * A setting's value as stored once the changes are made, or null for
+     * the default.
+     */
+    private static String valueAfter(Setting setting, Map<Setting, String> changes, Map<String, Row> current) {
+        if (changes.containsKey(setting))
+            return changes.get(setting);
+        Row row = current.get(setting.getName());
+        return row == null ? null : row.value;
     }
 
     private static String describe(Setting setting, String value) {
-        return value == null ? "the default (" + setting.getDefaultValue() + ")" : value;
+        if (setting.getType() == Setting.Type.SECRET)
+            return value == null ? "none" : "a new secret";
+        if (setting.getType() == Setting.Type.TEXT)
+            return value == null ? "none" : value.split("\\r?\\n").length + " line(s)";
+        if (value == null)
+            return setting.getDefaultValue() == null ? "none" : "the default (" + setting.getDefaultValue() + ")";
+        return setting.getType() == Setting.Type.STRING ? "\"" + Values.forLog(value) + "\"" : value;
     }
 
     /**
@@ -406,10 +504,10 @@ public class PamSettings {
                     try (PreparedStatement statement = connection.prepareStatement(
                             "INSERT INTO pam_setting (name, value) VALUES (?, ?)")) {
                         statement.setString(1, setting.getName());
-                        statement.setString(2, value);
+                        statement.setString(2, store(setting, value));
                         statement.executeUpdate();
                         logger.info("\"{}\" was imported from guacamole.properties ({}); it is now set on the PAM"
-                                + " settings page, for every server.", setting.getName(), value);
+                                + " settings page, for every server.", setting.getName(), describe(setting, value));
                         continue;
                     }
                     catch (SQLException e) {
@@ -420,9 +518,13 @@ public class PamSettings {
                     }
                 }
 
-                if (!value.equals(stored))
+                if (setting.getType() == Setting.Type.SECRET)
+                    logger.warn("\"{}\" in guacamole.properties is ignored: it is set on the PAM settings page, for"
+                            + " every server. Remove it from guacamole.properties.", setting.getName());
+                else if (!value.equals(stored))
                     logger.warn("\"{}\" in guacamole.properties ({}) is ignored: it is set on the PAM settings page,"
-                            + " for every server ({}). Remove it from guacamole.properties.", setting.getName(), value,
+                            + " for every server ({}). Remove it from guacamole.properties.", setting.getName(),
+                            describe(setting, value),
                             describe(setting, stored));
 
             }
@@ -430,6 +532,48 @@ public class PamSettings {
                 throw new GuacamoleServerException("Unable to import the settings from guacamole.properties.", e);
             }
 
+        }
+
+    }
+
+    /**
+     * Encrypts the secrets stored as plaintext once a key is set, encrypts
+     * again those of earlier keys, or decrypts them all, as
+     * {@link Secrets#needsMigration} says; see SecretMigration.
+     */
+    public void migrateSecrets(MigrationReport report) throws GuacamoleException {
+
+        try (Connection connection = database.getConnection();
+             PreparedStatement select = connection.prepareStatement("SELECT value FROM pam_setting WHERE name = ?");
+             PreparedStatement update = connection.prepareStatement(
+                 "UPDATE pam_setting SET value = ? WHERE name = ? AND value = ?")) {
+
+            for (Setting setting : ALL) {
+
+                if (setting.getType() != Setting.Type.SECRET)
+                    continue;
+
+                String stored;
+                select.setString(1, setting.getName());
+                try (ResultSet results = select.executeQuery()) {
+                    stored = results.next() ? results.getString(1) : null;
+                }
+                if (!secrets.needsMigration(stored))
+                    continue;
+
+                update.setString(1, secrets.protect(purpose(setting), stored));
+                update.setString(2, setting.getName());
+                update.setString(3, stored);
+                report.changed(update.executeUpdate());
+
+            }
+
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to migrate the secrets of the settings.", e);
+        }
+        finally {
+            snapshot = null;
         }
 
     }

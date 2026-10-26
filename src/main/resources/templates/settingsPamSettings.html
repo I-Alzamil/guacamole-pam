@@ -6,32 +6,59 @@
             {{ 'PAM_SETTINGS.STANDBY_' + standby | translate }}
         </p>
 
-        <form name="settingsForm" ng-submit="save()" novalidate>
-            <table class="properties pam-setting-table" ng-class="{loading: !entries}">
-                <tr ng-repeat="entry in entries">
-                    <th><label for="pam-setting-{{ entry.name }}">{{ 'PAM_SETTINGS.FIELD_HEADER_' + key(entry) | translate }}</label></th>
-                    <td>
-                        <input ng-if="entry.type === 'BOOLEAN'" type="checkbox" id="pam-setting-{{ entry.name }}"
-                               ng-model="values[entry.name]">
-                        <input ng-if="entry.type === 'INTEGER'" type="number" id="pam-setting-{{ entry.name }}"
-                               name="{{ entry.name }}" required step="1" ng-min="entry.minimum" ng-max="entry.maximum"
-                               ng-model="values[entry.name]">
-                        <p class="pam-setting-help">{{ 'PAM_SETTINGS.HELP_' + key(entry) | translate }}</p>
-                        <p class="pam-setting-meta">
-                            {{ 'PAM_SETTINGS.INFO_DEFAULT' | translate:{ VALUE: (label(entry, entry.defaultValue) | translate) } }}
-                            <span ng-if="entry.modified && !entry.imported">{{ 'PAM_SETTINGS.INFO_MODIFIED' | translate:{
-                                USER: entry.modifiedBy, DATE: ((entry.modified | date:'medium') + ' ' + (entry.modified | pamZone)) } }}</span>
-                            <span ng-if="entry.imported">{{ 'PAM_SETTINGS.INFO_IMPORTED' | translate:{
-                                DATE: ((entry.modified | date:'medium') + ' ' + (entry.modified | pamZone)) } }}</span>
-                        </p>
-                    </td>
-                </tr>
-            </table>
+        <form name="settingsForm" ng-submit="save()" novalidate autocomplete="off">
+            <div ng-repeat="section in sections" class="pam-setting-section">
+                <h3 ng-if="section.name !== 'GENERAL'">{{ 'PAM_SETTINGS.SECTION_HEADER_' + section.name | translate }}</h3>
+                <p ng-if="section.name !== 'GENERAL'" class="pam-setting-help">{{ 'PAM_SETTINGS.SECTION_HELP_' + section.name | translate }}</p>
+                <table class="properties pam-setting-table" ng-class="{loading: !entries}">
+                    <tr ng-repeat="entry in section.entries">
+                        <th><label for="pam-setting-{{ entry.name }}">{{ 'PAM_SETTINGS.FIELD_HEADER_' + key(entry) | translate }}</label></th>
+                        <td>
+                            <input ng-if="entry.type === 'BOOLEAN'" type="checkbox" id="pam-setting-{{ entry.name }}"
+                                   ng-model="values[entry.name]">
+                            <input ng-if="entry.type === 'INTEGER'" type="number" id="pam-setting-{{ entry.name }}"
+                                   name="{{ entry.name }}" required step="1" ng-min="entry.minimum" ng-max="entry.maximum"
+                                   ng-model="values[entry.name]">
+                            <input ng-if="entry.type === 'STRING'" type="text" id="pam-setting-{{ entry.name }}"
+                                   name="{{ entry.name }}" ng-maxlength="entry.maximum" ng-model="values[entry.name]">
+                            <textarea ng-if="entry.type === 'TEXT'" id="pam-setting-{{ entry.name }}" rows="6"
+                                      name="{{ entry.name }}" ng-maxlength="entry.maximum" ng-model="values[entry.name]"
+                                      spellcheck="false"></textarea>
+                            <select ng-if="entry.type === 'ENUM'" id="pam-setting-{{ entry.name }}"
+                                    ng-model="values[entry.name]"
+                                    ng-options="option as (optionLabel(entry, option) | translate) for option in entry.options"></select>
+                            <span ng-if="entry.type === 'SECRET'" class="pam-setting-secret">
+                                <input type="password" id="pam-setting-{{ entry.name }}" name="{{ entry.name }}"
+                                       autocomplete="new-password" ng-maxlength="entry.maximum" ng-model="values[entry.name]"
+                                       ng-disabled="removed[entry.name]"
+                                       placeholder="{{ entry.set ? ('PAM_SETTINGS.INFO_SECRET_UNCHANGED' | translate) : '' }}">
+                                <label ng-if="entry.set"><input type="checkbox" ng-model="removed[entry.name]">
+                                    {{ 'PAM_SETTINGS.FIELD_HEADER_REMOVE_SECRET' | translate }}</label>
+                            </span>
+                            <p class="pam-setting-help">{{ 'PAM_SETTINGS.HELP_' + key(entry) | translate }}</p>
+                            <p class="pam-setting-meta">
+                                <span ng-if="entry.type !== 'SECRET'">{{ 'PAM_SETTINGS.INFO_DEFAULT' | translate:{ VALUE: (label(entry, entry.defaultValue) | translate) } }}</span>
+                                <span ng-if="entry.type === 'SECRET'">{{ (entry.set ? 'PAM_SETTINGS.INFO_SECRET_SET' : 'PAM_SETTINGS.INFO_SECRET_NONE') | translate }}</span>
+                                <span ng-if="entry.modified && !entry.imported">{{ 'PAM_SETTINGS.INFO_MODIFIED' | translate:{
+                                    USER: entry.modifiedBy, DATE: ((entry.modified | date:'medium') + ' ' + (entry.modified | pamZone)) } }}</span>
+                                <span ng-if="entry.imported">{{ 'PAM_SETTINGS.INFO_IMPORTED' | translate:{
+                                    DATE: ((entry.modified | date:'medium') + ' ' + (entry.modified | pamZone)) } }}</span>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+                <div class="action-buttons pam-setting-section-actions">
+                    <button type="button" ng-if="isTestable(section)" ng-click="test(section)"
+                            ng-disabled="isDirty() || testing || saving"
+                            title="{{ isDirty() ? ('PAM_SETTINGS.HELP_TEST_SAVE_FIRST' | translate) : '' }}"
+                            >{{ 'PAM_SETTINGS.ACTION_TEST_' + section.name | translate }}</button>
+                    <button type="button" ng-click="restoreDefaults(section)" ng-disabled="!anySet(section) || saving"
+                            >{{ 'PAM_SETTINGS.ACTION_RESTORE_DEFAULTS' | translate }}</button>
+                </div>
+            </div>
 
             <div class="action-buttons">
                 <button type="submit" ng-disabled="!isDirty() || settingsForm.$invalid || saving">{{ 'PAM.ACTION_SAVE' | translate }}</button>
-                <button type="button" ng-click="restoreDefaults()" ng-disabled="!anySet() || saving"
-                        >{{ 'PAM_SETTINGS.ACTION_RESTORE_DEFAULTS' | translate }}</button>
             </div>
         </form>
     </div>

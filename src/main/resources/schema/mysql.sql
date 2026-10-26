@@ -200,7 +200,7 @@ CREATE TABLE IF NOT EXISTS pam_connection_secret (
 CREATE TABLE IF NOT EXISTS pam_setting (
 
   name          varchar(64)   NOT NULL,
-  value         varchar(1024),
+  value         varchar(8000),
   modified      datetime(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   modified_by   varchar(128),
 
