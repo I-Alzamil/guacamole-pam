@@ -64,6 +64,20 @@ public class PamDatabase {
      */
     private static final int SCHEMA_VERSION = 1;
 
+    /**
+     * Lock taken by the server creating the tables (key 0), so servers
+     * starting together create them one at a time: two running the script at
+     * once can collide, even on "CREATE TABLE IF NOT EXISTS" with PostgreSQL.
+     */
+    private static final int SCHEMA_LOCK = 0x70616d64;
+
+    /**
+     * How long to wait for another server creating the tables before running
+     * the script anyway, in milliseconds, and how often to try meanwhile.
+     */
+    private static final long SCHEMA_LOCK_WAIT_MS = 30000;
+    private static final long SCHEMA_LOCK_RETRY_MS = 250;
+
     private final DatabaseSettings settings;
 
     private final SqlDialect dialect;
@@ -195,23 +209,54 @@ public class PamDatabase {
     public Connection getDedicatedConnection() throws GuacamoleException {
         Connection connection;
         try {
-            connection = driver.connect(settings.getUrl(), settings.getProperties());
-            if (connection == null)
-                throw new SQLException("The driver does not accept " + settings.getUrl());
+            connection = connectDirectly();
         }
         catch (SQLException e) {
             throw new GuacamoleServerException("Unable to connect to the PAM database.", e);
         }
+        return withSchema(connection);
+    }
+
+    /**
+     * A connection outside the pool, set up as the pool's are, whether or
+     * not the tables exist.
+     */
+    private Connection connectDirectly() throws SQLException {
+        Connection connection = driver.connect(settings.getUrl(), settings.getProperties());
+        if (connection == null)
+            throw new SQLException("The driver does not accept " + settings.getUrl());
         if (settings.getSessionSetup() != null) {
             try (Statement statement = connection.createStatement()) {
                 statement.execute(settings.getSessionSetup());
             }
             catch (SQLException e) {
                 close(connection);
-                throw new GuacamoleServerException("Unable to set up the PAM database session.", e);
+                throw e;
             }
         }
-        return withSchema(connection);
+        return connection;
+    }
+
+    /**
+     * Waits until this server holds the lock of creating the tables, on the
+     * given connection, or until another has held it too long.
+     */
+    private void lockSchema(Connection lock) throws SQLException {
+        long end = System.currentTimeMillis() + SCHEMA_LOCK_WAIT_MS;
+        while (!dialect.tryLock(lock, SCHEMA_LOCK, 0)) {
+            if (System.currentTimeMillis() >= end) {
+                logger.warn("Another server has been creating the PAM database tables for {} seconds: creating"
+                        + " them anyway.", SCHEMA_LOCK_WAIT_MS / 1000);
+                return;
+            }
+            try {
+                Thread.sleep(SCHEMA_LOCK_RETRY_MS);
+            }
+            catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new SQLException("Interrupted while waiting to create the PAM database tables.", e);
+            }
+        }
     }
 
     private static void close(Connection connection) {
@@ -266,6 +311,25 @@ public class PamDatabase {
         // without the privilege to create tables use tables created for it
         // (PostgreSQL refuses even "CREATE TABLE IF NOT EXISTS" to it)
         if (!hasVersion(connection, SCHEMA_VERSION)) {
+            // Closing the lock's own connection releases it
+            try (Connection lock = connectDirectly()) {
+                lockSchema(lock);
+                createSchema(connection, schema);
+            }
+        }
+
+        schemaReady = true;
+        logger.info("PAM database schema is ready.");
+
+    }
+
+    /**
+     * Runs the schema script, unless another server did meanwhile, and on a
+     * fresh install the initializers.
+     */
+    private void createSchema(Connection connection, String schema) throws SQLException {
+
+        if (!hasVersion(connection, SCHEMA_VERSION)) {
 
             boolean fresh = !hasAnyVersion(connection);
 
@@ -289,9 +353,6 @@ public class PamDatabase {
             }
 
         }
-
-        schemaReady = true;
-        logger.info("PAM database schema is ready.");
 
     }
 
