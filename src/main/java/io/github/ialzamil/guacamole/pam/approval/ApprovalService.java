@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory;
 
 import io.github.ialzamil.guacamole.pam.Values;
 import io.github.ialzamil.guacamole.pam.checkout.Checkout;
-import io.github.ialzamil.guacamole.pam.checkout.CheckoutService;
+import io.github.ialzamil.guacamole.pam.checkout.RequestService;
 
 /**
  * Decisions on requests by approvers: users whose approval
@@ -33,11 +33,11 @@ public class ApprovalService {
 
     private final ApprovalRepository approvals;
 
-    private final CheckoutService checkoutService;
+    private final RequestService requestService;
 
-    public ApprovalService(ApprovalRepository approvals, CheckoutService checkoutService) {
+    public ApprovalService(ApprovalRepository approvals, RequestService requestService) {
         this.approvals = approvals;
-        this.checkoutService = checkoutService;
+        this.requestService = requestService;
     }
 
     /**
@@ -85,7 +85,7 @@ public class ApprovalService {
      */
     public ApprovalRequest approve(int requestId, Approver approver, String remoteHost) throws GuacamoleException {
 
-        checkoutService.requireActive();
+        requestService.requireActive();
         ApprovalRequest pending = requireQualified(requestId, approver);
         if (pending.getUsername().equals(approver.getUsername()))
             throw new GuacamoleClientException("You cannot approve your own request.");
@@ -106,11 +106,11 @@ public class ApprovalService {
         Checkout checkout = null;
         try {
             if (request.getExtendsCheckout() != null)
-                checkout = checkoutService.grantExtension(request, approver.getUsername());
+                checkout = requestService.grantExtension(request, approver.getUsername());
             else if (request.getStarts() == null)
-                checkout = checkoutService.startApprovedCheckout(request);
+                checkout = requestService.startApprovedCheckout(request);
             else
-                checkoutService.reserve(request, approver.getUsername());
+                requestService.reserve(request, approver.getUsername());
         }
         catch (GuacamoleClientException e) {
             approvals.releaseCompletion(requestId, approver.getUsername());
@@ -148,7 +148,7 @@ public class ApprovalService {
      */
     public void deny(int requestId, Approver approver, String reason, String remoteHost) throws GuacamoleException {
 
-        checkoutService.requireActive();
+        requestService.requireActive();
         String trimmed = reason == null ? "" : reason.trim();
         if (trimmed.isEmpty())
             throw new GuacamoleClientException("Please give a reason for the denial.");

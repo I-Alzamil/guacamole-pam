@@ -23,6 +23,7 @@ import io.github.ialzamil.guacamole.pam.approval.ApproverDirectory;
 import io.github.ialzamil.guacamole.pam.approval.BadgePreferences;
 import io.github.ialzamil.guacamole.pam.checkout.CheckoutRepository;
 import io.github.ialzamil.guacamole.pam.checkout.CheckoutService;
+import io.github.ialzamil.guacamole.pam.checkout.RequestService;
 import io.github.ialzamil.guacamole.pam.coordination.Coordination;
 import io.github.ialzamil.guacamole.pam.coordination.SingleServer;
 import io.github.ialzamil.guacamole.pam.crypto.SecretMigration;
@@ -70,6 +71,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
     private final RotationService rotationService;
 
     private final CheckoutService checkoutService;
+
+    private final RequestService requestService;
 
     private final ApprovalRepository approvals;
 
@@ -126,6 +129,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             approvers = null;
             badgePreferences = null;
             checkoutService = null;
+            requestService = null;
             approvalService = null;
             secretMigration = null;
             connectionSecrets = null;
@@ -160,7 +164,9 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         badgePreferences = new BadgePreferences(database);
         checkoutService = new CheckoutService(connections, checkouts, platforms, approvals, rotationService,
                 settings);
-        approvalService = new ApprovalService(approvals, checkoutService);
+        requestService = new RequestService(connections, platforms, checkouts, approvals, rotationService,
+                checkoutService);
+        approvalService = new ApprovalService(approvals, requestService);
 
         // Offer the Account connection type in the connection editor
         environment.getProtocols().putIfAbsent(AccountProtocol.NAME, AccountProtocol.PROTOCOL);
@@ -266,6 +272,10 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     public CheckoutService getCheckoutService() {
         return checkoutService;
+    }
+
+    public RequestService getRequestService() {
+        return requestService;
     }
 
     public ApprovalService getApprovalService() {

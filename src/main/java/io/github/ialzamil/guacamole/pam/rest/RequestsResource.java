@@ -50,13 +50,13 @@ public class RequestsResource extends PamResource {
      */
     @GET
     public List<PasswordRequest> listRequests() throws GuacamoleException {
-        return provider.getCheckoutService().listRequests(context(), username(), isAdministrator());
+        return provider.getRequestService().listRequests(context(), username(), isAdministrator());
     }
 
     @GET
     @Path("{id}")
     public PasswordRequest getRequest(@PathParam("id") String id) throws GuacamoleException {
-        return provider.getCheckoutService().getRequest(context(), username(), id, isAdministrator());
+        return provider.getRequestService().getRequest(context(), username(), id, isAdministrator());
     }
 
     /**
@@ -92,7 +92,7 @@ public class RequestsResource extends PamResource {
             }
         }
 
-        RequestOutcome outcome = provider.getCheckoutService().request(context(), username(), remoteHost(), id,
+        RequestOutcome outcome = provider.getRequestService().request(context(), username(), remoteHost(), id,
                 body == null ? null : body.get("reason"), starts, periods, isAdministrator());
 
         // Awaiting approval: no password yet
@@ -119,7 +119,7 @@ public class RequestsResource extends PamResource {
     @DELETE
     @Path("{id}/pending")
     public void cancelRequest(@PathParam("id") String id) throws GuacamoleException {
-        provider.getCheckoutService().cancelRequest(context(), username(), remoteHost(), id);
+        provider.getRequestService().cancelRequest(context(), username(), remoteHost(), id);
     }
 
     /**
@@ -128,7 +128,7 @@ public class RequestsResource extends PamResource {
     @DELETE
     @Path("{id}/reservation")
     public void cancelReservation(@PathParam("id") String id) throws GuacamoleException {
-        provider.getCheckoutService().cancelReservation(context(), username(), remoteHost(), id);
+        provider.getRequestService().cancelReservation(context(), username(), remoteHost(), id);
     }
 
     /**
@@ -138,7 +138,7 @@ public class RequestsResource extends PamResource {
     @POST
     @Path("{id}/extension")
     public PasswordRequest extend(@PathParam("id") String id, Map<String, String> body) throws GuacamoleException {
-        return provider.getCheckoutService().extend(context(), username(), remoteHost(), id,
+        return provider.getRequestService().extend(context(), username(), remoteHost(), id,
                 body == null ? null : body.get("reason"), isAdministrator());
     }
 
@@ -148,7 +148,7 @@ public class RequestsResource extends PamResource {
     @DELETE
     @Path("{id}/extension")
     public void cancelExtension(@PathParam("id") String id) throws GuacamoleException {
-        provider.getCheckoutService().cancelExtension(context(), username(), remoteHost(), id);
+        provider.getRequestService().cancelExtension(context(), username(), remoteHost(), id);
     }
 
     @POST
