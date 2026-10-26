@@ -230,7 +230,7 @@ every server at once:
 - **Open sessions are counted from the database** (`pam_session`), so
   after-use and periodic rotations wait for sessions on every server. A server
   that stops without closing its sessions leaves records that are ignored
-  after 3 minutes, then removed, and the connections are rotated after use.
+  after 45 seconds, then removed, and the connections are rotated after use.
 - **When a checkout ends**, by release, revocation or expiry, the server
   ending it closes the holder's sessions at once. Other servers close theirs
   within 2 seconds.

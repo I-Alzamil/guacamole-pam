@@ -98,6 +98,12 @@ class SessionRegistry implements Coordination.Sessions {
 
     private final ConcurrentMap<GuacamoleTunnel, Session> local = new ConcurrentHashMap<>();
 
+    /**
+     * How many sessions one statement refreshes at most, well within the
+     * parameters every database allows.
+     */
+    private static final int MAX_IN = 100;
+
     SessionRegistry(PamDatabase database) {
         this.database = database;
         this.dialect = database.getDialect();
@@ -235,13 +241,32 @@ class SessionRegistry implements Coordination.Sessions {
     public void refresh() throws GuacamoleException {
         try (Connection connection = database.getConnection()) {
 
-            // Each recorded on its own: one of a connection just deleted,
-            // whose session closes shortly, cannot be, and must not keep
-            // the others from being. Rows this server failed to remove are
-            // not refreshed, and go stale like those of a stopped server
+            // Only those of open sessions: rows this server failed to remove
+            // are not refreshed, and go stale like those of a stopped server
+            List<Session> open = new ArrayList<>();
             for (Session session : local.values()) {
-                if (Values.parseId(session.identifier) == null)
-                    continue;
+                if (Values.parseId(session.identifier) != null)
+                    open.add(session);
+            }
+
+            int refreshed = 0;
+            for (int i = 0; i < open.size(); i += MAX_IN) {
+                List<Session> part = open.subList(i, Math.min(open.size(), i + MAX_IN));
+                try (PreparedStatement statement = connection.prepareStatement("UPDATE pam_session SET heartbeat = "
+                        + dialect.now() + " WHERE session_id IN " + SqlDialect.parameters(part.size()))) {
+                    for (int j = 0; j < part.size(); j++)
+                        statement.setString(j + 1, part.get(j).id);
+                    refreshed += statement.executeUpdate();
+                }
+            }
+            if (refreshed == open.size())
+                return;
+
+            // Some were removed by other servers while this one was not
+            // heard from: each recorded again on its own, as one of a
+            // connection just deleted, whose session closes shortly, cannot
+            // be, and must not keep the others from being
+            for (Session session : open) {
                 try {
                     record(connection, session);
                 }

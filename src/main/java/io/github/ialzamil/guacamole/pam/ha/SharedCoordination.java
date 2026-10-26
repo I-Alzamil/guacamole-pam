@@ -24,9 +24,10 @@ import io.github.ialzamil.guacamole.pam.db.SqlDialect;
  * ({@link RotationLocks}), so only one server rotates a connection at a
  * time, and sessions counted from "pam_session", so every server knows
  * whether a connection is in use. Each server refreshes the heartbeat of
- * its rows every minute; rows of a server that stopped without removing
- * them are ignored once stale, then removed, and their connections rotated
- * after use.
+ * its rows as often as the HA module's own heartbeat, every 10 seconds;
+ * rows of a server that stopped without removing them are ignored once
+ * stale, after 45 seconds as the module's sessions, then removed, and their
+ * connections rotated after use.
  *
  * Each server holds one of the locks {@link Coordination#SHARED_LOCK}, so a
  * server without the module stays on standby while they run; one that runs
@@ -38,12 +39,12 @@ public final class SharedCoordination implements Coordination {
     private static final Logger logger = LoggerFactory.getLogger(SharedCoordination.class);
 
     /**
-     * Age after which a session's row is no longer trusted: three missed
-     * heartbeats.
+     * Age after which a session's row is no longer trusted, as those of the
+     * HA module's own sessions: over four missed heartbeats.
      */
-    static final int STALE_SECONDS = 180;
+    static final int STALE_SECONDS = SessionStore.STALE_SECONDS;
 
-    private static final long HEARTBEAT_MS = TimeUnit.SECONDS.toMillis(60);
+    private static final long HEARTBEAT_MS = TimeUnit.SECONDS.toMillis(SessionStore.HEARTBEAT_SECONDS);
 
     private static final int VALID_TIMEOUT_SECONDS = 2;
 
