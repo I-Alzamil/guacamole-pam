@@ -527,6 +527,7 @@
         "HELP_EXTENSIONS_ENABLED": "Whether holders may extend their checkouts, for connections leaving it to this setting.",
         "HELP_MAX_EXTENSIONS": "How many times a checkout may be extended, for connections leaving it to this setting. Requests may also ask for up to one more than this many time limits at once.",
         "HELP_SHARED": "Shared by every Guacamole server using this database, and applied to all of them within seconds, without a restart. Connections can override some of them.",
+        "WARNING_NO_HA": "{SERVERS} Guacamole servers share this database without the HA module. PAM works across them, but each keeps its own logins, connection limits, Active Sessions, share links, failed logins and TOTP codes. Set pam-ha: true in guacamole.properties on every server to share them (see the README's High availability section).",
         "INFO_DEFAULT": "Default: {VALUE}.",
         "INFO_IMPORTED": "Imported from guacamole.properties on {DATE}.",
         "INFO_MODIFIED": "Last changed by {USER} on {DATE}.",

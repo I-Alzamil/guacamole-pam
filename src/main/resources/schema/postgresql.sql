@@ -240,6 +240,17 @@ CREATE TABLE IF NOT EXISTS pam_session (
 
 );
 
+-- Guacamole servers running with the extension, each refreshing its row
+-- every minute, so a server can tell it shares the database with others
+CREATE TABLE IF NOT EXISTS pam_server (
+
+  server     varchar(128)  NOT NULL,
+  heartbeat  timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (server)
+
+);
+
 -- Sensitive parameters of connections (passwords, private keys,
 -- passphrases), kept apart and encrypted while an encryption key is set. The
 -- parameter is then a token such as ${PAM_PASSWORD_17}, which the extension

@@ -116,6 +116,8 @@ public final class RotationService {
 
     private final RotationLocks locks;
 
+    private final ServerRegistry servers;
+
     private final SessionRegistry sessions;
 
     private final ScheduledExecutorService scheduler = newScheduler("pam-rotation", 2);
@@ -138,7 +140,8 @@ public final class RotationService {
         this.connections = connections;
         this.checkouts = checkouts;
         this.locks = new RotationLocks(database);
-        this.sessions = new SessionRegistry(database);
+        this.servers = new ServerRegistry(database);
+        this.sessions = new SessionRegistry(database, servers.getServer());
         scheduler.scheduleWithFixedDelay(this::rotateDueConnections,
                 PERIODIC_CHECK_SECONDS, PERIODIC_CHECK_SECONDS, TimeUnit.SECONDS);
         housekeeping.scheduleWithFixedDelay(this::endCheckouts,
@@ -147,6 +150,8 @@ public final class RotationService {
                 ACCESS_CHECK_SECONDS, ACCESS_CHECK_SECONDS, TimeUnit.SECONDS);
         housekeeping.scheduleWithFixedDelay(this::heartbeat,
                 HEARTBEAT_SECONDS, HEARTBEAT_SECONDS, TimeUnit.SECONDS);
+        // At once, so other servers count this one from its start
+        housekeeping.scheduleWithFixedDelay(this::serverHeartbeat, 0, HEARTBEAT_SECONDS, TimeUnit.SECONDS);
     }
 
     private static ScheduledExecutorService newScheduler(String name, int threads) {
@@ -374,6 +379,26 @@ public final class RotationService {
             logger.error("Session heartbeat failed: {}", e.getMessage());
             logger.debug("Session heartbeat failed.", e);
         }
+    }
+
+    private void serverHeartbeat() {
+        try {
+            servers.heartbeat();
+        }
+        catch (SchemaUnavailableException e) {
+            logger.debug("Server heartbeat skipped: {}", e.getMessage());
+        }
+        catch (Exception e) {
+            logger.error("Server heartbeat failed: {}", e.getMessage());
+            logger.debug("Server heartbeat failed.", e);
+        }
+    }
+
+    /**
+     * How many Guacamole servers run the extension on the database.
+     */
+    public int countServers() throws GuacamoleException {
+        return servers.count();
     }
 
     /**
@@ -723,6 +748,7 @@ public final class RotationService {
     public void shutdown() {
         housekeeping.shutdownNow();
         scheduler.shutdownNow();
+        servers.remove();
     }
 
 }

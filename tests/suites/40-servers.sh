@@ -83,6 +83,21 @@ USER2=$(token2 t2-servers t2-servers-pw)
 ADMIN2=$(token2 "$GUAC_ADMIN" "$GUAC_ADMIN_PASSWORD")
 check "setup: logged in on both servers" yes "$([ -n "$USER1" ] && [ -n "$USER2" ] && [ -n "$ADMIN2" ] && echo yes)"
 
+# ---------------------------------------------------------------- servers
+# Started with lab.sh --ha (the HA module on) or --ha=off
+HA_MODULE=$(podman exec myguactest printenv PAM_HA)
+section "Servers sharing the database (HA module: $HA_MODULE)"
+SERVERS=$(api GET "$PAM/settings/servers" "$ADMIN")
+check "the PAM Settings tab counts both servers" "200 2 $HA_MODULE" \
+    "$(status_of "$SERVERS") $(json_get "${SERVERS#* }" "str(d['servers']) + ' ' + str(d['ha']).lower()")"
+check "...for administrators only" 403 "$(status_of "$(api GET "$PAM/settings/servers" "$USER1")")"
+NO_HA_WARNING=$(podman logs myguactest2 2>&1 | grep -c "share this database without the HA module")
+if [ "$HA_MODULE" = true ]; then
+    check "...and no server warns of the HA module missing" 0 "$NO_HA_WARNING"
+else
+    check "...and the second server warns, once, that the HA module is off" 1 "$NO_HA_WARNING"
+fi
+
 # ---------------------------------------------------------------- sessions
 section "Sessions are seen by every server"
 open_session S2 "$GUAC2_URL" "$ADMIN2" "$SSH_C"

@@ -41,6 +41,17 @@ angular.module('guacPam').directive('guacSettingsPamSettings', [function guacSet
             pamService.getSettings().then(show, guacNotification.SHOW_REQUEST_ERROR);
 
             /**
+             * How many servers run the extension on the database, if
+             * several do without the HA module, to say so; null otherwise.
+             */
+            $scope.serversWithoutHa = null;
+
+            pamService.getServers().then(function serversRead(servers) {
+                if (servers.servers > 1 && !servers.ha)
+                    $scope.serversWithoutHa = servers.servers;
+            }, angular.noop);
+
+            /**
              * The translation key part naming a setting:
              * "pam-max-extensions" is "MAX_EXTENSIONS".
              */

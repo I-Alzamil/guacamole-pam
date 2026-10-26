@@ -1,6 +1,5 @@
 package io.github.ialzamil.guacamole.pam.rotation;
 
-import java.net.InetAddress;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -54,9 +53,9 @@ class SessionRegistry {
     private final String fresh;
 
     /**
-     * Identifies this server's rows: its host name, made unique per start.
+     * Identifies this server's rows (see {@link ServerRegistry}).
      */
-    private final String server = hostName() + "/" + UUID.randomUUID().toString().substring(0, 8);
+    private final String server;
 
     /**
      * A session open on this server.
@@ -108,19 +107,11 @@ class SessionRegistry {
 
     private final ConcurrentMap<GuacamoleTunnel, Session> local = new ConcurrentHashMap<>();
 
-    SessionRegistry(PamDatabase database) {
+    SessionRegistry(PamDatabase database, String server) {
         this.database = database;
         this.dialect = database.getDialect();
+        this.server = server;
         this.fresh = " heartbeat > " + dialect.plusSeconds(dialect.now(), Integer.toString(-STALE_SECONDS));
-    }
-
-    private static String hostName() {
-        try {
-            return InetAddress.getLocalHost().getHostName();
-        }
-        catch (Exception e) {
-            return "guacamole";
-        }
     }
 
     void started(String identifier, String username, GuacamoleTunnel tunnel, SessionAccess access) {

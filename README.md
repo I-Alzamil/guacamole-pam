@@ -191,7 +191,9 @@ PostgreSQL and MySQL).
 
 This is what PAM itself needs. Guacamole keeps much else on each server
 alone, such as logins, connection limits and Active Sessions: the
-[HA module](#high-availability-the-ha-module) shares those too.
+[HA module](#high-availability-the-ha-module) shares those too. Each server
+records itself in `pam_server`, and with several running without the HA
+module, each logs a warning saying so, and the **PAM Settings** tab shows it.
 
 ### High availability (the HA module)
 

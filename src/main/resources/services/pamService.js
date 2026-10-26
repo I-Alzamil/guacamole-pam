@@ -82,6 +82,14 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
     };
 
     /**
+     * How many Guacamole servers run the extension on the database
+     * ("servers"), and whether this one runs the HA module ("ha").
+     */
+    service.getServers = function getServers() {
+        return request('GET', 'settings/servers');
+    };
+
+    /**
      * Changes shared settings, all or none: each by name, to a value, or to
      * null for its default. Resolves with the settings as then.
      */

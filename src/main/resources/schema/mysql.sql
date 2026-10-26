@@ -184,6 +184,15 @@ CREATE TABLE IF NOT EXISTS pam_session (
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS pam_server (
+
+  server     varchar(128)  NOT NULL,
+  heartbeat  datetime(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+  PRIMARY KEY (server)
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS pam_connection_secret (
 
   connection_id  integer       NOT NULL,

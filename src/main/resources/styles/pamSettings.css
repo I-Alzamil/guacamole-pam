@@ -1199,7 +1199,8 @@ a.button.disabled {
 }
 
 .pam-policy-warning,
-.pam-policy-error {
+.pam-policy-error,
+.pam-settings-notice {
     color: #b45309;
     max-width: 48em;
 }
