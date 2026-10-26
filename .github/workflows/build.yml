@@ -1,0 +1,54 @@
+# Builds the extension and runs its unit tests on every Java release it
+# supports, keeping the jar built on Java 17 (Guacamole 1.6's own). The lab
+# suites under tests/ need the podman lab, so are run locally.
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request supersedes a running build
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Java ${{ matrix.java }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [11, 17, 21]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      - name: Build and run unit tests
+        run: mvn --batch-mode --no-transfer-progress verify
+      - name: Keep the jar
+        if: matrix.java == 17
+        uses: actions/upload-artifact@v4
+        with:
+          name: guacamole-pam
+          path: target/guacamole-pam-*.jar
+          if-no-files-found: error
+
+  scripts:
+    name: Lab and test scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shell syntax
+        run: |
+          find build.sh lab tests -name '*.sh' -print0 | xargs -0 -n1 bash -n
+      - name: Check Python syntax
+        run: python3 -m py_compile tests/*.py

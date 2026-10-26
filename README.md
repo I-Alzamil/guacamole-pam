@@ -1,5 +1,7 @@
 # guacamole-pam
 
+[![Build](https://github.com/I-Alzamil/guacamole-pam/actions/workflows/build.yml/badge.svg)](https://github.com/I-Alzamil/guacamole-pam/actions/workflows/build.yml)
+
 Privileged access management for [Apache Guacamole](https://guacamole.apache.org/) 1.6.
 
 - **Password rotation.** Each connection's password is either just stored, or
