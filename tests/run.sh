@@ -9,7 +9,7 @@ source ./lib.sh
 trap 'rm -rf -- "${T2_TMP:?}"' EXIT
 
 missing=()
-for container in myguactest myguacdbtest myguacdtest mysshtest myldaptest myadtest mykdctest mytacacstest mypgtarget mymysqltarget mymariadbtarget mymssqltarget; do
+for container in myguactest myguacdbtest myguacdtest mysshtest myldaptest myadtest mykdctest mytacacstest mypgtarget mymysqltarget mymariadbtarget mymssqltarget mysyslogtest; do
     [ "$(podman inspect -f '{{.State.Running}}' "$container" 2>/dev/null)" = true ] || missing+=("$container")
 done
 if [ ${#missing[@]} -gt 0 ]; then

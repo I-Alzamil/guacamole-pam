@@ -34,6 +34,7 @@ import io.github.ialzamil.guacamole.pam.db.PamDatabase;
 import io.github.ialzamil.guacamole.pam.ha.HaAuthenticationProvider;
 import io.github.ialzamil.guacamole.pam.ha.SharedCoordination;
 import io.github.ialzamil.guacamole.pam.notification.Events;
+import io.github.ialzamil.guacamole.pam.notification.syslog.SyslogNotifier;
 import io.github.ialzamil.guacamole.pam.password.PasswordPolicyRepository;
 import io.github.ialzamil.guacamole.pam.platform.PlatformImport;
 import io.github.ialzamil.guacamole.pam.platform.PlatformRepository;
@@ -155,6 +156,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
                 : new SingleServer(database);
         events = new Events();
         settings = new PamSettings(database, environment, coordination, secrets, events);
+        events.add(new SyslogNotifier(settings));
         CheckoutRepository checkouts = new CheckoutRepository(database);
         connectionSecrets = new ConnectionSecrets(database, secrets);
         passwordPolicies = new PasswordPolicyRepository(database);

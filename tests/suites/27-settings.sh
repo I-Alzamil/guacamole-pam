@@ -36,11 +36,11 @@ section "Who may read and change them"
 check "a user cannot read them" 403 "$(status_of "$(api GET "$SETTINGS" "$USER")")"
 check "...nor change them" 403 "$(status_of "$(api PUT "$SETTINGS" "$USER" '{"pam-admin-bypass-requests":true}')")"
 check "...which stay as they were" "False False" "$(setting pam-admin-bypass-requests "e['value'], e['set']")"
-check "an administrator reads each, at its default" \
+check "an administrator reads each general setting, at its default" \
     "pam-admin-bypass-requests=False pam-extensions-enabled=True pam-max-extensions=2" \
     "$(curl -s "$SETTINGS?token=$ADMIN" | python3 -I -c "
 import sys,json
-print(' '.join('%s=%s' % (e['name'], e['value']) for e in json.load(sys.stdin)))")"
+print(' '.join('%s=%s' % (e['name'], e['value']) for e in json.load(sys.stdin) if e['section'] == 'GENERAL'))")"
 check "...with their defaults and bounds" "2 0 20" "$(setting pam-max-extensions "e['defaultValue'], e['minimum'], e['maximum']")"
 
 # ---------------------------------------------------------------- invalid
@@ -103,6 +103,7 @@ fi
 section "Defaults restored"
 R=$(api PUT "$SETTINGS" "$ADMIN" '{"pam-admin-bypass-requests":null,"pam-extensions-enabled":null,"pam-max-extensions":null}')
 check "each set back to its default" "200 False/False True/False 2/False" "$(status_of "$R") $(json_get "${R#* }" \
-    "' '.join('%s/%s' % (e['value'], e['set']) for e in d)")"
+    "' '.join('%s/%s' % (e['value'], e['set']) for e in d if e['section'] == 'GENERAL')")"
 check "...still recorded as decided here, so a server's guacamole.properties cannot bring them back" 3 \
-    "$(sql "SELECT COUNT(*) FROM pam_setting WHERE value IS NULL")"
+    "$(sql "SELECT COUNT(*) FROM pam_setting WHERE value IS NULL AND name IN ('pam-admin-bypass-requests',
+        'pam-extensions-enabled', 'pam-max-extensions')")"

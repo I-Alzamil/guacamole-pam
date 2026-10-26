@@ -1,7 +1,10 @@
 package io.github.ialzamil.guacamole.pam;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.Certificate;
@@ -13,9 +16,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
+
 /**
  * Server certificates as platforms name them: by fingerprint, and the CA
- * certificates a platform trusts, in PEM.
+ * certificates a platform or an output of events trusts, in PEM.
  */
 public final class Certificates {
 
@@ -68,6 +74,36 @@ public final class Certificates {
         if (certificates.isEmpty())
             throw new IllegalArgumentException("The CA certificates field holds no certificate.");
         return Collections.unmodifiableList(certificates);
+
+    }
+
+    /**
+     * A TLS context trusting the given CA certificates, or Java's own
+     * trusted ones if there are none. Host names are checked by the
+     * sockets, not here.
+     */
+    public static SSLContext trusting(List<X509Certificate> authorities) throws GeneralSecurityException {
+
+        TrustManagerFactory trust = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        if (authorities.isEmpty())
+            trust.init((KeyStore) null);
+        else {
+            KeyStore store = KeyStore.getInstance(KeyStore.getDefaultType());
+            try {
+                store.load(null, null);
+            }
+            catch (IOException e) {
+                throw new GeneralSecurityException(e);
+            }
+            int index = 0;
+            for (X509Certificate authority : authorities)
+                store.setCertificateEntry("ca-" + index++, authority);
+            trust.init(store);
+        }
+
+        SSLContext context = SSLContext.getInstance("TLS");
+        context.init(null, trust.getTrustManagers(), null);
+        return context;
 
     }
 

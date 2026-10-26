@@ -32,6 +32,9 @@
 #       The databases (not Guacamole's own) use TLS with certificates of a
 #       test CA, generated the first time into lab/targets/certs (ca.crt
 #       there), and each has an account "dbtest" / "P@ssw0rd-Db1".
+#         mysyslogtest     syslog receiver: TLS on 6514 (a certificate of the
+#                          same CA), TCP and UDP on 514, writing what it
+#                          receives to /tmp/tls.log, tcp.log and udp.log
 #   lab.sh seed
 #       Adds the test platforms, connections, users and group (seed.sh).
 #   lab.sh reset
@@ -53,7 +56,7 @@ source ./database.sh
 
 PAM_TEST_ENCRYPTION_KEY="${PAM_ENCRYPTION_KEY-um/hqZa6cc89CtHmc9vYOuoDd8S1jY8IaASlz5S00iY=}"
 LAB_CONTAINERS="myguactest myguactest2 myguacdtest myguacdbtest mysshtest myldaptest myadtest mykdctest
-    mytacacstest mypgtarget mymysqltarget mymariadbtarget mymssqltarget"
+    mytacacstest mypgtarget mymysqltarget mymariadbtarget mymssqltarget mysyslogtest"
 
 running() { [ "$(podman inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
 
@@ -290,17 +293,16 @@ start_tacacs() {
 }
 
 # The databases to manage accounts on, over TLS
-start_databases() {
+# A certificate of the test CA for each given server, into lab/targets/certs
+# as HOST.crt and HOST.key, the CA (ca.crt) made the first time
+certify() {
     local certs=targets/certs host
-    local targets="mypgtarget mymysqltarget mymariadbtarget mymssqltarget"
-
-    # The test CA, and a certificate for each server
     mkdir -p "$certs"
     if [ ! -s "$certs/ca.crt" ]; then
         openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=guacamole-pam test CA" \
             -keyout "$certs/ca.key" -out "$certs/ca.crt" 2>/dev/null || return 1
     fi
-    for host in $targets; do
+    for host in "$@"; do
         [ -s "$certs/$host.crt" ] && continue
         openssl req -newkey rsa:2048 -nodes -subj "/CN=$host" -keyout "$certs/$host.key" \
             -out "$certs/$host.csr" 2>/dev/null
@@ -309,6 +311,14 @@ start_databases() {
             -out "$certs/$host.crt" 2>/dev/null
         rm -f "$certs/$host.csr"
     done
+}
+
+start_databases() {
+    local certs=targets/certs
+    local targets="mypgtarget mymysqltarget mymariadbtarget mymssqltarget"
+
+    # The test CA, and a certificate for each server
+    certify $targets || return 1
     # Read by each server's own user, so world-readable: test keys only
     chmod 644 "$certs"/*.key
 
@@ -361,9 +371,26 @@ start_databases() {
     sq "IF SUSER_ID('dbtest') IS NULL CREATE LOGIN dbtest WITH PASSWORD = 'P@ssw0rd-Db1'"
 }
 
+# A syslog receiver, writing each transport's messages to its file in /tmp
+start_syslog() {
+    running mysyslogtest && return 0
+    certify mysyslogtest || return 1
+    podman run --rm -d \
+        --name mysyslogtest \
+        --hostname mysyslogtest \
+        --net myguacnet \
+        -v "./targets/certs:/certs:ro,Z" \
+        --entrypoint sh docker.io/alpine/socat:1.8.1.1 -c '
+            socat -u OPENSSL-LISTEN:6514,reuseaddr,fork,cert=/certs/mysyslogtest.crt,key=/certs/mysyslogtest.key,verify=0 \
+                OPEN:/tmp/tls.log,creat,append &
+            socat -u TCP-LISTEN:514,reuseaddr,fork OPEN:/tmp/tcp.log,creat,append &
+            socat -u UDP-RECV:514 OPEN:/tmp/udp.log,creat,append &
+            wait' >/dev/null
+}
+
 start_services() {
     local service
-    for service in ssh ldap ad kdc tacacs databases; do
+    for service in ssh ldap ad kdc tacacs databases syslog; do
         "start_$service" || { echo "The $service test server did not start." >&2; return 1; }
     done
     echo "Test servers running."

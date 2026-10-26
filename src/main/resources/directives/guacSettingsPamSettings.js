@@ -195,7 +195,9 @@ angular.module('guacPam').directive('guacSettingsPamSettings', [function guacSet
                 pamService.testSettings(section.name.toLowerCase()).then(function tested(result) {
                     guacNotification.showStatus({
                         title   : 'PAM_SETTINGS.SECTION_HEADER_' + section.name,
-                        text    : { key : 'PAM_SETTINGS.INFO_TEST_SENT', variables : { MESSAGE : result.message } },
+                        className : result.sent ? '' : 'error',
+                        text    : { key : result.sent ? 'PAM_SETTINGS.INFO_TEST_SENT' : 'PAM_SETTINGS.INFO_TEST_FAILED',
+                                    variables : { MESSAGE : result.message } },
                         actions : [ closeStatus ]
                     });
                 }, guacNotification.SHOW_REQUEST_ERROR)['finally'](function testEnded() {

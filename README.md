@@ -57,6 +57,7 @@ Privileged access management for [Apache Guacamole](https://guacamole.apache.org
   cancellations, checkouts, and their release or revocation. In both
   histories, click a user, an approver or who ended a checkout for when and
   from where they acted, or a scheduled request for its start and end.
+  Every event can also go to a [syslog server](#syslog), over TLS.
 - **High availability, if wanted.** Several Guacamole servers can share the
   database as one, active-active: the optional
   [HA module](#high-availability-the-ha-module) shares sessions, connection
@@ -573,6 +574,47 @@ to reach the database, or protect what it stores: `pam-database`,
 `pam-database-max-connections` and the `pam-encryption-*` keys: keep them
 alike on every server.
 
+### Syslog
+
+The **Syslog** section of the **PAM Settings** tab sends every PAM event to a
+syslog server as it happens, so a SIEM sees who requested, approved, checked
+out, connected to and viewed what. It's off by default. Each Guacamole server
+sends the events that happened on it, so with the HA module each event is
+sent once.
+
+Events are rotations (succeeded or failed); requests submitted, approved,
+granted, denied and cancelled; checkouts started, extended, released,
+expired and revoked; passwords viewed; sessions started and ended; a server
+going on standby and working again; and changes to the PAM settings.
+Passwords are never sent.
+
+- **Transport**: TLS (RFC 5425, the default, port 6514) checks that the
+  server's certificate is trusted and names the host set; paste the CA
+  certificates that issued it, in PEM, unless Java already trusts them. TCP
+  (port 514 usually) sends in the clear; UDP also loses messages silently
+  when the server is down.
+- **Format**: RFC 5424, framed by length over TLS and TCP (RFC 6587). The
+  MSGID is the event, and the message a sentence followed by the event's
+  fields as `name="value"` pairs, which log servers and SIEMs split without
+  configuration:
+
+  ```
+  <85>1 2026-10-27T10:00:00.123Z guac1 guacamole-pam - checkout-started - User "bob" checked out "web01". event="checkout-started" user="bob" connection="web01" connection-id="3" checkout="12" starts="2026-10-27T10:00:00.120Z" ends="2026-10-27T11:00:00.120Z" remote-host="10.0.0.5" reason="Ticket 4521"
+  ```
+
+  Fields: `user` (whose request, checkout or session), `actor` (who decided,
+  revoked or changed), `connection`, `connection-id`, `request`, `checkout`,
+  `starts`, `ends`, `remote-host`, `reason`, `detail`. Severities: error for
+  failed rotations, warning for revoked checkouts and standby, notice for
+  checkouts, grants, denials, viewed passwords and setting changes,
+  informational otherwise. The facility is `authpriv` unless set.
+  Messages are cut at 8 KB.
+- **Delivery**: each server queues up to 1,000 events, sent one at a time on
+  a connection kept open. An event that can't be sent is tried again after 2,
+  5 and 10 seconds, then dropped; the log says when sending fails, and when it
+  works again. **Send a test message** sends one with the saved settings, and
+  says why it couldn't.
+
 ### Password policies
 
 New passwords are random, and follow a *password policy*, so they meet each
@@ -836,7 +878,7 @@ passwords. Its commands run in the order given:
 | `lab/lab.sh app` | (Re)starts Guacamole's database, guacd and Guacamole with the built jar, on http://localhost:8080. Run it again after each build. Stored secrets are encrypted with a fixed test key; set `PAM_ENCRYPTION_KEY=` to store them unencrypted |
 | `lab/lab.sh app --ha` | Also a second Guacamole sharing the database and guacd, on http://localhost:8081, with the [HA module](#high-availability-the-ha-module) on in both, for the two-server tests (`--ha` alone restarts both servers that way, keeping the database and guacd running) |
 | `lab/lab.sh app --ha=off` | The same two servers with the HA module off: the second, started once the first answers, stays on standby (alone, likewise restarts both) |
-| `lab/lab.sh services` | The servers whose accounts the lab manages, keeping those already running: SSH `mysshtest` (user `mysshtest`; its ECDSA host key has a certificate of a test SSH CA, `lab/targets/certs/ssh_ca.pub`), OpenLDAP `myldaptest` (`uid=ldaptest,ou=people,dc=example,dc=org`), Samba AD `myadtest` (LDAPS and Kerberos, `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`), MIT Kerberos `mykdctest` (realm `EXAMPLE.ORG`, `kdctest`), TACACS+ `mytacacstest` (tac_plus-ng, built from source into `localhost/pam-tacacs-test` the first time; `tactest`), and databases over TLS with certificates of a test CA generated into `lab/targets/certs`: PostgreSQL `mypgtarget`, MySQL `mymysqltarget`, MariaDB `mymariadbtarget`, SQL Server `mymssqltarget` (`dbtest`). Passwords are listed at the top of `lab/lab.sh` |
+| `lab/lab.sh services` | The servers whose accounts the lab manages, keeping those already running: SSH `mysshtest` (user `mysshtest`; its ECDSA host key has a certificate of a test SSH CA, `lab/targets/certs/ssh_ca.pub`), OpenLDAP `myldaptest` (`uid=ldaptest,ou=people,dc=example,dc=org`), Samba AD `myadtest` (LDAPS and Kerberos, `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`), MIT Kerberos `mykdctest` (realm `EXAMPLE.ORG`, `kdctest`), TACACS+ `mytacacstest` (tac_plus-ng, built from source into `localhost/pam-tacacs-test` the first time; `tactest`), and databases over TLS with certificates of a test CA generated into `lab/targets/certs`: PostgreSQL `mypgtarget`, MySQL `mymysqltarget`, MariaDB `mymariadbtarget`, SQL Server `mymssqltarget` (`dbtest`); and a syslog receiver `mysyslogtest` (TLS with a certificate of the same CA, TCP, UDP). Passwords are listed at the top of `lab/lab.sh` |
 | `lab/lab.sh seed` | Adds the test platforms, connections, users and group to a fresh database, through the REST API (`lab/seed.sh`) |
 | `lab/lab.sh reset` | Recreates Guacamole's database, with only Guacamole's schema and `guacadmin` / `guacadmin` |
 | `lab/lab.sh stop` | Stops every container of the lab |

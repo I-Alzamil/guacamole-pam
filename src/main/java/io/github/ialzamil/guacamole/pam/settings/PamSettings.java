@@ -31,6 +31,7 @@ import io.github.ialzamil.guacamole.pam.db.SqlDialect;
 import io.github.ialzamil.guacamole.pam.notification.Event;
 import io.github.ialzamil.guacamole.pam.notification.EventType;
 import io.github.ialzamil.guacamole.pam.notification.Events;
+import io.github.ialzamil.guacamole.pam.notification.syslog.SyslogSettings;
 
 /**
  * Settings of the extension shared by every Guacamole server using the
@@ -74,8 +75,16 @@ public class PamSettings {
     /**
      * Every setting, in the order the settings page shows them.
      */
-    public static final List<Setting> ALL = Collections.unmodifiableList(Arrays.asList(
-            ADMIN_BYPASS_REQUESTS, EXTENSIONS_ENABLED, MAX_EXTENSIONS));
+    public static final List<Setting> ALL = all(Arrays.asList(ADMIN_BYPASS_REQUESTS, EXTENSIONS_ENABLED,
+            MAX_EXTENSIONS), SyslogSettings.ALL);
+
+    @SafeVarargs
+    private static List<Setting> all(List<Setting>... sections) {
+        List<Setting> all = new ArrayList<>();
+        for (List<Setting> section : sections)
+            all.addAll(section);
+        return Collections.unmodifiableList(all);
+    }
 
     /**
      * How long values read are used before being read again, unless this

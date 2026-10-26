@@ -16,8 +16,11 @@ import org.slf4j.LoggerFactory;
  * Hands each event PAM reports to every output, on the output's own thread,
  * so neither a rotation nor a request ever waits for a slow syslog server or
  * mail server. Each output queues up to {@link #QUEUE_SIZE} events; once
- * full, the oldest are dropped, which is logged. A failure to send is
- * logged once, and again only once sending worked meanwhile.
+ * full, the oldest are dropped, which is logged. An event that cannot be
+ * sent is tried again after {@link #RETRY_SECONDS}, so a server restarting
+ * loses nothing, then dropped; while sending keeps failing, each event is
+ * tried once. A failure is logged once, and again only once sending worked
+ * meanwhile.
  *
  * Each server sends the events that happened on it, so with the HA module
  * every event is sent once.
@@ -29,6 +32,11 @@ public final class Events {
     static final int QUEUE_SIZE = 1000;
 
     private static final long SHUTDOWN_SECONDS = 2;
+
+    /**
+     * How long to wait before each new try of an event.
+     */
+    private static final long[] RETRY_SECONDS = { 2, 5, 10 };
 
     /**
      * An output, with its thread and queue.
@@ -64,7 +72,7 @@ public final class Events {
             try {
                 if (!notifier.isEnabled())
                     return;
-                notifier.send(event);
+                send(event);
                 int lost = dropped.getAndSet(0);
                 if (failing || lost > 0)
                     logger.info("Events are sent to {} again{}.", notifier.getName(),
@@ -78,6 +86,32 @@ public final class Events {
                     logger.debug("Unable to send an event to {}: {}", notifier.getName(), e.getMessage());
                 logger.debug("Unable to send an event to {}.", notifier.getName(), e);
                 failing = true;
+            }
+        }
+
+        /**
+         * Sends an event, trying again unless sending already failed
+         * before.
+         */
+        private void send(Event event) throws Exception {
+            for (int attempt = 0; ; attempt++) {
+                try {
+                    notifier.send(event);
+                    return;
+                }
+                catch (Exception e) {
+                    if (failing || attempt >= RETRY_SECONDS.length)
+                        throw e;
+                    logger.debug("Unable to send an event to {}, trying again: {}", notifier.getName(),
+                            e.getMessage());
+                    try {
+                        TimeUnit.SECONDS.sleep(RETRY_SECONDS[attempt]);
+                    }
+                    catch (InterruptedException stopped) {
+                        Thread.currentThread().interrupt();
+                        throw e;
+                    }
+                }
             }
         }
 

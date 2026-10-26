@@ -100,7 +100,8 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
 
     /**
      * Sends a test through an output of events ("syslog", "email"), as
-     * saved. Resolves with what was sent ("message").
+     * saved. Resolves with whether it was sent ("sent"), and what was sent
+     * where, or why not ("message").
      */
     service.testSettings = function testSettings(output) {
         return request('POST', 'settings/test/' + encodeURIComponent(output));
