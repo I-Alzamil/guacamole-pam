@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.guacamole.GuacamoleClientException;
-import org.apache.guacamole.form.EnumField;
 import org.apache.guacamole.form.Field;
 import org.apache.guacamole.form.Form;
 import org.apache.guacamole.form.MultilineField;
@@ -16,6 +15,7 @@ import org.apache.guacamole.form.NumericField;
 import org.apache.guacamole.form.PasswordField;
 import org.apache.guacamole.form.TextField;
 
+import io.github.ialzamil.guacamole.pam.PamEnumField;
 import io.github.ialzamil.guacamole.pam.database.DatabaseClient;
 import io.github.ialzamil.guacamole.pam.database.DatabaseTarget.Kind;
 import io.github.ialzamil.guacamole.pam.database.DatabaseTarget;
@@ -69,15 +69,13 @@ public class DatabaseManagementType implements ManagementType {
     public Collection<Form> getPlatformForms() {
         return Arrays.asList(
             new Form("database-server", Arrays.<Field>asList(
-                new EnumField(TYPE, Arrays.asList(Kind.POSTGRESQL.getValue(), Kind.MYSQL.getValue(),
-                        Kind.SQLSERVER.getValue())),
+                new PamEnumField(TYPE, Kind.POSTGRESQL.getValue(), Kind.MYSQL.getValue(), Kind.SQLSERVER.getValue()),
                 new TextField(HOSTNAME),
                 new NumericField(PORT),
                 new TextField(DATABASE)
             )),
             new Form("database-trust", Arrays.<Field>asList(
-                new EnumField(ENCRYPTION, Arrays.asList("", DatabaseTarget.ENCRYPTION_UNVERIFIED,
-                        DatabaseTarget.ENCRYPTION_NONE)),
+                new PamEnumField(ENCRYPTION, "", DatabaseTarget.ENCRYPTION_UNVERIFIED, DatabaseTarget.ENCRYPTION_NONE),
                 new MultilineField(CA_CERTIFICATES)
             )),
             new Form("database-rotation", Arrays.<Field>asList(

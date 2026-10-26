@@ -11,6 +11,9 @@
  *                       "pam-rotation-interval" connection attribute.
  * PAM_SCRIPT   - sequence script editor with live validation, for the
  *                settings of SSH platforms.
+ * PAM_ENUM     - drop-down of options in the order the server lists them
+ *                (Guacamole's own ENUM sorts them), so insecure ones come
+ *                last.
  */
 angular.module('guacPam').config(['formServiceProvider', function pamFieldTypeConfig(formServiceProvider) {
 
@@ -28,6 +31,12 @@ angular.module('guacPam').config(['formServiceProvider', function pamFieldTypeCo
         module      : 'guacPam',
         controller  : 'pamRotationIntervalFieldController',
         templateUrl : 'app/ext/pam/templates/pamRotationIntervalField.html'
+    });
+
+    formServiceProvider.registerFieldType('PAM_ENUM', {
+        module      : 'form',
+        controller  : 'selectFieldController',
+        templateUrl : 'app/ext/pam/templates/pamEnumField.html'
     });
 
     formServiceProvider.registerFieldType('PAM_SCRIPT', {

@@ -44,6 +44,7 @@
         "templates/settingsPamPasswordPolicies.html": "text/html",
         "templates/pamPlatformPicker.html": "text/html",
         "templates/pamScriptField.html": "text/html",
+        "templates/pamEnumField.html": "text/html",
         "templates/settingsPamHistory.html": "text/html",
         "templates/settingsPamApprovals.html": "text/html",
         "templates/settingsPamHa.html": "text/html",

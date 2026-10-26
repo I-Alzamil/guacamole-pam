@@ -6,7 +6,6 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.guacamole.form.BooleanField;
-import org.apache.guacamole.form.EnumField;
 import org.apache.guacamole.form.Field;
 import org.apache.guacamole.form.Form;
 import org.apache.guacamole.form.NumericField;
@@ -171,8 +170,8 @@ public final class PamAttributes {
         )));
 
         forms.add(new Form("pam-policy", Arrays.<Field>asList(
-            new EnumField(ROTATION_MODE, Arrays.asList("", Platform.MODE_NEVER,
-                    Platform.MODE_AFTER_USE, Platform.MODE_PERIODIC)),
+            new PamEnumField(ROTATION_MODE, "", Platform.MODE_NEVER, Platform.MODE_AFTER_USE,
+                    Platform.MODE_PERIODIC),
             new Field(ROTATION_INTERVAL, ROTATION_INTERVAL_FIELD_TYPE),
             new Field(PASSWORD_POLICY, PASSWORD_POLICY_FIELD_TYPE)
         )));
@@ -182,9 +181,9 @@ public final class PamAttributes {
         forms.add(new Form("pam-checkout", Arrays.<Field>asList(
             new BooleanField(REQUEST_EXEMPT, "true"),
             new NumericField(CHECKOUT_DURATION),
-            new EnumField(CHECKOUT_EXCLUSIVE, Arrays.asList("", EXCLUSIVE_YES, EXCLUSIVE_NO)),
+            new PamEnumField(CHECKOUT_EXCLUSIVE, "", EXCLUSIVE_YES, EXCLUSIVE_NO),
             new NumericField(APPROVALS_REQUIRED),
-            new EnumField(EXTENSIONS, Arrays.asList("", EXTENSIONS_YES, EXTENSIONS_NO)),
+            new PamEnumField(EXTENSIONS, "", EXTENSIONS_YES, EXTENSIONS_NO),
             new NumericField(MAX_EXTENSIONS),
             new NumericField(EXTENSION_DURATION),
             new BooleanField(REVEAL_PASSWORD, "true")

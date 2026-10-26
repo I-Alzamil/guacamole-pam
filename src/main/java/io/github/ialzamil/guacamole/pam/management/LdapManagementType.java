@@ -9,13 +9,13 @@ import java.util.Set;
 
 import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.form.BooleanField;
-import org.apache.guacamole.form.EnumField;
 import org.apache.guacamole.form.Field;
 import org.apache.guacamole.form.Form;
 import org.apache.guacamole.form.NumericField;
 import org.apache.guacamole.form.PasswordField;
 import org.apache.guacamole.form.TextField;
 
+import io.github.ialzamil.guacamole.pam.PamEnumField;
 import io.github.ialzamil.guacamole.pam.db.ConnectionRepository.Target;
 import io.github.ialzamil.guacamole.pam.ldap.LdapClient;
 import io.github.ialzamil.guacamole.pam.ldap.LdapTarget;
@@ -71,9 +71,9 @@ public class LdapManagementType implements ManagementType {
             new Form("ldap-server", Arrays.<Field>asList(
                 new TextField(HOSTNAME),
                 new NumericField(PORT),
-                new EnumField(ENCRYPTION, Arrays.asList("", LdapTarget.ENCRYPTION_STARTTLS, LdapTarget.ENCRYPTION_NONE)),
+                new PamEnumField(ENCRYPTION, "", LdapTarget.ENCRYPTION_STARTTLS, LdapTarget.ENCRYPTION_NONE),
                 new TextField(CERTIFICATE),
-                new EnumField(DIRECTORY_TYPE, Arrays.asList("", LdapTarget.DIRECTORY_ACTIVE_DIRECTORY))
+                new PamEnumField(DIRECTORY_TYPE, "", LdapTarget.DIRECTORY_ACTIVE_DIRECTORY)
             )),
             new Form("ldap-rotation", Arrays.<Field>asList(
                 new TextField(ADMIN_DN),
