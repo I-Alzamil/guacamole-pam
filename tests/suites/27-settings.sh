@@ -96,7 +96,7 @@ if [ "$(podman inspect -f '{{.State.Running}}' myguactest2 2>/dev/null)" = true 
     check "...and changes made here, after its cache time (5 s)" "false 5" \
         "$(seen2 "str(d['bypass']).lower()") $(seen2 "d['maxPeriods']")"
 else
-    section "Skipped: no second server (start it with lab/lab.sh --second)"
+    section "Skipped: no second server (start it with lab/lab.sh --ha)"
 fi
 
 # ---------------------------------------------------------------- defaults

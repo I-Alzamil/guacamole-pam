@@ -3,7 +3,9 @@
 
     session.py GUAC_URL TOKEN ID [TYPE]
 
-TYPE is "c" for a connection (the default) or "g" for a connection group.
+TYPE is "c" for a connection (the default), "g" for a connection group, or
+"a" to join an active connection. PAM_DATA_SOURCE names the data source
+(postgresql unless set).
 
 Prints "open" once the tunnel is connected and "closed" when it ends, from
 either side. Ends the session cleanly on SIGTERM or SIGINT.

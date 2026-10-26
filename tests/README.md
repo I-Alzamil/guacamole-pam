@@ -11,6 +11,7 @@ account rotates, by the administrator and by itself, and stays `ed25519`.
 |---|---|---|---|
 | 1 | Unit tests (JUnit) | Nothing | `mvn test` (also part of every build) |
 | 2 | Live suites against the extension running in Guacamole | The podman test setup | `tests/run.sh` |
+| 2 | The HA module, against two servers per database | `lab/ha.sh start DATABASE...` | `tests/ha/run.sh [DATABASE...]` |
 
 ## Tier 1: unit tests
 
@@ -42,7 +43,7 @@ and each database's own client).
 
 ```
 ./build.sh
-lab/lab.sh app --second services   # --second: a second server, for 40-servers
+lab/lab.sh app --ha services   # --ha: a second server, both with the HA module, for 40-servers
 ```
 
 `lab.sh seed` is not needed: suites create what they use.
@@ -81,10 +82,10 @@ defaults (`http://localhost:8080`, `guacadmin` / `guacadmin`).
 | `20-access` | Requests and reasons; two approvals, directly and through a group; the last two given at once; approvers through connection groups (nested, and ROOT) and nested user groups, never a disabled one; non-approvers; self-approval; denials with reasons; cancellations; checkouts of Accounts and of connections, release and revocation; an expired checkout not ended yet opening no session; what administrators skip; deleting a connection keeping its checkouts and requests in the history |
 | `25-ahead` | Requests ahead of time: what is refused (no approval needed, a past start, more than 30 days ahead); approval reserving the connection; overlapping requests refused, or no longer approvable once another is approved (the approval withdrawn); others' checkouts ending when a reservation starts, and refused during it; checking out with a reservation, until its end, and only once; cancelling one; expiry at its end rather than after 24 hours; deleting a connection cancelling its reservations |
 | `26-extensions` | Several time limits at once (up to one more than the extensions allowed, using them up); extensions without approval (a reason needed, granted at once, by the time limit, until none is left) and with approval (as many approvals as requests, not by the holder, by the extension length); a connection allowing none; cancelling one; one expiring with its checkout; others' reservations bounding them; the checkout history listing them with their approvers |
-| `27-settings` | The PAM Settings tab: read and changed by administrators only; invalid values and unknown settings (the encryption key among them) refused, with the whole change; administrators bypassing requests, and the extensions allowed by default, applied to requests at once, and on the second server within its 5-second cache (skipped without `lab.sh --second`); each change recorded as whose, and logged; defaults restored, still recorded as decided in the database |
+| `27-settings` | The PAM Settings tab: read and changed by administrators only; invalid values and unknown settings (the encryption key among them) refused, with the whole change; administrators bypassing requests, and the extensions allowed by default, applied to requests at once, and on the second server within its 5-second cache (skipped without `lab.sh --ha`); each change recorded as whose, and logged; defaults restored, still recorded as decided in the database |
 | `28-password-policies` | Who may read and change password policies (users get names only); rules that can make no password refused, and duplicate names; examples and their strength; rotated passwords following the default rules, a platform's policy, and a connection's own in place of it, checked on OpenLDAP too; a policy changed applying to the next rotation; what uses each, and deletion refused while used; platforms choosing no such policy refused; a policy gone missing stopping rotations before any change; platforms imported naming their policy |
 | `30-security` | What editors who are not administrators cannot change (password management, access requests; and of managed connections their credentials, the password included, where they connect, an RDP gateway, SFTP or a VNC repeater included, how they check the server, their protocol and guacd), while display parameters and saving unchanged still work, the original account-takeover attack end to end; balancing groups; administrator endpoints; platform secrets |
-| `40-servers` | Two servers sharing the database (skipped without `lab.sh --second`): sessions counted by every server; a checkout revoked on one server closing the session on the other; after-use rotation waiting for sessions on the other server; one rotation at a time, and no checkout during it, across servers; records of a stopped server ignored once stale, removed, then the connection rotated. Sessions are held open by `session.py`, as a browser would |
+| `40-servers` | Two servers sharing the database, with the HA module on (skipped without `lab.sh --ha`): sessions counted by every server; a checkout revoked on one server closing the session on the other; after-use rotation waiting for sessions on the other server; one rotation at a time, and no checkout during it, across servers; records of a stopped server ignored once stale, removed, then the connection rotated. Sessions are held open by `session.py`, as a browser would |
 | `50-encryption` | Stored secrets with the test key of `lab.sh` (skipped without one): platform secrets and pending passwords encrypted at rest; every connection's passwords, private keys and passphrases, Accounts' included, kept apart behind tokens such as `${PAM_PASSWORD_17}`; Guacamole's own tokens left in place; what the API shows editors (`********`, never a token); editor saves keeping, replacing or refusing values (`********` sent back, or the token by an API client; another field's or connection's token or value; `********` in a clone or where nothing is stored; an unknown key); sessions logging in with kept passwords and with a kept private key and passphrase (checked in guacd's log, against a wrong-password control); a balancing group opening both its connections, each with its own secrets; a kept value moved to another connection in the database refused; rotations. Suites read encrypted values with the jar's own decryption tool |
 | `60-reveal` | Showing a connection's password to the holder of its checkout: refused by default and without a checkout; shown with its username when allowed, uncached, each display recorded in the history and logged, never to another user; a managed password rotated once released although its rotation mode is never, the SSH server refusing the one shown; no rotation after a checkout that showed nothing; nothing shown for a password that is Guacamole's `${GUAC_PASSWORD}` |
 | `70-revocation` | Revoked access: a session closing once its user may no longer read the connection, another of theirs staying open; a session closing when its connection is deleted; an administrator losing the permission losing its powers within the same login |
@@ -99,6 +100,40 @@ platforms and connections; accounts in the LDAP, Samba and MIT servers) and
 remove it when they end, even after a failed check. They leave existing data
 alone, except the SSH image's single account (`mysshtest`): its new password
 is written back to the seeded "PAM test (Linux)" connection.
+
+### The HA module
+
+`tests/ha/run.sh` checks the HA module on each database given (every one by
+default), against the two servers `lab/ha.sh` starts for it, which also have
+the ban, TOTP and history recording storage extensions. Their connections
+need no access request, so PAM lets them open as Guacamole alone would. It
+holds real sessions open on them (`tests/session.py`), and checks:
+
+- sessions counted on both servers, and ended on both;
+- a connection's limit, a limit per user, and a balancing group's limit
+  (with the connection it picks) across the servers;
+- logins made on one server working on the other, with their connections
+  and sessions, and logging out on one ending them on both;
+- sessions of one server listed on the other, hidden details for other
+  users, ending a session from the other server (with a session joining
+  it), and joining it from there;
+- share links opening on either server, made from either, and ending with
+  the session shared;
+- a recording made on one server shown and played by the other;
+- a TOTP code used on one server refused on the other;
+- a server stopping cleanly freeing its sessions at once, a server killed
+  no longer counting once no longer heard from, and its logins going on on
+  the other;
+- failed logins on both servers banning an address on both.
+
+To see the checks fail as with Guacamole alone, start the servers with the
+module off (the checks restart servers, so both need it):
+
+```
+lab/ha.sh stop postgresql
+HA=off lab/ha.sh start postgresql
+HA=off tests/ha/run.sh postgresql
+```
 
 ### Trusting the tests
 

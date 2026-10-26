@@ -3,11 +3,12 @@
 # podman containers on the network "myguacnet". For development only: every
 # password is a fixed test one. Build the jar first with build.sh.
 #
-#   lab.sh app [--second]
+#   lab.sh app [--ha]
 #       (Re)starts Guacamole's database, guacd and Guacamole with the built
-#       jar, on http://localhost:8080. --second also starts a second
-#       Guacamole sharing them, on http://localhost:8081 (tests/suites/
-#       40-servers.sh); given alone, --second starts only that one.
+#       jar, on http://localhost:8080. --ha also starts a second Guacamole
+#       sharing them, on http://localhost:8081, with the HA module on in
+#       both (tests/suites/40-servers.sh); given alone, --ha restarts both
+#       servers that way, keeping the database and guacd running.
 #   lab.sh services
 #       Starts the servers seed.sh and the suites manage accounts on, keeping
 #       those already running:
@@ -69,6 +70,7 @@ run_guacamole() {
         "${DB_ENV[@]}" \
         -e WEBAPP_CONTEXT=ROOT \
         -e PAM_ENCRYPTION_KEY="$PAM_TEST_ENCRYPTION_KEY" \
+        -e PAM_HA=$ha_module -e PAM_HA_URL="http://$1:8080" -e PAM_HA_SECRET=t2-pam-ha-secret \
         -p "$2":8080 \
         -v "$jar":/opt/guacamole/extensions/guacamole-pam.jar:Z \
         -v ./entrypoint.d/855-add-pam.sh:/opt/guacamole/entrypoint.d/855-add-pam.sh:Z \
@@ -85,13 +87,20 @@ start_guacamole() {
         --hostname myguacdtest \
         --net myguacnet \
         docker.io/guacamole/guacd:1.6.0 >/dev/null || return 1
-    run_guacamole myguactest 8080 && echo "Guacamole: http://localhost:8080 ($PAM_DB)"
+    run_guacamole myguactest 8080 && echo "Guacamole: http://localhost:8080 ($PAM_DB$ha_note)"
 }
 
 start_second() {
-    running myguactest || { echo "Start Guacamole first: lab.sh app --second." >&2; return 1; }
     stop myguactest2
-    run_guacamole myguactest2 8081 && echo "Second Guacamole: http://localhost:8081"
+    run_guacamole myguactest2 8081 && echo "Second Guacamole: http://localhost:8081${ha_note:+ (HA module on)}"
+}
+
+# Both servers again, with the HA module on, on the database and guacd
+# already running
+restart_ha() {
+    running myguacdbtest && running myguacdtest || { echo "Start the lab first: lab.sh app --ha." >&2; return 1; }
+    stop myguactest
+    run_guacamole myguactest 8080 && echo "Guacamole: http://localhost:8080 ($PAM_DB$ha_note)" && start_second
 }
 
 reset() {
@@ -333,26 +342,30 @@ usage() {
 }
 
 [ $# -eq 0 ] && usage
-second=no
+ha=no
 for arg in "$@"; do
     case "$arg" in
-        --second) second=yes;;
+        --ha) ha=yes;;
         app|services|seed|reset|stop) ;;
         *) usage;;
     esac
 done
 
+# The HA module's "pam-ha" of the servers started
+ha_module=false ha_note=
+[ $ha = yes ] && ha_module=true ha_note=", HA module on"
+
 app=no
 for arg in "$@"; do
     case "$arg" in
         app) start_guacamole || exit 1; app=yes
-            [ $second = yes ] && { start_second || exit 1; };;
+            [ $ha = yes ] && { start_second || exit 1; };;
         services) start_services || exit 1;;
         seed) ./seed.sh || exit 1;;
         reset) reset || exit 1;;
         stop) stop $LAB_CONTAINERS; echo "Lab stopped.";;
     esac
 done
-# --second without "app": that server only
-[ $second = yes ] && [ $app = no ] && { start_second || exit 1; }
+# --ha without "app": both servers again, with the HA module on
+[ $ha = yes ] && [ $app = no ] && { restart_ha || exit 1; }
 exit 0

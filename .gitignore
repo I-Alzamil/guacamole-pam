@@ -5,3 +5,4 @@ lab/init/guacamole-*.sql
 lab/init/guacamole-auth-jdbc-sqlserver-fixed.jar
 __pycache__/
 lab/targets/
+lab/ha-rec/
