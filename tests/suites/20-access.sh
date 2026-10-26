@@ -176,8 +176,7 @@ create_user t2-nested t2-nested-pw
 create_user t2-disabled t2-disabled-pw
 create_user_group t2-deep-approvers "{\"pam-approver\":\"true\",\"pam-approver-connections\":\"[\\\"$DEEP\\\"]\"}"
 create_user_group t2-deep-members '{}' t2-nested
-api PATCH "$DATA/userGroups/t2-deep-approvers/memberUserGroups" "$ADMIN" \
-    '[{"op":"add","path":"/","value":"t2-deep-members"}]' >/dev/null
+add_member_group t2-deep-approvers t2-deep-members >/dev/null
 DISABLED_ATTRIBUTES="{\"pam-approver\":\"true\",\"pam-approver-connections\":\"[\\\"$DEEP\\\"]\"}"
 create_user_group t2-deep-disabled "$DISABLED_ATTRIBUTES" t2-disabled
 api PUT "$DATA/userGroups/t2-deep-disabled" "$ADMIN" \

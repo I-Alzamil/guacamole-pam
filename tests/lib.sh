@@ -169,6 +169,22 @@ create_user_group() {
     done
 }
 
+# add_member_group GROUP MEMBER-GROUP -> "HTTP-STATUS BODY". Guacamole 1.6
+# cannot add a group to a group on MySQL (its statement calls a misspelled
+# method), so there the membership is added to the database instead
+add_member_group() {
+    local result
+    result=$(api PATCH "$DATA/userGroups/$1/memberUserGroups" "$ADMIN" "[{\"op\":\"add\",\"path\":\"/\",\"value\":\"$2\"}]")
+    if [ "${result%% *}" = 500 ] && [ "$PAM_DATA_SOURCE" = mysql ] \
+            && sql "INSERT INTO guacamole_user_group_member (user_group_id, member_entity_id)
+                SELECT g.user_group_id, m.entity_id FROM guacamole_user_group g
+                JOIN guacamole_entity e ON e.entity_id = g.entity_id AND e.type = 'USER_GROUP' AND e.name = '$1'
+                JOIN guacamole_entity m ON m.type = 'USER_GROUP' AND m.name = '$2'"; then
+        result="204 added to the database"
+    fi
+    printf '%s\n' "$result"
+}
+
 # grant USER PERMISSION-PATCH-JSON
 grant() { api PATCH "$DATA/users/$1/permissions" "$ADMIN" "$2" >/dev/null; }
 
