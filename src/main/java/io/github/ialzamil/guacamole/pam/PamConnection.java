@@ -130,9 +130,14 @@ public class PamConnection extends DelegatingConnection {
             throw new GuacamoleSecurityException("This is an Account, which has no session."
                     + " Select it on the home screen to check out its password.");
 
-        // Connections requiring a request need an active checkout
+        // Not opened at all while its password is being rotated
         final String identifier = getIdentifier();
         final String username = context.self().getIdentifier();
+        boolean managed = super.getAttributes().get(PamAttributes.PLATFORM) != null;
+        if (managed)
+            rotationService.requireNotRotating(identifier);
+
+        // Connections requiring a request need an active checkout
         checkoutService.requireAccess(identifier, username, context.isAdministrator());
 
         // Secrets kept apart replace their tokens. Guacamole shows users no
@@ -172,6 +177,18 @@ public class PamConnection extends DelegatingConnection {
         };
 
         rotationService.sessionStarted(identifier, username, tracked, () -> context.mayStillUse(identifier));
+
+        // A rotation may have claimed the connection meanwhile
+        if (managed) {
+            try {
+                rotationService.requireNotRotating(identifier);
+            }
+            catch (GuacamoleException e) {
+                tracked.close();
+                throw e;
+            }
+        }
+
         return tracked;
 
     }

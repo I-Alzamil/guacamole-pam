@@ -3,7 +3,7 @@
 # --ha): sessions seen by every server, checkouts ended on one server closing
 # sessions on the other, one rotation of a connection at a time, and
 # sessions of a server that stopped. Without it (--ha=off): the second server
-# on standby, read-only for PAM, taking over once the first crashes, then
+# on standby, read-only for PAM, taking over once the first stops, then
 # both restarted. Skipped unless the second server runs. About 3 minutes.
 
 GUAC2_URL="${GUAC2_URL:-http://localhost:8081}"
@@ -117,20 +117,21 @@ if [ "$HA_MODULE" != true ]; then
         "$(status_of "$(api POST "$PAM/requests/$GATED" "$USER1" '{"reason":"T2 standby"}')")"
     check "...and releases them" 204 "$(status_of "$(api POST "$PAM/requests/$GATED/release" "$USER1")")"
 
-    section "The second server takes over once the first crashes"
+    section "The second server takes over once the first stops"
     edit_connection "$ADMIN" "$SSH_C" '' '{"pam-rotation-mode":"after-use"}' >/dev/null
     PASSWORD=$(parameter "$SSH_C" password)
     open_session K1 "$GUAC_URL" "$ADMIN" "$SSH_C"
     check "a session is open through server 1" open "$(session_state "$K1")"
     check "...and recorded" 1 "$(session_rows "$SSH_C")"
     server2_works() { [ "$(server_state "$PAM2" "$ADMIN2")" = "200 false None" ] && echo yes || echo no; }
-    podman kill myguactest >/dev/null
+    # Stopped as an upgrade would: the session ends as the server stops
+    podman stop -t 10 myguactest >/dev/null
     # Helpers reading connections ask server 2 meanwhile
     DATA1=$DATA
     DATA="$GUAC2_URL/api/session/data/$PAM_DATA_SOURCE"
     ADMIN=$ADMIN2
     START=$SECONDS
-    check "server 2 works within 10 seconds of server 1 crashing" yes "$(wait_for 10 server2_works)"
+    check "server 2 works within 10 seconds of server 1 stopping" yes "$(wait_for 10 server2_works)"
     printf '        (after %d s)\n' $((SECONDS - START))
     check "...removes the session server 1 left open, and rotates its connection after use" yes \
         "$(wait_for 30 password_changed "$SSH_C" "$PASSWORD")"
@@ -220,6 +221,8 @@ check "...and lists the connection as being rotated" yes \
     "$(curl -s "$PAM2/connections?token=$ADMIN2" | python3 -I -c "
 import sys,json
 print('yes' if any(c['identifier']==sys.argv[1] and c['rotating'] for c in json.load(sys.stdin)) else 'no')" "$SSH_C")"
+open_session D2 "$GUAC2_URL" "$ADMIN2" "$SSH_C"
+check_contains "...and a session" "being rotated" "$(session_state "$D2")"
 check_contains "server 2 refuses a checkout meanwhile" "being rotated" \
     "$(message_of "$(api POST "$PAM2/requests/$SSH_C" "$USER2" '{"reason":"T2 during rotation"}')")"
 wait $ROTATION

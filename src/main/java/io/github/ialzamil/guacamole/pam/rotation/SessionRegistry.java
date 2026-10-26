@@ -169,14 +169,17 @@ class SessionRegistry implements Coordination.Sessions {
     }
 
     /**
-     * Forgets a session, returning whether this server still has another
-     * session of the same connection.
+     * Forgets a session that ended, returning it, or null if unknown. Its
+     * row stays until {@link #removeRow}.
      */
-    boolean ended(GuacamoleTunnel tunnel) {
+    Session ended(GuacamoleTunnel tunnel) {
+        return local.remove(tunnel);
+    }
 
-        Session session = local.remove(tunnel);
-        if (session == null)
-            return false;
+    /**
+     * Removes the row of a session that ended.
+     */
+    void removeRow(Session session) {
 
         if (Values.parseId(session.identifier) != null) {
             try (Connection connection = database.getConnection();
@@ -191,8 +194,6 @@ class SessionRegistry implements Coordination.Sessions {
                         session.username, session.identifier, e.getMessage());
             }
         }
-
-        return getLocal(session.identifier).size() > 0;
 
     }
 

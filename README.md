@@ -484,6 +484,12 @@ such as `connection-secret:17:private-key`) or `platform-secrets`.
   keeps working outside Guacamole, without approvals, time limits or session
   recording. Connections allowing access without a request have no
   checkout, so their password is never shown.
+- **Rotations wait for sessions, and sessions for rotations.** Automatic
+  rotations wait until a connection has no open session or checkout, and a
+  session or checkout of a connection being rotated is refused until the
+  rotation ends ("Please try again in a moment"). A session ending as its
+  server stops still gets its after-use rotation, from the server working
+  next.
 - Balancing connection groups refuse to connect when one of their
   connections requires a request, is an Account, or has its password
   managed: open those connections directly.

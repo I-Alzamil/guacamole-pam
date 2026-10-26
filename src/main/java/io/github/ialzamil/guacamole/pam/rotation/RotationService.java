@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleResourceNotFoundException;
+import org.apache.guacamole.GuacamoleSecurityException;
 import org.apache.guacamole.net.GuacamoleTunnel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -167,9 +168,42 @@ public final class RotationService {
         sessions.started(identifier, username, tunnel, access);
     }
 
+    /**
+     * Forgets a session that ended, looking for its connection's after-use
+     * rotation shortly. Its row is removed only then: if this server stops
+     * meanwhile, the server working next finds it, and rotates the
+     * connection instead.
+     */
     public void sessionEnded(String identifier, GuacamoleTunnel tunnel) {
-        if (!sessions.ended(tunnel))
-            scheduleAfterUse(identifier);
+        SessionRegistry.Session session = sessions.ended(tunnel);
+        if (session == null)
+            return;
+        try {
+            scheduler.schedule(() -> {
+                sessions.removeRow(session);
+                rotateAfterUse(identifier);
+            }, AFTER_USE_DELAY_SECONDS, TimeUnit.SECONDS);
+        }
+        catch (RejectedExecutionException e) {
+            logger.debug("After-use rotation of connection {} left to the next server: shutting down.", identifier);
+        }
+    }
+
+    /**
+     * Refuses a session of a connection being rotated: its password is
+     * about to change. Checked once the session is recorded, as a rotation
+     * looks for sessions once it claimed the connection, so at least one of
+     * the two backs off, on any server.
+     *
+     * @throws GuacamoleSecurityException
+     *     If the connection is being rotated: forbidden, which the web UI
+     *     explains when refusing a session.
+     */
+    public void requireNotRotating(String identifier) throws GuacamoleException {
+        Integer id = Values.parseId(identifier);
+        if (id != null && isRotating(id))
+            throw new GuacamoleSecurityException("The password of this connection is being rotated. Please try"
+                    + " again in a moment.");
     }
 
     private void scheduleAfterUse(String identifier) {
@@ -177,8 +211,8 @@ public final class RotationService {
             scheduler.schedule(() -> rotateAfterUse(identifier), AFTER_USE_DELAY_SECONDS, TimeUnit.SECONDS);
         }
         catch (RejectedExecutionException e) {
-            // Shutting down: its session's row is gone already, so this
-            // after-use rotation is missed
+            // Shutting down: the server working next rotates it, finding
+            // the session's row
             logger.debug("After-use rotation of connection {} not scheduled: shutting down.", identifier);
         }
     }
@@ -463,7 +497,8 @@ public final class RotationService {
                     rotateUnlessDone(target, "password shown", current -> isShown(current.getId())
                             && isRetryAllowed(current));
                 else
-                    rotateUnlessDone(target, "periodic", current -> isDue(current, platforms.getAll()));
+                    rotateUnlessDone(target, "periodic", current -> isDue(current, platforms.getAll())
+                            && !isInUse(current.getId()));
 
             }
 
