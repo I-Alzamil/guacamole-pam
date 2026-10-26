@@ -56,7 +56,7 @@ public class SshClient {
     public ChangeOutcome runSequence(SshTarget target, SequenceScript script,
             Map<String, String> values) {
 
-        PinnedHostKeyRepository hostKeys = new PinnedHostKeyRepository(target.getPinnedHostKey());
+        PinnedHostKeyRepository hostKeys = hostKeys(target);
         Session session = null;
         ChannelShell channel = null;
         Output output = new Output(values);
@@ -177,7 +177,7 @@ public class SshClient {
 
         Session session = null;
         try {
-            session = openSession(target, password, false, new PinnedHostKeyRepository(target.getPinnedHostKey()));
+            session = openSession(target, password, false, hostKeys(target));
             return true;
         }
         catch (JSchException e) {
@@ -190,6 +190,10 @@ public class SshClient {
                 session.disconnect();
         }
 
+    }
+
+    private static PinnedHostKeyRepository hostKeys(SshTarget target) {
+        return new PinnedHostKeyRepository(target.getPinnedHostKey(), target.isTrustFirstKey());
     }
 
     private Session openSession(SshTarget target, String password, boolean allowKey,
@@ -224,11 +228,32 @@ public class SshClient {
                 || message.contains("too many authentication failures");
     }
 
+    private static String describeType(String type) {
+        return type == null ? "" : " (" + type + ")";
+    }
+
+    /**
+     * Where OpenSSH keeps the host key of the given type, to print its
+     * fingerprint with ssh-keygen.
+     */
+    private static String hostKeyFileHint(String type) {
+        if (type == null)
+            return "";
+        String file = type.equals("ssh-ed25519") ? "ed25519" : type.startsWith("ecdsa-") ? "ecdsa"
+                : type.startsWith("rsa-") || type.equals("ssh-rsa") ? "rsa" : null;
+        return file == null ? "" : " (ssh-keygen -lf /etc/ssh/ssh_host_" + file + "_key.pub)";
+    }
+
     private static String describe(Exception e, PinnedHostKeyRepository hostKeys) {
 
         String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
         String lower = message.toLowerCase();
 
+        if (hostKeys.isUntrusted())
+            return "The host key " + hostKeys.getPresentedFingerprint() + describeType(hostKeys.getPresentedType())
+                    + " is not trusted yet. No credentials were sent. Check it on the host"
+                    + hostKeyFileHint(hostKeys.getPresentedType()) + " and paste it into the connection's"
+                    + " \"Trusted SSH host key\" field, or let the platform trust the key a host presents first.";
         if (lower.contains("hostkey has been changed") || lower.contains("reject hostkey"))
             return "The host key " + hostKeys.getPresentedFingerprint()
                     + " does not match the trusted one. No credentials were sent. If the host's key was"

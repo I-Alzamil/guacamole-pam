@@ -39,8 +39,8 @@ import io.github.ialzamil.guacamole.pam.Certificates;
  *
  * The host's certificate must match the pinned fingerprint. Without one, it
  * must be issued by one of the given certificate authorities and name the
- * host; without those either, any certificate is accepted and its
- * fingerprint is recorded, as SSH does on first contact. Either way, the
+ * host; without those either, any certificate is accepted only if asked to,
+ * and its fingerprint recorded, as SSH does on first contact. Either way, the
  * certificate is kept for the login's channel binding.
  */
 class WinRmHttp implements AutoCloseable {
@@ -84,11 +84,12 @@ class WinRmHttp implements AutoCloseable {
 
     private final List<X509Certificate> authorities;
 
-    WinRmHttp(String hostname, int port, String pinnedCertificate, List<X509Certificate> authorities) {
+    WinRmHttp(String hostname, int port, String pinnedCertificate, List<X509Certificate> authorities,
+            boolean trustFirst) {
         this.hostname = hostname;
         this.port = port;
         this.authorities = authorities;
-        this.certificateCheck = new CertificateCheck(hostname, pinnedCertificate);
+        this.certificateCheck = new CertificateCheck(hostname, pinnedCertificate, trustFirst);
     }
 
     /**
@@ -275,13 +276,15 @@ class WinRmHttp implements AutoCloseable {
 
         private final String hostname;
         private final String pinned;
+        private final boolean trustFirst;
         private volatile X509ExtendedTrustManager authority;
         private volatile String presented;
         private volatile X509Certificate certificate;
 
-        CertificateCheck(String hostname, String pinned) {
+        CertificateCheck(String hostname, String pinned, boolean trustFirst) {
             this.hostname = hostname;
             this.pinned = pinned;
+            this.trustFirst = trustFirst;
         }
 
         @Override
@@ -307,6 +310,11 @@ class WinRmHttp implements AutoCloseable {
                             + "\" (" + rootMessage(e) + "). No credentials were sent.");
                 }
             }
+            else if (!trustFirst)
+                throw new CertificateException("The host's certificate " + presented + " is not trusted yet. No"
+                        + " credentials were sent. Check it on the host and paste it into the connection's"
+                        + " \"Trusted certificate\" field, give the platform the CA certificates that issue its"
+                        + " hosts' certificates, or let it trust the certificate a host presents first.");
 
             certificate = chain[0];
 

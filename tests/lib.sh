@@ -120,10 +120,23 @@ create_platform() {
     [ -n "$id" ] || fail "creating platform for \$$1" "$(cat "$T2_TMP/body")"
 }
 
+# The fingerprint of mysshtest's host key, as the extension reads it
+MYSSH_HOST_KEY=$(podman exec mysshtest ssh-keygen -lf /config/ssh_host_keys/ssh_host_ecdsa_key.pub 2>/dev/null \
+    | awk '{print $2}')
+
 # create_connection VARIABLE JSON: likewise for a connection
 create_connection() {
-    local id
-    id=$(json_get "$(api POST "$DATA/connections" "$ADMIN" "$2" | cut -d' ' -f2-)" "d.get('identifier')")
+    local id json
+    # Managed connections to mysshtest pin its host key unless they say
+    # otherwise (with null, to trust none): SSH platforms trust no key on
+    # first contact by default
+    json=$(python3 -I -c '
+import sys, json
+c = json.loads(sys.argv[1]); a = c.setdefault("attributes", {})
+if c.get("parameters", {}).get("hostname") == "mysshtest" and a.get("pam-platform") and "pam-ssh-host-key" not in a:
+    a["pam-ssh-host-key"] = sys.argv[2]
+print(json.dumps(c))' "$2" "$MYSSH_HOST_KEY")
+    id=$(json_get "$(api POST "$DATA/connections" "$ADMIN" "$json" | cut -d' ' -f2-)" "d.get('identifier')")
     [ -n "$id" ] && on_cleanup "api DELETE '$DATA/connections/$id' \"\$ADMIN\""
     printf -v "$1" '%s' "$id"
     [ -n "$id" ] || fail "creating connection for \$$1" "$(cat "$T2_TMP/body")"

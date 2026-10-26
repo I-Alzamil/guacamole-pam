@@ -12,9 +12,10 @@ public final class SshTarget {
     private final String privateKey;
     private final String passphrase;
     private final String pinnedHostKey;
+    private final boolean trustFirstKey;
 
     public SshTarget(String hostname, int port, String username, String password,
-            String privateKey, String passphrase, String pinnedHostKey) {
+            String privateKey, String passphrase, String pinnedHostKey, boolean trustFirstKey) {
         this.hostname = hostname;
         this.port = port;
         this.username = username;
@@ -22,13 +23,15 @@ public final class SshTarget {
         this.privateKey = privateKey;
         this.passphrase = passphrase;
         this.pinnedHostKey = pinnedHostKey;
+        this.trustFirstKey = trustFirstKey;
     }
 
     /**
      * Returns a copy of this target using a different current password.
      */
     public SshTarget withPassword(String newPassword) {
-        return new SshTarget(hostname, port, username, newPassword, privateKey, passphrase, pinnedHostKey);
+        return new SshTarget(hostname, port, username, newPassword, privateKey, passphrase, pinnedHostKey,
+                trustFirstKey);
     }
 
     public String getHostname() {
@@ -59,10 +62,19 @@ public final class SshTarget {
     }
 
     /**
-     * SHA256 fingerprint the host key must match, or null to accept any key.
+     * SHA256 fingerprint the host key must match, or null if none is
+     * trusted yet.
      */
     public String getPinnedHostKey() {
         return pinnedHostKey;
+    }
+
+    /**
+     * Whether any host key is accepted while none is trusted yet, at the
+     * first contact with the host.
+     */
+    public boolean isTrustFirstKey() {
+        return trustFirstKey;
     }
 
 }

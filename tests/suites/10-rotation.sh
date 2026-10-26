@@ -38,7 +38,25 @@ check "SSH: a host key other than the pinned one is refused" "FAILED" "${RESULT%
 check_contains "SSH: ...before any credentials are sent" "No credentials were sent" "$RESULT"
 check "SSH: ...and the password still works" yes "$(ssh_accepts mysshtest "$(parameter "$SSH_C" password)")"
 edit_connection "$ADMIN" "$SSH_C" '' '{"pam-ssh-host-key":null}' >/dev/null
-check "SSH: with the pin removed, rotation works again" "SUCCESS" "$(rotate "$SSH_C" | cut -d: -f1)"
+check "SSH: with the pin removed, the key recorded at the last rotation is trusted" "SUCCESS" \
+    "$(rotate "$SSH_C" | cut -d: -f1)"
+
+sql "UPDATE pam_rotation_state SET host_key = NULL WHERE connection_id = $SSH_C" >/dev/null
+RESULT=$(rotate "$SSH_C")
+check "SSH: with no key trusted, the host is refused" "FAILED" "${RESULT%%:*}"
+check_contains "SSH: ...before any credentials are sent, showing its key to check and pin" \
+    "The host key $MYSSH_HOST_KEY (ecdsa-sha2-nistp256) is not trusted yet. No credentials were sent." "$RESULT"
+check "SSH: ...and the password still works" yes "$(ssh_accepts mysshtest "$(parameter "$SSH_C" password)")"
+TRUSTING=$(python3 -I -c 'import json,sys; d=json.loads(sys.argv[1]); print(json.dumps({"name": "t2 ssh trusting",
+    "type": "ssh", "settings": dict(d["settings"], **{"trust-first-key": "true"}), "policy": {}}))' \
+    "$(api GET "$PAM/platforms/$LINUX" "$ADMIN" | cut -d' ' -f2-)")
+create_platform TRUSTING_P "$TRUSTING"
+use_platform "$SSH_C" "$TRUSTING_P"
+check "SSH: a platform trusting new host keys accepts it" "SUCCESS" "$(rotate "$SSH_C" | cut -d: -f1)"
+check "SSH: ...recording the key, which is trusted from then on" "$MYSSH_HOST_KEY" \
+    "$(sql "SELECT host_key FROM pam_rotation_state WHERE connection_id = $SSH_C")"
+use_platform "$SSH_C" "$LINUX"
+check "SSH: ...also by the platform trusting no new key" "SUCCESS" "$(rotate "$SSH_C" | cut -d: -f1)"
 
 section "SSH: a script choosing by the prompt, as the account and as root"
 

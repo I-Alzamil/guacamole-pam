@@ -35,6 +35,13 @@ public final class WinRmTarget {
     public static final String CA_CERTIFICATES = "winrm-ca-certificates";
 
     /**
+     * Whether, without a pinned fingerprint or CA certificates, the first
+     * certificate a host presents is trusted ("true"). Otherwise such a host
+     * is refused.
+     */
+    public static final String TRUST_FIRST_CERTIFICATE = "winrm-trust-first-certificate";
+
+    /**
      * Optional local administrator setting other accounts' passwords.
      * Without it, each account (itself an administrator) sets its own.
      */
@@ -56,6 +63,7 @@ public final class WinRmTarget {
     private final int port;
     private final String certificate;
     private final List<X509Certificate> authorities;
+    private final boolean trustFirst;
     private final Credentials account;
     private final String password;
     private final Credentials admin;
@@ -108,11 +116,12 @@ public final class WinRmTarget {
     }
 
     private WinRmTarget(String hostname, int port, String certificate, List<X509Certificate> authorities,
-            Credentials account, String password, Credentials admin, String adminPassword) {
+            boolean trustFirst, Credentials account, String password, Credentials admin, String adminPassword) {
         this.hostname = hostname;
         this.port = port;
         this.certificate = certificate;
         this.authorities = authorities;
+        this.trustFirst = trustFirst;
         this.account = account;
         this.password = password;
         this.admin = admin;
@@ -155,17 +164,18 @@ public final class WinRmTarget {
 
         return new WinRmTarget(hostname, Values.parsePort(parameters.get(PORT), DEFAULT_PORT),
                 normalize(parameters.get(CERTIFICATE)), Certificates.parseAuthorities(parameters.get(CA_CERTIFICATES)),
-                account, Values.emptyToNull(parameters.get(PASSWORD)), admin, adminPassword);
+                "true".equals(parameters.get(TRUST_FIRST_CERTIFICATE)), account, Values.emptyToNull(parameters.get(PASSWORD)), admin, adminPassword);
 
     }
 
     public WinRmTarget withPassword(String newPassword) {
-        return new WinRmTarget(hostname, port, certificate, authorities, account, newPassword, admin, adminPassword);
+        return new WinRmTarget(hostname, port, certificate, authorities, trustFirst, account, newPassword, admin,
+                adminPassword);
     }
 
     public WinRmTarget withCertificate(String fingerprint) {
-        return new WinRmTarget(hostname, port, normalize(fingerprint), authorities, account, password, admin,
-                adminPassword);
+        return new WinRmTarget(hostname, port, normalize(fingerprint), authorities, trustFirst, account, password,
+                admin, adminPassword);
     }
 
     /**
@@ -202,8 +212,8 @@ public final class WinRmTarget {
 
     /**
      * Fingerprint the certificate must match, or null to trust one issued by
-     * {@link #getAuthorities} (or, without any, any certificate, on first
-     * contact).
+     * {@link #getAuthorities} (or, without any, any certificate on first
+     * contact if {@link #isTrustFirst}).
      */
     public String getCertificate() {
         return certificate;
@@ -215,6 +225,14 @@ public final class WinRmTarget {
      */
     public List<X509Certificate> getAuthorities() {
         return authorities;
+    }
+
+    /**
+     * Whether, without a fingerprint or authorities, the certificate a host
+     * presents is trusted.
+     */
+    public boolean isTrustFirst() {
+        return trustFirst;
     }
 
     public Credentials getAccount() {

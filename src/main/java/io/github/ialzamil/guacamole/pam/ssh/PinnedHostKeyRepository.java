@@ -1,5 +1,6 @@
 package io.github.ialzamil.guacamole.pam.ssh;
 
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
@@ -11,16 +12,30 @@ import com.jcraft.jsch.UserInfo;
 /**
  * Host key check run by JSch before authenticating, so credentials are never
  * sent to a host whose key does not match the pinned fingerprint. Without a
- * pin any key is accepted, and its fingerprint is recorded for display.
+ * pin, any key is accepted only if asked to (trust on first use); either
+ * way, the fingerprint presented is kept for display.
  */
 class PinnedHostKeyRepository implements HostKeyRepository {
 
     private final String pinned;
 
+    private final boolean acceptAny;
+
     private volatile String presented;
 
-    PinnedHostKeyRepository(String pinnedFingerprint) {
+    private volatile String presentedType;
+
+    PinnedHostKeyRepository(String pinnedFingerprint, boolean acceptAny) {
         this.pinned = normalize(pinnedFingerprint);
+        this.acceptAny = acceptAny;
+    }
+
+    /**
+     * Whether the key presented was refused for want of a trusted one, not
+     * as a mismatch.
+     */
+    boolean isUntrusted() {
+        return pinned == null && !acceptAny && presented != null;
     }
 
     /**
@@ -34,9 +49,10 @@ class PinnedHostKeyRepository implements HostKeyRepository {
     @Override
     public int check(String host, byte[] key) {
         presented = fingerprint(key);
-        if (pinned == null || pinned.equals(normalize(presented)))
-            return OK;
-        return CHANGED;
+        presentedType = type(key);
+        if (pinned == null)
+            return acceptAny ? OK : NOT_INCLUDED;
+        return pinned.equals(normalize(presented)) ? OK : CHANGED;
     }
 
     @Override
@@ -64,6 +80,25 @@ class PinnedHostKeyRepository implements HostKeyRepository {
     @Override
     public HostKey[] getHostKey(String host, String type) {
         return new HostKey[0];
+    }
+
+    /**
+     * Type of the key the host presented, such as "ssh-ed25519", or null.
+     */
+    String getPresentedType() {
+        return presentedType;
+    }
+
+    /**
+     * The type a public key blob starts with, after its length.
+     */
+    static String type(byte[] key) {
+        if (key == null || key.length < 4)
+            return null;
+        int length = ((key[0] & 0xff) << 24) | ((key[1] & 0xff) << 16) | ((key[2] & 0xff) << 8) | (key[3] & 0xff);
+        if (length <= 0 || length > key.length - 4 || length > 64)
+            return null;
+        return new String(key, 4, length, StandardCharsets.US_ASCII);
     }
 
     /**

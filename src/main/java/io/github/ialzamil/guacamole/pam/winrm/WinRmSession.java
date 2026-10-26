@@ -73,7 +73,7 @@ class WinRmSession implements AutoCloseable {
         this.user = user;
         this.password = password;
         this.http = new WinRmHttp(target.getHostname(), target.getPort(), target.getCertificate(),
-                target.getAuthorities());
+                target.getAuthorities(), target.isTrustFirst());
         this.endpoint = "https://" + target.getHostname() + ":" + target.getPort() + "/wsman";
     }
 

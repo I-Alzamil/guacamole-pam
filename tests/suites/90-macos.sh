@@ -34,9 +34,10 @@ check "precondition: it is not an administrator" no \
     "$(mac_run "$T2_MACOS_PASSWORD" 'id -Gn' | tr ' ' '\n' | grep -qx admin && echo yes || echo no)"
 
 MACOS=$(platform_id "macOS")
+MAC_HOST_KEY=$(ssh-keyscan -t ed25519 "$T2_MACOS_HOST" 2>/dev/null | ssh-keygen -lf - | awk '{print $2}')
 create_connection MAC_C "{\"name\":\"t2 macos\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",
     \"parameters\":{\"hostname\":\"$T2_MACOS_HOST\",\"port\":\"22\",\"username\":\"$T2_MACOS_USER\",\"password\":\"$T2_MACOS_PASSWORD\"},
-    \"attributes\":{\"pam-platform\":\"$MACOS\",\"pam-request-exempt\":\"true\"}}"
+    \"attributes\":{\"pam-platform\":\"$MACOS\",\"pam-request-exempt\":\"true\",\"pam-ssh-host-key\":\"$MAC_HOST_KEY\"}}"
 
 for round in 1 2; do
     OLD=$(parameter "$MAC_C" password)

@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.guacamole.GuacamoleClientException;
+import org.apache.guacamole.form.BooleanField;
 import org.apache.guacamole.form.Field;
 import org.apache.guacamole.form.Form;
 import org.apache.guacamole.form.MultilineField;
@@ -37,13 +38,14 @@ public class WinRmManagementType implements ManagementType {
     public static final String ADMIN_USERNAME = WinRmTarget.ADMIN_USERNAME;
     public static final String ADMIN_PASSWORD = WinRmTarget.ADMIN_PASSWORD;
     public static final String CA_CERTIFICATES = WinRmTarget.CA_CERTIFICATES;
+    public static final String TRUST_FIRST_CERTIFICATE = WinRmTarget.TRUST_FIRST_CERTIFICATE;
 
     /**
      * Where the administrator password is sent, and how safely: the CA
      * certificates decide which hosts are trusted with it.
      */
     private static final Set<String> DESTINATION_FIELDS = Collections.unmodifiableSet(
-            new HashSet<>(Arrays.asList(PORT, CA_CERTIFICATES)));
+            new HashSet<>(Arrays.asList(PORT, CA_CERTIFICATES, TRUST_FIRST_CERTIFICATE)));
 
     /**
      * Connection attribute: host to reach over WinRM, the connection's
@@ -54,8 +56,8 @@ public class WinRmManagementType implements ManagementType {
     /**
      * Connection attribute: SHA-256 fingerprint the host's certificate must
      * match. If empty, the certificate must be issued by one of the
-     * platform's CA certificates, or without any, the certificate seen first
-     * is trusted from then on.
+     * platform's CA certificates, or without any, if the platform allows it,
+     * the certificate seen first is trusted from then on.
      */
     public static final String CERTIFICATE = "pam-winrm-certificate";
 
@@ -74,7 +76,10 @@ public class WinRmManagementType implements ManagementType {
                 new TextField(ADMIN_USERNAME),
                 new PasswordField(ADMIN_PASSWORD)
             )),
-            new Form("winrm-trust", Collections.<Field>singletonList(new MultilineField(CA_CERTIFICATES)))
+            new Form("winrm-trust", Arrays.<Field>asList(
+                new MultilineField(CA_CERTIFICATES),
+                new BooleanField(TRUST_FIRST_CERTIFICATE, "true")
+            ))
         );
     }
 

@@ -47,7 +47,10 @@ public class WinRmClientTest {
     }
 
     private WinRmTarget target(boolean admin, String certificate, String authorities) {
-        Map<String, String> values = new HashMap<>();
+        return target(admin, certificate, authorities, new HashMap<>());
+    }
+
+    private WinRmTarget target(boolean admin, String certificate, String authorities, Map<String, String> values) {
         if (authorities != null)
             values.put(WinRmTarget.CA_CERTIFICATES, authorities);
         values.put(WinRmTarget.HOSTNAME, "localhost");
@@ -102,8 +105,19 @@ public class WinRmClientTest {
     }
 
     @Test
-    public void firstContactRecordsTheCertificate() {
+    public void firstContactIsRefusedByDefault() {
         ChangeOutcome outcome = client.changePassword(target(true, null), "New-Pw1!");
+        assertFalse(outcome.isNewPasswordSent());
+        assertTrue(outcome.getError(), outcome.getError().contains(FINGERPRINT + " is not trusted yet"));
+        assertTrue(outcome.getError(), outcome.getError().contains("No credentials were sent"));
+        assertEquals(0, windows.requests);
+    }
+
+    @Test
+    public void firstContactRecordsTheCertificateIfTrusted() {
+        Map<String, String> values = new HashMap<>();
+        values.put(WinRmTarget.TRUST_FIRST_CERTIFICATE, "true");
+        ChangeOutcome outcome = client.changePassword(target(true, null, null, values), "New-Pw1!");
         assertTrue(outcome.getError(), outcome.isCompleted());
         assertEquals(FINGERPRINT, outcome.getHostKey());
     }

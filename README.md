@@ -759,10 +759,13 @@ openssl s_client -connect <host>:5986 </dev/null 2>/dev/null | openssl x509 -noo
   request whose error it handles, and ends that request's session whenever a
   later request is refused as unauthorized, from anyone. The extension's own
   pages never send requests without a session, so they don't trigger it.
-- **SSH hosts are pinned.** The host key is trusted on first contact and
-  required from then on, like SSH's `known_hosts`. If a host's key changes on
-  purpose, paste the new fingerprint (shown in the error) into the connection's
-  **Trusted SSH host key** field.
+- **SSH hosts are pinned.** A host is refused, before any credential is sent,
+  until its key's fingerprint is in the connection's **Trusted SSH host key**
+  field: the error shows the key presented and its type, to check on the
+  host (such as `ssh-keygen -lf /etc/ssh/ssh_host_ecdsa_key.pub`) and paste. With
+  **Trust new host keys** on the platform, the key seen first is trusted
+  instead and required from then on, like SSH's `known_hosts`. If a host's key
+  changes on purpose, paste the new fingerprint likewise.
 - **LDAP must be encrypted with a rotation account.** LDAP platforms with a
   rotation account require LDAPS or StartTLS. Pin the server certificate's
   fingerprint, or use a certificate the JVM trusts that matches the hostname.
@@ -775,10 +778,11 @@ openssl s_client -connect <host>:5986 </dev/null 2>/dev/null | openssl x509 -noo
   connect over HTTPS only (port 5986 by default), and log in with NTLM bound
   to the TLS channel, so they work whatever the host's `CbtHardeningLevel`
   (`Strict` recommended). With CA certificates on the platform, a host's
-  certificate must be issued by one of them and name the host. Without any,
-  like SSH host keys, the certificate is trusted on first contact and required
-  from then on. Either way, a fingerprint in the connection's **Trusted
-  certificate** field is required instead. Revocation isn't checked. See
+  certificate must be issued by one of them and name the host. Without any, it
+  must be pinned in the connection's **Trusted certificate** field (the error
+  shows its fingerprint), or, with **Trust new certificates** on the platform,
+  the certificate seen first is trusted and required from then on. Either
+  way, a pinned fingerprint is required instead. Revocation isn't checked. See
   [Setting up WinRM over HTTPS](#setting-up-winrm-over-https). Passwords are
   sent on PowerShell's input, never on a
   command line. Without an administrator on the platform, each account sets its

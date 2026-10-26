@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.guacamole.GuacamoleClientException;
+import org.apache.guacamole.form.BooleanField;
 import org.apache.guacamole.form.Field;
 import org.apache.guacamole.form.Form;
 import org.apache.guacamole.form.NumericField;
@@ -35,6 +36,13 @@ public class SshManagementType implements ManagementType {
      * Platform setting: SSH port when the connection does not give one.
      */
     public static final String PORT = "port";
+
+    /**
+     * Platform setting: whether a host's key is trusted at the first
+     * contact, while none is pinned or recorded ("true"). Otherwise such a
+     * host is refused until its key is pinned on the connection.
+     */
+    public static final String TRUST_FIRST_KEY = "trust-first-key";
 
     /**
      * Field type of the script, rendered with the script editor.
@@ -70,7 +78,8 @@ public class SshManagementType implements ManagementType {
     public Collection<Form> getPlatformForms() {
         return Collections.singletonList(new Form("ssh", Arrays.<Field>asList(
             new Field(SCRIPT, SCRIPT_FIELD_TYPE),
-            new NumericField(PORT)
+            new NumericField(PORT),
+            new BooleanField(TRUST_FIRST_KEY, "true")
         )));
     }
 
@@ -146,14 +155,16 @@ public class SshManagementType implements ManagementType {
             throw new IllegalArgumentException("The connection has neither a password nor a private key.");
 
         return new SshTarget(hostname, port, username, password, privateKey,
-                Values.emptyToNull(parameters.get("passphrase")), trustedHostKey(target));
+                Values.emptyToNull(parameters.get("passphrase")), trustedHostKey(target),
+                "true".equals(platform.get(TRUST_FIRST_KEY)));
 
     }
 
     /**
      * The host key to require: the one pinned on the connection, or else the
      * one recorded at the first contact with the host (trust on first use,
-     * as with SSH's known_hosts). Only a first contact accepts any key.
+     * as with SSH's known_hosts, if the platform allows it). Only a first
+     * contact may accept any key.
      */
     private static String trustedHostKey(Target target) {
 
