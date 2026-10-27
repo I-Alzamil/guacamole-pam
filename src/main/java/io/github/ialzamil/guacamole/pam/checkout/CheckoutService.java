@@ -170,7 +170,10 @@ public class CheckoutService {
             throws GuacamoleException {
 
         Integer id = Values.parseId(identifier);
-        Target target = id == null ? null : connections.load(id);
+        if (id == null)
+            return true;
+
+        Target target = connections.load(id);
         if (target == null || !CheckoutRules.requiresRequest(target))
             return true;
 

@@ -262,7 +262,7 @@ public final class RotationService {
     }
 
     private void scheduleAfterUse(String identifier, long delayMs) {
-        afterUseDue.merge(identifier, System.currentTimeMillis() + delayMs, Math::max);
+        afterUseDue.merge(identifier, System.currentTimeMillis() + delayMs, (a, b) -> Math.max(a, b));
         if (afterUseLooking.add(identifier))
             lookForAfterUse(identifier, delayMs);
     }
