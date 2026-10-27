@@ -1,6 +1,7 @@
 package io.github.ialzamil.guacamole.pam;
 
 import java.net.InetAddress;
+import java.util.regex.Pattern;
 
 /**
  * Reading values as stored in Guacamole's tables and in platform settings,
@@ -101,6 +102,21 @@ public final class Values {
     public static void checkHost(String host) {
         if (!host.matches("[A-Za-z0-9._:\\[\\]-]+"))
             throw new IllegalArgumentException("not a host name or address.");
+    }
+
+    /**
+     * A Guacamole token, as Guacamole replaces them in connection
+     * parameters: "${GUAC_USERNAME}", "${GUAC_USERNAME:LOWER}", escaped
+     * ones ("$${...}") included.
+     */
+    private static final Pattern GUACAMOLE_TOKEN = Pattern.compile("\\$\\{[A-Za-z0-9_]*(:[A-Za-z0-9_]*)?\\}");
+
+    /**
+     * Whether a value holds a Guacamole token, which Guacamole replaces:
+     * an ordinary password merely containing "${" does not.
+     */
+    public static boolean hasGuacamoleToken(String value) {
+        return value != null && GUACAMOLE_TOKEN.matcher(value).find();
     }
 
 }

@@ -143,6 +143,9 @@ public final class PasswordPolicyRepository {
         PasswordPolicy clean = sanitize(policy);
         SqlDialect dialect = database.getDialect();
 
+        // Read once its connection is back: holding one, never ask for
+        // another (see PamDatabase)
+        int id;
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                  "INSERT INTO pam_password_policy (name, description, rules, last_modified) VALUES (?, ?, ?, "
@@ -154,12 +157,13 @@ public final class PasswordPolicyRepository {
             try (ResultSet keys = statement.getGeneratedKeys()) {
                 if (!keys.next())
                     throw new GuacamoleServerException("The new password policy has no identifier.");
-                return get(keys.getInt(1));
+                id = keys.getInt(1);
             }
         }
         catch (SQLException e) {
             throw translate(e, clean);
         }
+        return get(id);
 
     }
 

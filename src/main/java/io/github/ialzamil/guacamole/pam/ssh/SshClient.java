@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -243,7 +244,7 @@ public class SshClient {
     }
 
     private static boolean isAuthFailure(JSchException e) {
-        String message = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+        String message = e.getMessage() == null ? "" : e.getMessage().toLowerCase(Locale.ROOT);
         return message.contains("auth fail") || message.contains("auth cancel")
                 || message.contains("too many authentication failures");
     }
@@ -267,7 +268,7 @@ public class SshClient {
     private static String describe(Exception e, PinnedHostKeyRepository hostKeys) {
 
         String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-        String lower = message.toLowerCase();
+        String lower = message.toLowerCase(Locale.ROOT);
 
         if (hostKeys.isUntrusted() && hostKeys.hasAuthorities())
             return "The host presented the key " + hostKeys.getPresentedFingerprint()

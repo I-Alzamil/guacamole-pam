@@ -2,6 +2,7 @@ package io.github.ialzamil.guacamole.pam.winrm;
 
 import java.security.cert.X509Certificate;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -188,7 +189,7 @@ public final class WinRmTarget {
             return null;
         if (value.regionMatches(true, 0, "sha256 fingerprint=", 0, 19))
             value = value.substring(19);
-        String hex = value.replaceAll("[:\\s]", "").toUpperCase();
+        String hex = value.replaceAll("[:\\s]", "").toUpperCase(Locale.ROOT);
         if (!hex.matches("[0-9A-F]{64}"))
             throw new IllegalArgumentException("Invalid certificate fingerprint (expected SHA-256): " + fingerprint);
         return hex.replaceAll("(..)(?!$)", "$1:");

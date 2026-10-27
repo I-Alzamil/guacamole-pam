@@ -62,6 +62,8 @@ public class SecretCipherTest {
         refused(cipher, PURPOSE, INDEPENDENT.replace("RfmsaA==", "RfmtaA=="));
         refused(cipher, PURPOSE, INDEPENDENT.replace("CXi9", "CXi8"));
         refused(cipher, PURPOSE, "pam:v1:630dcd29:ZGVmZ2hpamtsbW5v");
+        // Malformed base64, as a value cut short could be
+        refused(cipher, PURPOSE, "pam:v1:630dcd29:A");
     }
 
     @Test

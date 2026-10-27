@@ -26,6 +26,11 @@ public final class PasswordGenerator {
      */
     private static final String GUACAMOLE_TOKEN = "${";
 
+    /**
+     * Shuffles tried before turning "${" around.
+     */
+    private static final int MAX_SHUFFLES = 100;
+
     private final SecureRandom random = new SecureRandom();
 
     /**
@@ -55,12 +60,16 @@ public final class PasswordGenerator {
             pick(password, all, 1);
 
         // Never "${", which Guacamole reads as the start of a token: shuffled
-        // again until it is not there, which keeps every minimum (with every
-        // "{" before every "$", it never is)
-        String text;
-        do {
+        // again while it is there, which keeps every minimum
+        String text = arrange(password, rules, letters);
+        for (int attempt = 1; attempt < MAX_SHUFFLES && text.contains(GUACAMOLE_TOKEN); attempt++)
             text = arrange(password, rules, letters);
-        } while (text.contains(GUACAMOLE_TOKEN));
+
+        // Rules leaving little else, such as symbols "${" alone: each "${"
+        // turned around, until every "{" is before every "$". The first
+        // character, a letter if it must be, is never "$" then
+        while (text.contains(GUACAMOLE_TOKEN))
+            text = text.replace(GUACAMOLE_TOKEN, "{$");
         return text;
 
     }

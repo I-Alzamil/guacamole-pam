@@ -341,13 +341,16 @@ public class PamDatabase {
                 }
             }
 
+            // Not run again once the schema is recorded: what failed is
+            // said, with how to do it by hand
             if (fresh) {
                 for (Initializer initializer : initializers) {
                     try {
                         initializer.initialize(connection);
                     }
-                    catch (GuacamoleException e) {
-                        logger.warn("Unable to complete the fresh install: {}", e.getMessage());
+                    catch (GuacamoleException | SQLException e) {
+                        logger.warn("Unable to complete the fresh install: {} Add the default platforms with"
+                                + " \"Restore defaults\" on the Platforms tab.", e.getMessage());
                     }
                 }
             }

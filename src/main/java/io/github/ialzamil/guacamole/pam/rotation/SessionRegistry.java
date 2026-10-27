@@ -45,7 +45,18 @@ class SessionRegistry implements Coordination.Sessions {
     /**
      * Identifies this server's rows: its host name, made unique per start.
      */
-    private final String server = Values.hostName() + "/" + UUID.randomUUID().toString().substring(0, 8);
+    private final String server = truncate(Values.hostName(), MAX_HOST_NAME) + "/"
+            + UUID.randomUUID().toString().substring(0, 8);
+
+    /**
+     * Longest host name kept in the server's identifier, which
+     * "pam_session.server" holds in 128 characters.
+     */
+    private static final int MAX_HOST_NAME = 100;
+
+    private static String truncate(String value, int max) {
+        return value.length() > max ? value.substring(0, max) : value;
+    }
 
     /**
      * A session open on this server.
@@ -65,6 +76,12 @@ class SessionRegistry implements Coordination.Sessions {
         private volatile long started = System.currentTimeMillis();
 
         private volatile boolean recorded = false;
+
+        /**
+         * Whether it was first recorded later than it started, by a
+         * heartbeat: its start is then its own, not that of its row.
+         */
+        private volatile boolean recordedLate = false;
 
         private Session(String identifier, String username, GuacamoleTunnel tunnel, SessionAccess access) {
             this.identifier = identifier;
@@ -121,6 +138,7 @@ class SessionRegistry implements Coordination.Sessions {
         }
         catch (GuacamoleException | SQLException e) {
             // Recorded again by the next heartbeat, with the HA module
+            session.recordedLate = true;
             logger.warn("Unable to record the session of \"{}\" on connection {}: {}", username, identifier,
                     e.getMessage());
         }
@@ -156,7 +174,10 @@ class SessionRegistry implements Coordination.Sessions {
             statement.setString(1, session.id);
             try (ResultSet results = statement.executeQuery()) {
                 if (results.next()) {
-                    session.started = SqlDialect.getTimestamp(results, 1).getTime();
+                    // Recorded late, its row started after the session did,
+                    // maybe after its checkout ended
+                    if (!session.recordedLate)
+                        session.started = SqlDialect.getTimestamp(results, 1).getTime();
                     session.recorded = true;
                 }
             }

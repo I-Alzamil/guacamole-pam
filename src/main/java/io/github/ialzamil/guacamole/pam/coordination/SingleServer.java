@@ -111,6 +111,9 @@ public final class SingleServer implements Coordination {
         }
 
         if (wasAlone) {
+            // Another server may have held it meanwhile, and changed what
+            // this one keeps, such as the settings
+            aloneSince = System.currentTimeMillis();
             logger.info("This Guacamole server took its database lock again, having lost its connection.");
             return Collections.emptySet();
         }

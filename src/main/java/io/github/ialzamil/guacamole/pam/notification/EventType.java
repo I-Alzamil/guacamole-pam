@@ -1,5 +1,7 @@
 package io.github.ialzamil.guacamole.pam.notification;
 
+import java.util.Locale;
+
 /**
  * What happened, with how much it matters: its syslog severity (RFC 5424,
  * 0 emergency to 7 debug).
@@ -78,7 +80,7 @@ public enum EventType {
      * The name of the type in messages: "rotation-failed".
      */
     public String getId() {
-        return name().toLowerCase().replace('_', '-');
+        return name().toLowerCase(Locale.ROOT).replace('_', '-');
     }
 
 }

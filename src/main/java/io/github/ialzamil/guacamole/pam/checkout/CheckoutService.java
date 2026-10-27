@@ -95,7 +95,7 @@ public class CheckoutService {
 
         // A Guacamole token, such as ${GUAC_PASSWORD}, is the user's own
         String password = target.getPassword();
-        if (password == null || password.isEmpty() || password.contains("${"))
+        if (password == null || password.isEmpty() || Values.hasGuacamoleToken(password))
             throw new GuacamoleClientException("This connection has no stored password to show.");
 
         if (!checkouts.recordReveal(checkout.getId()))
@@ -105,7 +105,7 @@ public class CheckoutService {
         passwordRevealed(checkout, target);
 
         String user = Values.trimToNull(target.getParameters().get(USERNAME_PARAMETER));
-        return new PasswordGrant(checkout, user == null || user.contains("${") ? null : user, null, password);
+        return new PasswordGrant(checkout, user == null || Values.hasGuacamoleToken(user) ? null : user, null, password);
 
     }
 

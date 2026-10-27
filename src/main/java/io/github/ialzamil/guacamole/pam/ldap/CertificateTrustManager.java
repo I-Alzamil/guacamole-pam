@@ -1,6 +1,7 @@
 package io.github.ialzamil.guacamole.pam.ldap;
 
 import java.security.cert.CertificateException;
+import java.util.Locale;
 import java.security.cert.X509Certificate;
 
 import javax.net.ssl.X509TrustManager;
@@ -82,7 +83,7 @@ class CertificateTrustManager implements X509TrustManager {
         if (value.regionMatches(true, 0, "SHA256:", 0, 7))
             value = value.substring(7);
 
-        value = value.replaceAll("[:\\s]", "").toLowerCase();
+        value = value.replaceAll("[:\\s]", "").toLowerCase(Locale.ROOT);
         return value.isEmpty() ? null : value;
 
     }

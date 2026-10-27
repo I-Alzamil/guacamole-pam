@@ -176,7 +176,7 @@ public class PlatformImport {
         if (platforms.size() > MAX_PLATFORMS)
             throw new GuacamoleClientException("At most " + MAX_PLATFORMS + " platforms can be imported at once.");
 
-        Map<String, Platform> stored = repository.getAllWithSecretsByName();
+        Map<String, Platform> stored = repository.getAllByName();
         Set<String> names = new HashSet<>();
         List<Result> results = new ArrayList<>();
         List<Planned> planned = new ArrayList<>();
@@ -216,6 +216,10 @@ public class PlatformImport {
                 if (current != null && !current.getType().equals(platform.getType()))
                     throw new GuacamoleClientException("The existing platform of this name is of another type,"
                             + " which cannot be changed.");
+                // Its secrets, kept where the file leaves them out, read for
+                // this one only
+                if (current != null)
+                    current = repository.getWithSecrets(Integer.toString(current.getId()));
                 repository.namePasswordPolicy(platform);
                 planned.add(new Planned(PlatformRepository.sanitize(platform, current),
                         current == null ? null : current.getId()));

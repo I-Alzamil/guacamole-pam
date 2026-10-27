@@ -132,7 +132,9 @@ public class DatabaseSettingsTest {
                 .getProperties().getProperty("sslmode"));
         Properties mysql = DatabaseSettings.fromEnvironment(new TestEnvironment().database("mysql")
                 .with("mysql-ssl-mode", "disabled")).getProperties();
-        assertEquals("disabled", mysql.getProperty("sslMode"));
+        assertEquals("DISABLED", mysql.getProperty("sslMode"));
+        assertEquals("VERIFY_IDENTITY", DatabaseSettings.fromEnvironment(new TestEnvironment().database("mysql")
+                .with("mysql-ssl-mode", "verify-identity")).getProperties().getProperty("sslMode"));
         assertEquals("false", mysql.getProperty("useSSL"));
     }
 

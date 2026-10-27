@@ -3,6 +3,7 @@ package io.github.ialzamil.guacamole.pam.settings;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 import org.apache.guacamole.GuacamoleClientException;
 
@@ -179,7 +180,7 @@ public final class Setting {
 
         if (type == Type.BOOLEAN) {
             if (text.equalsIgnoreCase("true") || text.equalsIgnoreCase("false"))
-                return text.toLowerCase();
+                return text.toLowerCase(Locale.ROOT);
             throw new GuacamoleClientException("\"" + name + "\" must be true or false.");
         }
 

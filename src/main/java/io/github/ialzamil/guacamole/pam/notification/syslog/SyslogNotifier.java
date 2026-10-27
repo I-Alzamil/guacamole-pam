@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.cert.X509Certificate;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 import javax.net.ssl.SSLHandshakeException;
@@ -86,7 +87,7 @@ public final class SyslogNotifier implements Notifier {
         }
 
         String describe() {
-            return host + ":" + port + " over " + transport.toUpperCase();
+            return host + ":" + port + " over " + transport.toUpperCase(Locale.ROOT);
         }
 
     }

@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -78,6 +79,11 @@ public final class RotationService {
     private static final long AFTER_USE_DELAY_SECONDS = 5;
 
     private static final long PERIODIC_CHECK_SECONDS = 60;
+
+    /**
+     * Why an administrator's rotation runs, in logs and events.
+     */
+    private static final String MANUAL = "manual";
 
     /**
      * How often this server checks its role (see {@link Coordination#check}),
@@ -195,9 +201,12 @@ public final class RotationService {
             return;
         events.publish(Event.of(EventType.SESSION_ENDED).user(session.getUsername()).connection(identifier, name));
         try {
+            // Its row removed first, so the rotation does not count it;
+            // kept while on standby, for the server working to find
             scheduler.schedule(() -> {
-                sessions.removeRow(session);
-                rotateAfterUse(identifier);
+                if (coordination.getStandby() == null)
+                    sessions.removeRow(session);
+                scheduleAfterUse(identifier, 0);
             }, AFTER_USE_DELAY_SECONDS, TimeUnit.SECONDS);
         }
         catch (RejectedExecutionException e) {
@@ -222,13 +231,55 @@ public final class RotationService {
                     + " again in a moment.");
     }
 
+    /**
+     * When each connection's after-use rotation is due, in milliseconds:
+     * its sessions and checkouts ending at once, or one after another,
+     * make one look for it, once the last is due.
+     */
+    private final Map<String, Long> afterUseDue = new ConcurrentHashMap<>();
+
+    /**
+     * Connections whose look for an after-use rotation is scheduled.
+     */
+    private final Set<String> afterUseLooking = ConcurrentHashMap.newKeySet();
+
+    /**
+     * Looks for the connection's after-use rotation after
+     * {@link #AFTER_USE_DELAY_SECONDS}, letting guacd finish disconnecting,
+     * once however many sessions and checkouts end meanwhile.
+     */
     private void scheduleAfterUse(String identifier) {
+        scheduleAfterUse(identifier, TimeUnit.SECONDS.toMillis(AFTER_USE_DELAY_SECONDS));
+    }
+
+    private void scheduleAfterUse(String identifier, long delayMs) {
+        afterUseDue.merge(identifier, System.currentTimeMillis() + delayMs, Math::max);
+        if (afterUseLooking.add(identifier))
+            lookForAfterUse(identifier, delayMs);
+    }
+
+    /**
+     * Looks for the connection's after-use rotation once it is due, put off
+     * by later ends meanwhile.
+     */
+    private void lookForAfterUse(String identifier, long delayMs) {
         try {
-            scheduler.schedule(() -> rotateAfterUse(identifier), AFTER_USE_DELAY_SECONDS, TimeUnit.SECONDS);
+            scheduler.schedule(() -> {
+                long left = afterUseDue.getOrDefault(identifier, 0L) - System.currentTimeMillis();
+                if (left > 0) {
+                    lookForAfterUse(identifier, left);
+                    return;
+                }
+                afterUseLooking.remove(identifier);
+                afterUseDue.remove(identifier);
+                rotateAfterUse(identifier);
+            }, delayMs, TimeUnit.MILLISECONDS);
         }
         catch (RejectedExecutionException e) {
             // Shutting down: the server working next rotates it, finding
             // the session's row
+            afterUseLooking.remove(identifier);
+            afterUseDue.remove(identifier);
             logger.debug("After-use rotation of connection {} not scheduled: shutting down.", identifier);
         }
     }
@@ -240,7 +291,7 @@ public final class RotationService {
      */
     public void checkoutEnded(Checkout checkout) {
         closeSessions(checkout, false);
-        scheduler.execute(() -> rotateAfterUse(checkout.getConnectionIdentifier()));
+        scheduleAfterUse(checkout.getConnectionIdentifier());
     }
 
     /**
@@ -256,17 +307,26 @@ public final class RotationService {
             if (endedElsewhere && session.getStarted() >= checkout.getReleased())
                 continue;
 
-            try {
-                logger.info("Closing the session of \"{}\" on \"{}\": its checkout ended{}.",
-                        checkout.getUsername(), Values.forLog(checkout.getConnectionName()),
-                        endedElsewhere ? " on another server" : "");
-                session.getTunnel().close();
-            }
-            catch (Exception e) {
-                logger.warn("Unable to close a session of \"{}\" on \"{}\": {}", checkout.getUsername(),
-                        Values.forLog(checkout.getConnectionName()), e.getMessage());
-            }
+            close(session, "\"" + Values.forLog(checkout.getConnectionName()) + "\"",
+                    "its checkout ended" + (endedElsewhere ? " on another server" : ""));
 
+        }
+    }
+
+    /**
+     * Closes a session of this server, saying why.
+     *
+     * @param connection
+     *     The connection, as logs name it: "web01" or "connection 17".
+     */
+    private static void close(SessionRegistry.Session session, String connection, String why) {
+        try {
+            logger.info("Closing the session of \"{}\" on {}: {}.", session.getUsername(), connection, why);
+            session.getTunnel().close();
+        }
+        catch (Exception e) {
+            logger.warn("Unable to close a session of \"{}\" on {}: {}", session.getUsername(), connection,
+                    e.getMessage());
         }
     }
 
@@ -375,15 +435,7 @@ public final class RotationService {
             Target target = id == null ? null : connections.load(id);
             if (target == null || target.getAttribute(PamAttributes.PLATFORM) == null)
                 continue;
-            try {
-                logger.info("Closing the session of \"{}\" on connection {}: this server is on standby.",
-                        session.getUsername(), session.getIdentifier());
-                session.getTunnel().close();
-            }
-            catch (Exception e) {
-                logger.warn("Unable to close a session of \"{}\" on connection {}: {}", session.getUsername(),
-                        session.getIdentifier(), e.getMessage());
-            }
+            close(session, "connection " + session.getIdentifier(), "this server is on standby");
         }
     }
 
@@ -419,15 +471,7 @@ public final class RotationService {
             if (allowed)
                 continue;
 
-            try {
-                logger.info("Closing the session of \"{}\" on connection {}: their access was revoked.",
-                        session.getUsername(), session.getIdentifier());
-                session.getTunnel().close();
-            }
-            catch (Exception e) {
-                logger.warn("Unable to close a session of \"{}\" on connection {}: {}", session.getUsername(),
-                        session.getIdentifier(), e.getMessage());
-            }
+            close(session, "connection " + session.getIdentifier(), "their access was revoked");
 
         }
     }
@@ -527,12 +571,23 @@ public final class RotationService {
                 if (sessionCounts.containsKey(target.getId()) || held.contains(target.getId()))
                     continue;
 
-                if (wasShown)
-                    rotateUnlessDone(target, "password shown", current -> isShown(current.getId())
-                            && isRetryAllowed(current));
-                else
-                    rotateUnlessDone(target, "periodic", current -> isDue(current, platforms.getAll())
-                            && !isInUse(current.getId()));
+                // One connection failing, such as with secrets no key here
+                // reads, keeps none of the others from rotating
+                try {
+                    if (wasShown)
+                        rotateUnlessDone(target, "password shown", current -> isShown(current.getId())
+                                && isRetryAllowed(current));
+                    else
+                        rotateUnlessDone(target, "periodic", current -> isDue(current, all));
+                }
+                catch (SchemaUnavailableException e) {
+                    throw e;
+                }
+                catch (Exception e) {
+                    logger.error("Periodic rotation of connection \"{}\" ({}) failed: {}",
+                            Values.forLog(target.getName()), target.getId(), e.getMessage());
+                    logger.debug("Periodic rotation failed.", e);
+                }
 
             }
 
@@ -592,7 +647,7 @@ public final class RotationService {
             throw new GuacamoleResourceNotFoundException("No such connection.");
 
         requireNotCheckedOut(id);
-        return rotate(target, "manual", current -> true);
+        return rotate(target, MANUAL, current -> true);
 
     }
 
@@ -677,7 +732,11 @@ public final class RotationService {
                 throw new GuacamoleClientException("A rotation of this connection is already running.");
 
             // Checked only after claiming the connection; see CheckoutService
+            // and requireNotRotating. Automatic rotations wait for sessions
+            // to end; administrators rotating by hand decide
             requireNotCheckedOut(target.getId());
+            if (!MANUAL.equals(reason) && coordination.countSessions(sessions).getOrDefault(target.getId(), 0) > 0)
+                return null;
 
             // Loaded again: another server may have rotated it since
             Target current = connections.load(target.getId());
@@ -788,7 +847,18 @@ public final class RotationService {
         // recovered even if Guacamole stops mid-rotation
         connections.recordStart(id, newPassword);
 
-        ChangeOutcome outcome = changer.change(newPassword);
+        ChangeOutcome outcome;
+        try {
+            outcome = changer.change(newPassword);
+        }
+        catch (RuntimeException e) {
+            // Whether it reached the target is unknown: kept as pending
+            String message = "The change failed unexpectedly (" + e.getMessage() + "). The new password was kept"
+                    + " in pam_rotation_state.pending_password" + PENDING_HINT + ", in case the target took it.";
+            logger.debug("The change failed unexpectedly.", e);
+            connections.recordFailure(id, RotationResult.UNKNOWN, message, null, true);
+            return new RotationResult(RotationResult.UNKNOWN, message);
+        }
         String detail = outcome.isCompleted() ? null : outcome.getError();
         if (recovered != null)
             detail = detail == null ? recovered : recovered + " " + detail;

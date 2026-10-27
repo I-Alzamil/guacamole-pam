@@ -118,7 +118,13 @@ public final class SecretCipher {
         if (!matcher.group(1).equals(keyId))
             throw new GeneralSecurityException("Encrypted by another key (" + matcher.group(1) + ").");
 
-        byte[] data = Base64.getDecoder().decode(matcher.group(2));
+        byte[] data;
+        try {
+            data = Base64.getDecoder().decode(matcher.group(2));
+        }
+        catch (IllegalArgumentException e) {
+            throw new GeneralSecurityException("Malformed value.", e);
+        }
         if (data.length < NONCE_BYTES + TAG_BITS / 8)
             throw new GeneralSecurityException("Truncated value.");
 

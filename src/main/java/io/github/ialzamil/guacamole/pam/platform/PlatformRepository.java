@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
@@ -262,7 +263,7 @@ public final class PlatformRepository {
             statement.setString(2, clean.getDescription());
             statement.setString(3, clean.getType());
             statement.setString(4, toJson(clean.getSettings()));
-            statement.setString(5, secrets.protect(Secrets.PLATFORM_SECRETS, toJson(clean.getSecrets())));
+            statement.setString(5, protectSecrets(clean.getSecrets()));
             statement.setString(6, toJson(clean.getPolicy()));
             if (unlessExisting)
                 statement.setString(7, clean.getName());
@@ -318,7 +319,7 @@ public final class PlatformRepository {
             statement.setString(1, clean.getName());
             statement.setString(2, clean.getDescription());
             statement.setString(3, toJson(clean.getSettings()));
-            statement.setString(4, secrets.protect(Secrets.PLATFORM_SECRETS, toJson(clean.getSecrets())));
+            statement.setString(4, protectSecrets(clean.getSecrets()));
             statement.setString(5, toJson(clean.getPolicy()));
             statement.setInt(6, id);
             statement.executeUpdate();
@@ -326,18 +327,19 @@ public final class PlatformRepository {
     }
 
     /**
-     * Returns every platform by name, with its secrets decrypted for
-     * server-side use.
+     * Returns every platform by name, without its secrets, names compared
+     * ignoring case, as the databases' unique index on them does on MySQL
+     * and SQL Server.
      */
-    Map<String, Platform> getAllWithSecretsByName() throws GuacamoleException {
+    Map<String, Platform> getAllByName() throws GuacamoleException {
 
-        Map<String, Platform> platforms = new HashMap<>();
+        Map<String, Platform> platforms = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(SELECT);
              ResultSet results = statement.executeQuery()) {
             while (results.next()) {
-                Platform platform = toPlatform(results, true);
+                Platform platform = toPlatform(results, false);
                 platforms.put(platform.getName(), platform);
             }
         }
@@ -640,6 +642,16 @@ public final class PlatformRepository {
         catch (IOException e) {
             throw new SQLException("Unable to decode platform settings.", e);
         }
+    }
+
+
+    /**
+     * Secrets as stored: encrypted, unless there are none, which needs no
+     * key (so a wrong one keeps no platform without secrets from saving).
+     */
+    private String protectSecrets(Map<String, String> platformSecrets) throws GuacamoleException, SQLException {
+        String json = toJson(platformSecrets);
+        return platformSecrets.isEmpty() ? json : secrets.protect(Secrets.PLATFORM_SECRETS, json);
     }
 
 }

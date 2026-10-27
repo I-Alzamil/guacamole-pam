@@ -12,6 +12,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -20,6 +21,7 @@ import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.protocol.GuacamoleConfiguration;
 
+import io.github.ialzamil.guacamole.pam.Values;
 import io.github.ialzamil.guacamole.pam.crypto.MigrationReport;
 import io.github.ialzamil.guacamole.pam.crypto.SecretCipher;
 import io.github.ialzamil.guacamole.pam.crypto.Secrets;
@@ -63,8 +65,6 @@ public class ConnectionSecrets {
      */
     public static final String MASK = "********";
 
-    private static final String GUACAMOLE_TOKEN = "${";
-
     private final PamDatabase database;
 
     private final SqlDialect dialect;
@@ -82,7 +82,7 @@ public class ConnectionSecrets {
      * "PAM_SFTP_PRIVATE_KEY_17".
      */
     public static String tokenName(String parameter, int connectionId) {
-        return "PAM_" + parameter.toUpperCase().replace('-', '_') + "_" + connectionId;
+        return "PAM_" + parameter.toUpperCase(Locale.ROOT).replace('-', '_') + "_" + connectionId;
     }
 
     public static String token(String parameter, int connectionId) {
@@ -303,7 +303,7 @@ public class ConnectionSecrets {
                 continue;
 
             // Guacamole must replace the token, so it stays in the parameter
-            if (!own && value.contains(GUACAMOLE_TOKEN)) {
+            if (!own && Values.hasGuacamoleToken(value)) {
                 saving.forgotten.add(name);
                 continue;
             }
@@ -325,6 +325,10 @@ public class ConnectionSecrets {
                 }
             }
             else {
+                // A key was meant to be used: never stored as plaintext
+                // instead
+                if (!own && secrets.getError() != null)
+                    throw new GuacamoleServerException("A secret cannot be stored: " + secrets.getError());
                 if (own)
                     saving.changes.put(name, require(id, name));
                 saving.forgotten.add(name);
@@ -482,6 +486,10 @@ public class ConnectionSecrets {
      */
     public void migrate(MigrationReport report) throws GuacamoleException {
 
+        // Nothing moves while the key is wrong: values would go back to
+        // plaintext
+        if (secrets.getError() != null)
+            return;
         boolean keeps = keepsSecrets();
 
         try (Connection connection = database.getConnection()) {
@@ -502,7 +510,7 @@ public class ConnectionSecrets {
                         boolean own = value.equals(token(name, id));
                         // Guacamole tokens stay put, and so does an encrypted
                         // value written there by hand: it is no plaintext
-                        if (keeps && !own && !value.contains(GUACAMOLE_TOKEN) && !SecretCipher.isEncrypted(value))
+                        if (keeps && !own && !Values.hasGuacamoleToken(value) && !SecretCipher.isEncrypted(value))
                             misplaced.add(new Misplaced(id, name, value, true));
                         else if (!keeps && own)
                             misplaced.add(new Misplaced(id, name, value, false));

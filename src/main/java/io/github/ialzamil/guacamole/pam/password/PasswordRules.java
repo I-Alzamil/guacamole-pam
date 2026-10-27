@@ -64,6 +64,9 @@ public final class PasswordRules {
 
         if (minLowercase < 0 || minUppercase < 0 || minDigits < 0 || minSymbols < 0)
             throw new GuacamoleClientException("Minimums cannot be negative.");
+        // Each at most the length, so their sum below cannot overflow
+        if (minLowercase > length || minUppercase > length || minDigits > length || minSymbols > length)
+            throw new GuacamoleClientException("A minimum cannot be more than the length of " + length + ".");
 
         // A kind not allowed has no minimum
         if (!lowercase) minLowercase = 0;

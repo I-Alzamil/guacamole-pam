@@ -124,6 +124,27 @@ public class PasswordGeneratorTest {
         assertTrue("Both symbols are still used", sawBoth);
     }
 
+    /**
+     * Rules leaving almost nothing but "$" and "{", where no shuffle would
+     * avoid "${": made at once still.
+     */
+    @Test(timeout = 5000)
+    public void endsEvenWhenAlmostEveryArrangementStartsAToken() throws GuacamoleClientException {
+        PasswordRules rules = PasswordRules.defaults();
+        rules.setLength(64);
+        rules.setLowercase(false);
+        rules.setUppercase(false);
+        rules.setDigits(false);
+        rules.setStartWithLetter(false);
+        rules.setSymbolSet("${");
+        rules.validate();
+        for (int i = 0; i < ROUNDS; i++) {
+            String password = generator.generate(rules);
+            assertEquals(64, password.length());
+            assertFalse(password, password.contains("${"));
+        }
+    }
+
     @Test
     public void estimatesStrength() throws GuacamoleClientException {
         // 25 + 24 + 8 + 8 characters (lowercase without l, uppercase without I and O, digits without 0 and 1)
@@ -149,6 +170,10 @@ public class PasswordGeneratorTest {
             rules.setSymbols(false);
         }, "Allow at least one kind of character.");
         refuses(rules -> rules.setMinDigits(-1), "Minimums cannot be negative.");
+        refuses(rules -> {
+            rules.setMinLowercase(Integer.MAX_VALUE);
+            rules.setMinUppercase(Integer.MAX_VALUE);
+        }, "A minimum cannot be more than the length of 24.");
         refuses(rules -> {
             rules.setLength(8);
             rules.setMinDigits(6);

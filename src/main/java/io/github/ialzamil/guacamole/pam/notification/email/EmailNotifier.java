@@ -11,6 +11,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -202,11 +203,11 @@ public final class EmailNotifier implements Notifier {
             if (address == null)
                 logger.debug("No email to \"{}\" about {}: no email address.", entry.getKey(),
                         event.getType().getId());
-            else if (seen.add(address.toLowerCase()))
+            else if (seen.add(address.toLowerCase(Locale.ROOT)))
                 recipients.put(address, new Recipient(entry.getValue(),
                         config.textOf(event, chosen.get(entry.getKey()))));
         }
-        if (config.adminAddress != null && seen.add(config.adminAddress.toLowerCase()))
+        if (config.adminAddress != null && seen.add(config.adminAddress.toLowerCase(Locale.ROOT)))
             recipients.put(config.adminAddress, new Recipient(null, config.textOf(event, null)));
 
         // Tried again (see Events): those emailed already are not again

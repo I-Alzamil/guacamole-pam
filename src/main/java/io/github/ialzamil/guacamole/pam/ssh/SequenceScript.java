@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -204,7 +205,7 @@ public final class SequenceScript {
             }
 
             int space = trimmed.indexOf(' ');
-            String directive = (space < 0 ? trimmed.substring(1) : trimmed.substring(1, space)).toLowerCase();
+            String directive = (space < 0 ? trimmed.substring(1) : trimmed.substring(1, space)).toLowerCase(Locale.ROOT);
             String argument = space < 0 ? "" : trimmed.substring(space + 1).trim();
 
             switch (directive) {

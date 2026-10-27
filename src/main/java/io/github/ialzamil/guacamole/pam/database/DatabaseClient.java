@@ -20,6 +20,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -246,7 +247,7 @@ public class DatabaseClient {
                 try (Statement statement = connection.createStatement();
                      ResultSet results = statement.executeQuery("SHOW GRANTS")) {
                     while (results.next()) {
-                        String grant = results.getString(1).toUpperCase();
+                        String grant = results.getString(1).toUpperCase(Locale.ROOT);
                         allowed |= grant.contains("CREATE USER") || grant.startsWith("GRANT ALL PRIVILEGES ON *.*");
                     }
                 }
@@ -799,7 +800,7 @@ public class DatabaseClient {
                 break;
             case SQLSERVER:
                 if (code == 15151)
-                    return "The login \"" + target.getUsername() + "\" does not exist, or " + who.toLowerCase()
+                    return "The login \"" + target.getUsername() + "\" does not exist, or " + who.toLowerCase(Locale.ROOT)
                             + " may not change it: " + reason + " Changing another login needs ALTER ANY LOGIN,"
                             + " and a sysadmin login CONTROL SERVER.";
                 break;
@@ -828,7 +829,7 @@ public class DatabaseClient {
         // with the reason among its causes
         for (Throwable cause = e; cause != null; cause = cause.getCause()) {
             String message = cause.getMessage() == null ? "" : cause.getMessage();
-            String lower = message.toLowerCase();
+            String lower = message.toLowerCase(Locale.ROOT);
             if (cause instanceof javax.net.ssl.SSLException || lower.contains("certificate") || lower.contains("ssl")
                     || lower.contains("tls") || lower.contains("pkix") || lower.contains("handshake"))
                 return "Unable to trust the " + target.describe() + ": " + firstLine(message);

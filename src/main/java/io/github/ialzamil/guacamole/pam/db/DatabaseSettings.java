@@ -4,6 +4,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Properties;
 
 import org.apache.guacamole.GuacamoleException;
@@ -97,7 +98,7 @@ public final class DatabaseSettings {
 
         String chosen = environment.getProperty(PAM_DATABASE);
         if (chosen != null) {
-            chosen = chosen.trim().toLowerCase();
+            chosen = chosen.trim().toLowerCase(Locale.ROOT);
             if (!DATABASES.contains(chosen))
                 throw new GuacamoleServerException("\"" + PAM_DATABASE.getName() + "\" must be one of "
                         + String.join(", ", DATABASES) + ".");
@@ -143,10 +144,7 @@ public final class DatabaseSettings {
             return e.getMessage();
         }
 
-        try {
-            Class.forName(settings.driverClass, false, DatabaseSettings.class.getClassLoader());
-        }
-        catch (ClassNotFoundException | LinkageError e) {
+        if (!isInstalled(settings.driverClass)) {
             return "the " + settings.dialect.getDisplayName() + " JDBC driver (" + settings.driverClass
                     + ") is not installed. It comes with Guacamole's " + settings.dialect.getDisplayName()
                     + " authentication, which must be installed.";
@@ -181,7 +179,7 @@ public final class DatabaseSettings {
 
     private static String choice(Environment environment, String name, String defaultValue, String... allowed)
             throws GuacamoleException {
-        String value = environment.getProperty(string(name), defaultValue).trim().toLowerCase();
+        String value = environment.getProperty(string(name), defaultValue).trim().toLowerCase(Locale.ROOT);
         if (!Arrays.asList(allowed).contains(value))
             throw new GuacamoleServerException("\"" + name + "\" must be one of " + String.join(", ", allowed)
                     + ", not \"" + value + "\".");
@@ -261,7 +259,8 @@ public final class DatabaseSettings {
         settings.properties.setProperty("characterEncoding", "UTF-8");
         String sslMode = choice(environment, "mysql-ssl-mode", "preferred",
                 "disabled", "preferred", "required", "verify-ca", "verify-identity");
-        settings.properties.setProperty("sslMode", sslMode);
+        // As Guacamole passes it, to either driver: VERIFY_IDENTITY
+        settings.properties.setProperty("sslMode", sslMode.toUpperCase(Locale.ROOT).replace('-', '_'));
         settings.properties.setProperty("useSSL", Boolean.toString(!sslMode.equals("disabled")));
 
         File trustStore = environment.getProperty(file("mysql-ssl-trust-store"));
