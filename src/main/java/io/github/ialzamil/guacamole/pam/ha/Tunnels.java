@@ -1,5 +1,6 @@
 package io.github.ialzamil.guacamole.pam.ha;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -9,8 +10,10 @@ import java.util.Locale;
 
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.net.DelegatingGuacamoleSocket;
+import org.apache.guacamole.net.DelegatingGuacamoleTunnel;
 import org.apache.guacamole.net.GuacamoleSocket;
 import org.apache.guacamole.net.GuacamoleTunnel;
+import org.apache.guacamole.net.auth.ConnectionRecord;
 import org.apache.guacamole.protocol.ConfiguredGuacamoleSocket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,7 +46,52 @@ final class Tunnels {
         DELEGATE_SOCKET = method;
     }
 
+    /**
+     * DelegatingGuacamoleTunnel's tunnel, private: the tunnel Guacamole's
+     * database authentication gives may be wrapped in others.
+     */
+    private static final Field DELEGATE_TUNNEL;
+
+    static {
+        Field field = null;
+        try {
+            field = DelegatingGuacamoleTunnel.class.getDeclaredField("tunnel");
+            field.setAccessible(true);
+        }
+        catch (ReflectiveOperationException | RuntimeException e) {
+            logger.debug("Unable to unwrap tunnels.", e);
+        }
+        DELEGATE_TUNNEL = field;
+    }
+
     private Tunnels() {
+    }
+
+    /**
+     * The connection Guacamole's database authentication opened for a
+     * tunnel, as its record of the session tells, or null if not found:
+     * the one it picked in a balancing group, which its active connections
+     * hide from users who may only use the group. Its tunnels are made by
+     * that record, which they keep.
+     */
+    static String recordedConnectionId(GuacamoleTunnel tunnel) {
+        try {
+            for (int depth = 0; tunnel != null && depth < 16; depth++) {
+                for (Field field : tunnel.getClass().getDeclaredFields()) {
+                    if (field.isSynthetic() && ConnectionRecord.class.isAssignableFrom(field.getType())) {
+                        field.setAccessible(true);
+                        return ((ConnectionRecord) field.get(tunnel)).getConnectionIdentifier();
+                    }
+                }
+                if (!(tunnel instanceof DelegatingGuacamoleTunnel) || DELEGATE_TUNNEL == null)
+                    return null;
+                tunnel = (GuacamoleTunnel) DELEGATE_TUNNEL.get(tunnel);
+            }
+        }
+        catch (ReflectiveOperationException | RuntimeException e) {
+            logger.debug("Unable to find the connection a tunnel was opened to.", e);
+        }
+        return null;
     }
 
     /**

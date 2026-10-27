@@ -103,9 +103,11 @@ suite() {
         \"primaryConnectionIdentifier\":\"$OPEN\",\"parameters\":{\"read-only\":\"true\"},\"attributes\":{}}")" \
         "d.get('identifier')")
     for user in t2alice t2bob; do
-        for c in $OPEN $SINGLE $PER_USER $MEMBER $RECORDED; do grant_read $user connectionPermissions "$c"; done
+        for c in $OPEN $SINGLE $PER_USER $RECORDED; do grant_read $user connectionPermissions "$c"; done
         grant_read $user connectionGroupPermissions "$GROUP"
     done
+    # Bob may use the balancing group only, not the connection in it
+    grant_read t2alice connectionPermissions "$MEMBER"
     grant_read t2alice sharingProfilePermissions "$VIEW"
     check "connections, a balancing group, a sharing profile and users created" yes \
         "$([ -n "$OPEN" ] && [ -n "$SINGLE" ] && [ -n "$PER_USER" ] && [ -n "$GROUP" ] && [ -n "$MEMBER" ] \
@@ -151,6 +153,11 @@ suite() {
         "$(hold b5 "$B" "$BOB_B" "$GROUP" g)"
     release a5
     eventually "once Alice ends it, the group is unused" 0 $ENDED_WAIT active "$B" "$ADMIN_B" "$GROUP" g
+    check "Bob, who may use the group but not the connection in it, opens the group on server A" open \
+        "$(hold b9 "$A" "$BOB_A" "$GROUP" g)"
+    eventually "...server B shows the connection Guacamole picked in use, too" 1 5 active "$B" "$ADMIN_B" "$MEMBER"
+    release b9
+    eventually "...and once Bob ends it, unused" 0 $ENDED_WAIT active "$B" "$ADMIN_B" "$GROUP" g
     eventually "...and the single-session connection, for what follows" 0 $ENDED_WAIT active "$B" "$ADMIN_B" "$SINGLE"
 
     section "$DB: logins shared between servers"

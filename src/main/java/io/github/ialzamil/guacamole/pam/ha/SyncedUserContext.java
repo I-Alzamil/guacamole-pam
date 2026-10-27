@@ -81,8 +81,9 @@ final class SyncedUserContext extends DelegatingUserContext {
 
     /**
      * Where the session of a tunnel just opened runs, from the active
-     * connection Guacamole lists for it: the connection it picked, when
-     * through a balancing group, and its guacd.
+     * connection Guacamole lists for it, or else the record behind its
+     * tunnel: the connection it picked, when through a balancing group, and
+     * its guacd.
      *
      * @param connectionId
      *     The connection opened, or null if a balancing group was.
@@ -102,6 +103,8 @@ final class SyncedUserContext extends DelegatingUserContext {
         catch (GuacamoleException | RuntimeException e) {
             logger.debug("Unable to find the active connection of tunnel {}.", tunnelId, e);
         }
+        if (connectionId == null)
+            connectionId = Tunnels.recordedConnectionId(tunnel);
 
         return new SessionStore.Details(tunnelId, connectionId, host,
                 Tunnels.guacd(store.getDatabase(), config, connectionId, Tunnels.guacdConnectionId(tunnel)));
