@@ -68,7 +68,8 @@ CREATE TABLE IF NOT EXISTS pam_ha_share (
   sharing_profile_id  varchar(128),
   created             datetime(3)   NOT NULL,
 
-  PRIMARY KEY (share_key)
+  PRIMARY KEY (share_key),
+  KEY pam_ha_share_session (session_id)
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -86,7 +87,8 @@ CREATE TABLE IF NOT EXISTS pam_ha_login (
   created          datetime(3)   NOT NULL,
   last_access      datetime(3)   NOT NULL,
 
-  PRIMARY KEY (login_id)
+  PRIMARY KEY (login_id),
+  KEY pam_ha_login_last_access (last_access)
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

@@ -7,6 +7,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Locale;
 
+import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.net.DelegatingGuacamoleSocket;
 import org.apache.guacamole.net.GuacamoleSocket;
 import org.apache.guacamole.net.GuacamoleTunnel;
@@ -123,6 +124,20 @@ final class Tunnels {
      * Whether a host name is this server itself, which other servers reach
      * by another name.
      */
+    /**
+     * Closes a tunnel, if any, ignoring a failure to.
+     */
+    static void closeQuietly(GuacamoleTunnel tunnel) {
+        if (tunnel == null)
+            return;
+        try {
+            tunnel.close();
+        }
+        catch (GuacamoleException | RuntimeException e) {
+            logger.debug("Unable to close a tunnel.", e);
+        }
+    }
+
     static boolean isLocal(String hostname) {
         String name = hostname.trim().toLowerCase(Locale.ROOT);
         if (name.startsWith("[") && name.endsWith("]"))

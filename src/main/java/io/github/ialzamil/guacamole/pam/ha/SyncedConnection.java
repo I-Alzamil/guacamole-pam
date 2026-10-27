@@ -75,13 +75,16 @@ final class SyncedConnection extends DelegatingConnection {
         String sessionId = store.open(target(), context.getUsername(),
                 Limits.of(Target.Kind.CONNECTION, getAttributes(), store.getDefaults()));
 
+        GuacamoleTunnel tunnel = null;
         try {
-            GuacamoleTunnel tunnel = getDelegateConnection().connect(info, tokens);
+            tunnel = getDelegateConnection().connect(info, tokens);
             SessionTunnel session = new SessionTunnel(tunnel, () -> store.close(sessionId));
             store.attach(sessionId, session, context.details(tunnel, getIdentifier()));
             return session;
         }
         catch (GuacamoleException | RuntimeException e) {
+            // Opened, but never handed over: closed here
+            Tunnels.closeQuietly(tunnel);
             store.close(sessionId);
             throw e;
         }

@@ -94,7 +94,7 @@ public class DatabaseTest {
             try (InputStream schema = Database.class.getResourceAsStream(type.getSchemaResource())) {
                 String text = new String(schema.readAllBytes(), StandardCharsets.UTF_8);
                 // Eight tables and the lock's row, and PostgreSQL's indexes of its own
-                assertEquals(type + " statements", type == DatabaseType.POSTGRESQL ? 12 : 9,
+                assertEquals(type + " statements", type == DatabaseType.POSTGRESQL ? 14 : 9,
                         Database.statements(text).length);
                 for (String table : new String[] { "pam_ha_server", "pam_ha_session",
                         "pam_ha_lock", "pam_ha_share", "pam_ha_login", "pam_ha_ban",

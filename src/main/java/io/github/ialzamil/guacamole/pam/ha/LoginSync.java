@@ -62,6 +62,32 @@ final class LoginSync {
      */
     private static final long MISS_MS = 5000;
 
+    /**
+     * Most logins of other servers looked up in the database per second.
+     */
+    private static final int MAX_LOOKUPS_PER_SECOND = 20;
+
+    /**
+     * Lookups of the current second.
+     */
+    private static final class Rate {
+
+        private long second;
+        private int count;
+
+        synchronized boolean tryAcquire() {
+            long now = System.currentTimeMillis() / 1000;
+            if (now != second) {
+                second = now;
+                count = 0;
+            }
+            return ++count <= MAX_LOOKUPS_PER_SECOND;
+        }
+
+    }
+
+    private final Rate lookups = new Rate();
+
     private final SessionStore store;
 
     /**
@@ -92,6 +118,12 @@ final class LoginSync {
     private final Map<String, String> recorded = new ConcurrentHashMap<>();
 
     private final Map<String, Long> synced = new ConcurrentHashMap<>();
+
+    /**
+     * Logins this server keeps to itself, such as share links while those
+     * are not shared: tokens.
+     */
+    private final Set<String> unrecorded = ConcurrentHashMap.newKeySet();
 
     private final Map<String, Long> misses = new ConcurrentHashMap<>();
 
@@ -262,8 +294,12 @@ final class LoginSync {
             Credentials credentials = user.getCredentials();
             String key = credentials == null ? null : credentials.getParameter("key");
             if (AuthenticatedUser.ANONYMOUS_IDENTIFIER.equals(user.getIdentifier())
-                    && (key == null || !anonymousShares))
+                    && (key == null || !anonymousShares)) {
+                // Not looked at again: each look counts as using it, which
+                // would keep it from ever timing out
+                unrecorded.add(token);
                 return;
+            }
 
             List<String> providers = new ArrayList<>();
             for (Object context : in.getUserContexts(session))
@@ -324,6 +360,12 @@ final class LoginSync {
         String hash = Sql.sha256(token);
         Long missedUntil = misses.get(hash);
         if (missedUntil != null && missedUntil > System.currentTimeMillis())
+            return null;
+
+        // Tokens of no login, such as made up by the thousand, are looked
+        // up at a bounded rate, so they never fill the database's
+        // connections
+        if (!lookups.tryAcquire())
             return null;
 
         Object lock = building.computeIfAbsent(hash, h -> new Object());
@@ -484,8 +526,9 @@ final class LoginSync {
 
         try {
 
+            unrecorded.removeIf(token -> logins.getLocal(token) == null);
             for (Map.Entry<String, Object> login : logins.entrySet()) {
-                if (!recorded.containsKey(login.getKey()))
+                if (!recorded.containsKey(login.getKey()) && !unrecorded.contains(login.getKey()))
                     record(login.getKey(), login.getValue());
             }
 

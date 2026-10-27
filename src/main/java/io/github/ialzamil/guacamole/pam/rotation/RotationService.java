@@ -142,10 +142,17 @@ public final class RotationService {
     private final ScheduledExecutorService scheduler = newScheduler("pam-rotation", 2);
 
     /**
-     * The role of this server, expiry and ended checkouts, kept apart so
-     * long rotations never delay the end of a session.
+     * Expiry, ended checkouts and access checks, kept apart so long
+     * rotations never delay the end of a session.
      */
     private final ScheduledExecutorService housekeeping = newScheduler("pam-housekeeping", 1);
+
+    /**
+     * The role of this server and its sessions' heartbeat, apart again, so
+     * slow checks of checkouts or access never make other servers take its
+     * sessions for ended (see Coordination#check).
+     */
+    private final ScheduledExecutorService coordinating = newScheduler("pam-coordination", 1);
 
     /**
      * When ended checkouts were last looked for successfully.
@@ -165,7 +172,9 @@ public final class RotationService {
         scheduler.scheduleWithFixedDelay(this::rotateDueConnections,
                 PERIODIC_CHECK_SECONDS, PERIODIC_CHECK_SECONDS, TimeUnit.SECONDS);
         // At once, so this server works, or is on standby, from its start
-        housekeeping.scheduleWithFixedDelay(this::housekeeping, 0, ENDED_CHECK_SECONDS, TimeUnit.SECONDS);
+        coordinating.scheduleWithFixedDelay(this::checkCoordination, 0, ENDED_CHECK_SECONDS, TimeUnit.SECONDS);
+        housekeeping.scheduleWithFixedDelay(this::endCheckouts, ENDED_CHECK_SECONDS, ENDED_CHECK_SECONDS,
+                TimeUnit.SECONDS);
         housekeeping.scheduleWithFixedDelay(this::checkAccess,
                 ACCESS_CHECK_SECONDS, ACCESS_CHECK_SECONDS, TimeUnit.SECONDS);
     }
@@ -391,10 +400,9 @@ public final class RotationService {
 
     /**
      * Brings this server's role up to date, rotating after use the
-     * connections whose sessions ended on a server that stopped, then ends
-     * checkouts.
+     * connections whose sessions ended on a server that stopped.
      */
-    private void housekeeping() {
+    private void checkCoordination() {
         try {
             for (int id : coordination.check(sessions))
                 scheduleAfterUse(Integer.toString(id));
@@ -407,7 +415,6 @@ public final class RotationService {
             logger.error("Unable to check the other servers: {}", e.getMessage());
             logger.debug("Unable to check the other servers.", e);
         }
-        endCheckouts();
     }
 
     /**
@@ -915,6 +922,7 @@ public final class RotationService {
     }
 
     public void shutdown() {
+        coordinating.shutdownNow();
         housekeeping.shutdownNow();
         scheduler.shutdownNow();
         coordination.shutdown();

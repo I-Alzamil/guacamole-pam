@@ -62,13 +62,14 @@ final class Joins {
         filter.filterValues(config.getParameters());
 
         String sessionId = store.openJoin(joined, username, sharingProfileId, false);
+        GuacamoleSocket socket = null;
+        GuacamoleTunnel tunnel = null;
         try {
 
-            GuacamoleSocket socket = joined.guacd.ssl
+            socket = joined.guacd.ssl
                     ? new SSLGuacamoleSocket(joined.guacd.hostname, joined.guacd.port)
                     : new InetGuacamoleSocket(joined.guacd.hostname, joined.guacd.port);
-            GuacamoleTunnel tunnel = new SimpleGuacamoleTunnel(new ConfiguredGuacamoleSocket(socket, config,
-                    info));
+            tunnel = new SimpleGuacamoleTunnel(new ConfiguredGuacamoleSocket(socket, config, info));
 
             Long historyId = startHistory(database, joined.connectionId, sharingProfileId, username, remoteHost);
             SessionTunnel session = new SessionTunnel(tunnel, () -> {
@@ -81,6 +82,16 @@ final class Joins {
 
         }
         catch (GuacamoleException | RuntimeException e) {
+            // The socket to guacd, open even when the join was refused
+            if (tunnel != null)
+                Tunnels.closeQuietly(tunnel);
+            else if (socket != null) {
+                try {
+                    socket.close();
+                }
+                catch (GuacamoleException ignored) {
+                }
+            }
             store.close(sessionId);
             throw e;
         }

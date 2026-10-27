@@ -1,5 +1,6 @@
 package io.github.ialzamil.guacamole.pam.ha;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -29,6 +30,12 @@ final class Database {
      * Seconds to wait for the database when connecting.
      */
     private static final int CONNECT_TIMEOUT_SECONDS = 10;
+
+    /**
+     * Seconds to wait for an answer once connected: a connection cut off
+     * mid-query never answers, and would hold the heartbeat forever.
+     */
+    private static final int SOCKET_TIMEOUT_SECONDS = 30;
 
     /**
      * This extension's tables.
@@ -84,6 +91,7 @@ final class Database {
                 put(properties, "sslrootcert", option(environment, type, "ssl-root-cert-file"));
                 put(properties, "sslpassword", option(environment, type, "ssl-key-password"));
                 put(properties, "connectTimeout", Integer.toString(CONNECT_TIMEOUT_SECONDS));
+                put(properties, "socketTimeout", Integer.toString(SOCKET_TIMEOUT_SECONDS));
                 return new Database(type, "org.postgresql.Driver",
                         "jdbc:postgresql://" + hostname + ":" + port + "/" + database, properties);
 
@@ -112,11 +120,18 @@ final class Database {
         String sslMode = option(environment, type, "ssl-mode");
         String serverTimezone = option(environment, type, "server-timezone");
 
-        if (driver == null || driver.equalsIgnoreCase("mysql")) {
+        // As Guacamole: MariaDB's driver if installed, unless told
+        if (driver == null)
+            driver = isInstalled(MARIADB_DRIVER) ? "mariadb" : "mysql";
+
+        if (driver.equalsIgnoreCase("mysql")) {
             if (sslMode != null)
                 put(properties, "sslMode", sslMode.toUpperCase(Locale.ROOT).replace('-', '_'));
             put(properties, "serverTimezone", serverTimezone);
             put(properties, "connectTimeout", Integer.toString(CONNECT_TIMEOUT_SECONDS * 1000));
+            put(properties, "socketTimeout", Integer.toString(SOCKET_TIMEOUT_SECONDS * 1000));
+            putStores(environment, properties, "trustCertificateKeyStoreUrl", "trustCertificateKeyStorePassword",
+                    "clientCertificateKeyStoreUrl", "clientCertificateKeyStorePassword");
             return new Database(type, "com.mysql.cj.jdbc.Driver",
                     "jdbc:mysql://" + hostname + ":" + port + "/" + database, properties);
         }
@@ -124,7 +139,9 @@ final class Database {
         if (driver.equalsIgnoreCase("mariadb")) {
             put(properties, "sslMode", mariaDbSslMode(sslMode));
             put(properties, "connectTimeout", Integer.toString(CONNECT_TIMEOUT_SECONDS * 1000));
-            return new Database(type, "org.mariadb.jdbc.Driver",
+            put(properties, "socketTimeout", Integer.toString(SOCKET_TIMEOUT_SECONDS * 1000));
+            putStores(environment, properties, "trustStore", "trustStorePassword", "keyStore", "keyStorePassword");
+            return new Database(type, MARIADB_DRIVER,
                     "jdbc:mariadb://" + hostname + ":" + port + "/" + database, properties);
         }
 
@@ -170,6 +187,7 @@ final class Database {
             put(properties, "instanceName", instance);
             put(properties, "databaseName", database);
             put(properties, "loginTimeout", Integer.toString(CONNECT_TIMEOUT_SECONDS));
+            put(properties, "socketTimeout", Integer.toString(SOCKET_TIMEOUT_SECONDS * 1000));
             return new Database(type, "com.microsoft.sqlserver.jdbc.SQLServerDriver",
                     "jdbc:sqlserver://" + hostname + ":" + port, properties);
         }
@@ -177,6 +195,7 @@ final class Database {
         if (driver.equalsIgnoreCase("jtds")) {
             put(properties, "instance", instance);
             put(properties, "loginTimeout", Integer.toString(CONNECT_TIMEOUT_SECONDS));
+            put(properties, "socketTimeout", Integer.toString(SOCKET_TIMEOUT_SECONDS));
             return new Database(type, "net.sourceforge.jtds.jdbc.Driver",
                     "jdbc:jtds:sqlserver://" + hostname + ":" + port + "/" + database, properties);
         }
@@ -191,6 +210,34 @@ final class Database {
         String value = environment.getProperty(Settings.string(
                 type.property(name)));
         return value == null || value.trim().isEmpty() ? null : value.trim();
+    }
+
+    private static final String MARIADB_DRIVER = "org.mariadb.jdbc.Driver";
+
+    private static boolean isInstalled(String driverClass) {
+        try {
+            Class.forName(driverClass, false, Database.class.getClassLoader());
+            return true;
+        }
+        catch (ClassNotFoundException | LinkageError e) {
+            return false;
+        }
+    }
+
+    /**
+     * The trust and client stores of "mysql-ssl-trust-store",
+     * "mysql-ssl-client-store" and their passwords, as the driver names
+     * them.
+     */
+    private static void putStores(Environment environment, Properties properties, String trustStore,
+            String trustPassword, String clientStore, String clientPassword) throws GuacamoleException {
+        DatabaseType type = DatabaseType.MYSQL;
+        String trust = option(environment, type, "ssl-trust-store");
+        String client = option(environment, type, "ssl-client-store");
+        put(properties, trustStore, trust == null ? null : new File(trust).toURI().toString());
+        put(properties, trustPassword, option(environment, type, "ssl-trust-password"));
+        put(properties, clientStore, client == null ? null : new File(client).toURI().toString());
+        put(properties, clientPassword, option(environment, type, "ssl-client-password"));
     }
 
     private static void put(Properties properties, String name, String value) {

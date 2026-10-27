@@ -342,7 +342,8 @@ final class SyncedActiveConnectionDirectory implements Directory<ActiveConnectio
         @Override
         public UserCredentials getSharingCredentials(String identifier) throws GuacamoleException {
             SharingProfile profile = context.getSharingProfileDirectory().get(identifier);
-            if (!managed || profile == null || !row.connectionId.equals(profile.getPrimaryConnectionIdentifier()))
+            if (!managed || profile == null || row.connectionId == null
+                    || !row.connectionId.equals(profile.getPrimaryConnectionIdentifier()))
                 throw new GuacamoleSecurityException("Permission denied.");
             return new UserCredentials(SHARE_KEY, Collections.singletonMap("key",
                     store.share(row.sessionId, identifier)));

@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS pam_ha_share (
 
 );
 
+CREATE INDEX IF NOT EXISTS pam_ha_share_session
+  ON pam_ha_share (session_id);
+
 -- Logins, by the SHA-256 of their token: who logged in, as last used on
 -- any server
 CREATE TABLE IF NOT EXISTS pam_ha_login (
@@ -93,6 +96,9 @@ CREATE TABLE IF NOT EXISTS pam_ha_login (
   PRIMARY KEY (login_id)
 
 );
+
+CREATE INDEX IF NOT EXISTS pam_ha_login_last_access
+  ON pam_ha_login (last_access);
 
 -- Addresses that failed to log in lately
 CREATE TABLE IF NOT EXISTS pam_ha_ban (

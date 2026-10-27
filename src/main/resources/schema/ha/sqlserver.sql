@@ -73,7 +73,8 @@ CREATE TABLE pam_ha_share (
   sharing_profile_id  nvarchar(128),
   created             datetime2(3)   NOT NULL,
 
-  PRIMARY KEY (share_key)
+  PRIMARY KEY (share_key),
+  INDEX pam_ha_share_session (session_id)
 
 );
 
@@ -92,7 +93,8 @@ CREATE TABLE pam_ha_login (
   created          datetime2(3)   NOT NULL,
   last_access      datetime2(3)   NOT NULL,
 
-  PRIMARY KEY (login_id)
+  PRIMARY KEY (login_id),
+  INDEX pam_ha_login_last_access (last_access)
 
 );
 

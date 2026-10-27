@@ -100,10 +100,11 @@ public final class SharedCoordination implements Coordination {
         catch (GuacamoleException | SQLException e) {
             closeSlot();
             enter(Standby.DATABASE, e.getMessage());
-            return Collections.emptySet();
         }
 
-        // On standby too, for the sessions opened before
+        // On standby too, for the sessions opened before, and when only
+        // the lock failed: other servers would otherwise take this one's
+        // sessions for ended, and rotate their passwords
         long now = System.currentTimeMillis();
         if (now - lastHeartbeat < HEARTBEAT_MS)
             return Collections.emptySet();
@@ -118,7 +119,11 @@ public final class SharedCoordination implements Coordination {
             return Collections.emptySet();
         }
         catch (GuacamoleException e) {
-            logger.error("Session heartbeat failed: {}", e.getMessage());
+            // Said once already, while the database cannot be reached
+            if (standby == Standby.DATABASE)
+                logger.debug("Session heartbeat failed: {}", e.getMessage());
+            else
+                logger.error("Session heartbeat failed: {}", e.getMessage());
             logger.debug("Session heartbeat failed.", e);
             return Collections.emptySet();
         }
@@ -134,12 +139,18 @@ public final class SharedCoordination implements Coordination {
         closeSlot();
         Connection connection = database.getDedicatedConnection();
 
-        for (int key = 0; key < SHARED_SLOTS; key++) {
-            if (dialect.tryLock(connection, SHARED_LOCK, key)) {
-                slot = connection;
-                noSlot = false;
-                return;
+        try {
+            for (int key = 0; key < SHARED_SLOTS; key++) {
+                if (dialect.tryLock(connection, SHARED_LOCK, key)) {
+                    slot = connection;
+                    noSlot = false;
+                    return;
+                }
             }
+        }
+        catch (SQLException | RuntimeException e) {
+            close(connection);
+            throw e;
         }
 
         close(connection);

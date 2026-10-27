@@ -51,6 +51,11 @@ import org.slf4j.LoggerFactory;
  */
 final class SessionStore {
 
+    /**
+     * Longest wait for the lock of session limits.
+     */
+    private static final int LOCK_TIMEOUT_SECONDS = 10;
+
     private static final Logger logger = LoggerFactory.getLogger(SessionStore.class);
 
     /**
@@ -135,6 +140,12 @@ final class SessionStore {
         private volatile Details details;
 
         private volatile GuacamoleTunnel tunnel;
+
+        /**
+         * Whether it was asked to end, maybe before its tunnel was
+         * attached.
+         */
+        private volatile boolean ending;
 
         /**
          * Whether it is in the database, so the heartbeat may record it
@@ -374,7 +385,13 @@ final class SessionStore {
                     session.recorded = true;
                 }
                 catch (SQLException | GuacamoleException | RuntimeException e) {
-                    connection.rollback();
+                    // Its failure never hides why, such as a limit reached
+                    try {
+                        connection.rollback();
+                    }
+                    catch (SQLException rollback) {
+                        e.addSuppressed(rollback);
+                    }
                     throw e;
                 }
 
@@ -431,6 +448,11 @@ final class SessionStore {
 
         counts = null;
 
+        // Asked to end while it was opening
+        Session session = sessions.get(id);
+        if (session != null && session.ending)
+            closeTunnel(session);
+
     }
 
     /**
@@ -466,6 +488,8 @@ final class SessionStore {
 
         Session session = sessions.get(id);
         if (session != null) {
+            // Still opening: ended as soon as its tunnel is attached
+            session.ending = true;
             closeTunnel(session);
             return;
         }
@@ -688,9 +712,11 @@ final class SessionStore {
                 }
             }
             try (Connection connection = database.connect()) {
-                Sql.update(connection, "DELETE FROM pam_ha_session WHERE server_id IN (SELECT server_id"
-                        + " FROM pam_ha_server WHERE last_seen < " + ago() + ")");
+                // Servers first, then every session of a server gone: one
+                // going stale between the two leaves none behind
                 Sql.update(connection, "DELETE FROM pam_ha_server WHERE last_seen < " + ago());
+                Sql.update(connection, "DELETE FROM pam_ha_session WHERE server_id NOT IN (SELECT server_id"
+                        + " FROM pam_ha_server)");
                 Sql.update(connection, "DELETE FROM pam_ha_share WHERE session_id NOT IN (SELECT"
                         + " session_id FROM pam_ha_session)");
             }
@@ -821,7 +847,16 @@ final class SessionStore {
      * holds while checking limits. Updating it locks it in every database.
      */
     private static void lock(Connection connection) throws SQLException {
-        if (Sql.update(connection, "UPDATE pam_ha_lock SET lock_id = 1 WHERE lock_id = 1") == 0)
+        // Waited for at most LOCK_TIMEOUT_SECONDS: a server stuck holding
+        // it, such as one cut off mid-transaction, must not hold every
+        // other server's sessions, and their heartbeats, with it
+        int updated;
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE pam_ha_lock SET lock_id = 1 WHERE lock_id = 1")) {
+            statement.setQueryTimeout(LOCK_TIMEOUT_SECONDS);
+            updated = statement.executeUpdate();
+        }
+        if (updated == 0)
             throw new SQLException("The row of pam_ha_lock is missing: run the schema script of the"
                     + " extension again.");
     }

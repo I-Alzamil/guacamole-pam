@@ -98,7 +98,10 @@ final class Config {
 
         banMaxAttempts = environment.getProperty(Settings.integer("ban-max-invalid-attempts"), 5);
         banDurationSeconds = environment.getProperty(Settings.integer("ban-address-duration"), 300);
-        ban = installed.contains("ban") && banMaxAttempts > 0 && banDurationSeconds > 0;
+        // As the ban extension: any of its limits at zero or less turns
+        // banning off
+        int banMaxAddresses = environment.getProperty(Settings.integer("ban-max-addresses"), 10485760);
+        ban = installed.contains("ban") && banMaxAttempts > 0 && banDurationSeconds > 0 && banMaxAddresses > 0;
 
         totp = installed.contains("totp");
         totpPeriodSeconds = environment.getProperty(Settings.integer("totp-period"), 30);
