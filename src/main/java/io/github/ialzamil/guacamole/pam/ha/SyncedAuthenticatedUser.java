@@ -10,7 +10,8 @@ import org.apache.guacamole.net.auth.Credentials;
 /**
  * A user this extension vouches for: one who logged in on another server,
  * whose login goes on here, or someone opening a share link of a session
- * of any server.
+ * of any server. The first is said to be authenticated by the extension
+ * they logged in through there.
  */
 final class SyncedAuthenticatedUser extends AbstractAuthenticatedUser {
 

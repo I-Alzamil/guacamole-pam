@@ -155,6 +155,10 @@ suite() {
 
     section "$DB: logins shared between servers"
     check "a login made on server A works on server B" t2alice "$(self_name "$B" "$ALICE_A")"
+    check "...through the database it was made through, as the web application finds it" "$DS" \
+        "$(json_get "$(curl -s -d "token=$ALICE_A" "$B/api/tokens")" "d.get('dataSource')")"
+    check "...so the user's own profile and preferences show there" t2alice \
+        "$(json_get "$(api GET "$B/api/session/data/$DS/users/t2alice" "$ALICE_A")" "d.get('username')")"
     check_contains "...with the user's connections" "\"$OPEN\"" \
         "$(api GET "$B/api/session/data/$DS/connections" "$ALICE_A")"
     check "...and opens sessions there" open "$(hold a10 "$B" "$ALICE_A" "$OPEN")"
@@ -250,6 +254,8 @@ suite() {
     check "Alice holds the single-session connection on server B" open "$(hold a7 "$B" "$ALICE_B" "$SINGLE")"
     podman kill "mypamha-$DB-b" >/dev/null
     check "server B killed, logins made there go on on server A" t2alice "$(self_name "$A" "$ALICE_B")"
+    check "...through the database they were made through" "$DS" \
+        "$(json_get "$(curl -s -d "token=$ALICE_B" "$A/api/tokens")" "d.get('dataSource')")"
     check_contains "server B killed, Bob is still refused on server A at first" "This connection is in use." \
         "$(hold b7 "$A" "$BOB_A" "$SINGLE")"
     eventually "...and Bob opens it within ${STALE_WAIT}s, once server B is no longer heard from" open "$STALE_WAIT" \

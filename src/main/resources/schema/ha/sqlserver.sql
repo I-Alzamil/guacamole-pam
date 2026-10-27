@@ -85,6 +85,7 @@ CREATE TABLE pam_ha_login (
 
   login_id         nvarchar(64)   NOT NULL,
   username         nvarchar(128)  NOT NULL,
+  auth_provider    nvarchar(64),
   user_groups      nvarchar(max),
   providers        nvarchar(max),
   share_key        nvarchar(64),

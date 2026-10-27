@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS pam_ha_login (
 
   login_id         varchar(64)   NOT NULL,
   username         varchar(128)  NOT NULL,
+  auth_provider    varchar(64),
   user_groups      text,
   providers        text,
   share_key        varchar(64),

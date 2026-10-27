@@ -270,6 +270,7 @@ final class LoginSync {
     private static final class Login {
 
         String username;
+        String authProvider;
         Set<String> groups;
         List<String> providers;
         String shareKey;
@@ -307,9 +308,10 @@ final class LoginSync {
 
             try (Connection connection = store.getDatabase().connect()) {
                 Sql.update(connection, "DELETE FROM pam_ha_login WHERE login_id = ?", hash);
-                Sql.update(connection, "INSERT INTO pam_ha_login (login_id, username, user_groups,"
-                        + " providers, share_key, remote_address, remote_hostname, created, last_access) VALUES"
-                        + " (?, ?, ?, ?, ?, ?, ?, " + now() + ", " + now() + ")", hash, user.getIdentifier(),
+                Sql.update(connection, "INSERT INTO pam_ha_login (login_id, username, auth_provider,"
+                        + " user_groups, providers, share_key, remote_address, remote_hostname, created,"
+                        + " last_access) VALUES (?, ?, ?, ?, ?, ?, ?, ?, " + now() + ", " + now() + ")", hash,
+                        user.getIdentifier(), user.getAuthenticationProvider().getIdentifier(),
                         String.join("\n", user.getEffectiveUserGroups()), String.join("\n", providers),
                         key == null ? null : Sql.sha256(key),
                         credentials == null ? null : credentials.getRemoteAddress(),
@@ -402,8 +404,8 @@ final class LoginSync {
 
     private Login read(String hash) {
         try (Connection connection = store.getDatabase().connect();
-             PreparedStatement statement = connection.prepareStatement("SELECT username, user_groups, providers,"
-                 + " share_key, remote_address, remote_hostname FROM pam_ha_login WHERE login_id = ? AND"
+             PreparedStatement statement = connection.prepareStatement("SELECT username, auth_provider,"
+                 + " user_groups, providers, share_key, remote_address, remote_hostname FROM pam_ha_login WHERE login_id = ? AND"
                  + " last_access > " + store.getDatabase().getType().secondsAgo(timeoutSeconds))) {
             statement.setString(1, hash);
             try (ResultSet results = statement.executeQuery()) {
@@ -411,11 +413,12 @@ final class LoginSync {
                     return null;
                 Login login = new Login();
                 login.username = results.getString(1);
-                login.groups = new HashSet<>(lines(results.getString(2)));
-                login.providers = lines(results.getString(3));
-                login.shareKey = results.getString(4);
-                login.remoteAddress = results.getString(5);
-                login.remoteHostname = results.getString(6);
+                login.authProvider = results.getString(2);
+                login.groups = new HashSet<>(lines(results.getString(3)));
+                login.providers = lines(results.getString(4));
+                login.shareKey = results.getString(5);
+                login.remoteAddress = results.getString(6);
+                login.remoteHostname = results.getString(7);
                 return login;
             }
         }
@@ -441,8 +444,8 @@ final class LoginSync {
         if (request == null)
             request = Internals.placeholderRequest(login.remoteAddress, login.remoteHostname);
         Credentials credentials = new Credentials(login.username, null, request);
-        SyncedAuthenticatedUser user = new SyncedAuthenticatedUser(provider, login.username, login.groups,
-                credentials, login.shareKey);
+        SyncedAuthenticatedUser user = new SyncedAuthenticatedUser(authenticatedBy(in, login), login.username,
+                login.groups, credentials, login.shareKey);
 
         List<UserContext> created = new ArrayList<>();
         try {
@@ -488,6 +491,18 @@ final class LoginSync {
             return null;
         }
 
+    }
+
+    /**
+     * The extension a login of another server is said to be made through:
+     * the one it was made through there, as the web application shows the
+     * user's own profile and preferences from it, or this one for share
+     * links, as only this one gives what they show on every server.
+     */
+    private AuthenticationProvider authenticatedBy(Internals in, Login login) {
+        AuthenticationProvider authProvider = login.shareKey == null && login.authProvider != null
+                ? in.getAuthProvider(login.authProvider) : null;
+        return authProvider != null ? authProvider : provider;
     }
 
     /**
