@@ -7,6 +7,10 @@
 -- records its own number there too (PamDatabase.SCHEMA_VERSION), so this
 -- script both creates the tables and upgrades earlier ones.
 --
+-- Version 1 is that of release 1.0.0, and is frozen: databases created by it
+-- exist, so its statements never change, in any of the three scripts. What
+-- changes goes in a later version, appended as above.
+--
 
 -- Schema versions applied, so later versions can tell what to upgrade.
 -- Empty means a fresh install

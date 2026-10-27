@@ -4,6 +4,10 @@
 -- this script once instead where its database user may not create tables.
 -- Every statement can run again.
 --
+-- As released in 1.0.0, these statements never change, as databases created
+-- by them exist: a later version appends what it changes, as statements that
+-- can run again too, as the module runs them all at every start.
+--
 
 -- Guacamole servers sharing the database, each as last heard from (UTC),
 -- the URL the others reach it at, if set, and, for the status page, its
