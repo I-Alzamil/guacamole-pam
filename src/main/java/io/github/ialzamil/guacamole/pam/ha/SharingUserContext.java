@@ -75,23 +75,8 @@ final class SharingUserContext extends DelegatingUserContext {
         public GuacamoleTunnel connect(GuacamoleClientInformation info, Map<String, String> tokens)
                 throws GuacamoleException {
 
-            SessionRow joined = share.session;
-            String sessionId = store.openJoin(joined, self().getIdentifier(),
-                    share.sharingProfileId, true);
-            GuacamoleTunnel tunnel = null;
-            try {
-                tunnel = getDelegateConnection().connect(info, tokens);
-                SessionTunnel session = new SessionTunnel(tunnel, () -> store.close(sessionId));
-                store.attach(sessionId, session, new SessionStore.Details(tunnel.getUUID().toString(),
-                        joined.connectionId, remoteHost, joined.guacd));
-                return session;
-            }
-            catch (GuacamoleException | RuntimeException e) {
-                // Opened, but never handed over: closed here
-                Tunnels.closeQuietly(tunnel);
-                store.close(sessionId);
-                throw e;
-            }
+            return store.joinListed(share.session, self().getIdentifier(), share.sharingProfileId, remoteHost,
+                    () -> getDelegateConnection().connect(info, tokens));
 
         }
 

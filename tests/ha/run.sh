@@ -185,11 +185,15 @@ suite() {
     check "...and it goes on" open "$(state a11)"
     check "the administrator joins it from server B" open "$(hold j1 "$B" "$ADMIN_B" "$ALICE_SESSION" a)"
     eventually "server A lists the joining session of server B too" 2 5 active_count "$A" "$ADMIN" "$OPEN"
+    check "the administrator joins it from server A too, where it runs" open \
+        "$(hold j2 "$A" "$ADMIN" "$ALICE_SESSION" a)"
+    eventually "server B lists that joining session too" 3 5 active_count "$B" "$ADMIN_B" "$OPEN"
     api PATCH "$B/api/session/data/$DS/activeConnections" "$ADMIN_B" \
         "[{\"op\":\"remove\",\"path\":\"/$ALICE_SESSION\"}]" >/dev/null
     eventually "the administrator ends Alice's session from server B: it ends on server A" closed 10 state a11
-    eventually "...with the session joining it" closed 10 state j1
-    release a11; release j1
+    eventually "...with the sessions joining it" closed 10 state j1
+    eventually "...on both servers" closed 10 state j2
+    release a11; release j1; release j2
     eventually "...and neither server lists them" 0 $ENDED_WAIT active_count "$B" "$ADMIN_B" "$OPEN"
 
     section "$DB: share links open on either server"

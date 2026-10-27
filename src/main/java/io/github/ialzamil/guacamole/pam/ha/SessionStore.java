@@ -369,6 +369,36 @@ final class SessionStore {
                 sharingProfileId, listed, joined.sessionId), null);
     }
 
+    /**
+     * A tunnel to open.
+     */
+    interface Connector {
+        GuacamoleTunnel connect() throws GuacamoleException;
+    }
+
+    /**
+     * Opens and records a session joining another of this server, through
+     * Guacamole, which lists it and ends it with the session joined.
+     */
+    GuacamoleTunnel joinListed(SessionRow joined, String username, String sharingProfileId, String remoteHost,
+            Connector connector) throws GuacamoleException {
+        String sessionId = openJoin(joined, username, sharingProfileId, true);
+        GuacamoleTunnel tunnel = null;
+        try {
+            tunnel = connector.connect();
+            SessionTunnel session = new SessionTunnel(tunnel, () -> close(sessionId));
+            attach(sessionId, session, new Details(tunnel.getUUID().toString(), joined.connectionId, remoteHost,
+                    joined.guacd));
+            return session;
+        }
+        catch (GuacamoleException | RuntimeException e) {
+            // Opened, but never handed over: closed here
+            Tunnels.closeQuietly(tunnel);
+            close(sessionId);
+            throw e;
+        }
+    }
+
     private String open(Session session, Limits limits) throws GuacamoleException {
 
         String id = UUID.randomUUID().toString();

@@ -278,10 +278,19 @@ final class SyncedActiveConnectionDirectory implements Directory<ActiveConnectio
             return connection.isConnectable();
         }
 
+        /**
+         * Joins the session as Guacamole does, recorded so other servers
+         * list the session joining it, and can end it.
+         */
         @Override
         public GuacamoleTunnel connect(GuacamoleClientInformation info, Map<String, String> tokens)
                 throws GuacamoleException {
-            return connection.connect(info, tokens);
+            String sessionId = store.sessionOfTunnel(getIdentifier());
+            SessionRow joined = sessionId == null ? null : store.find(sessionId);
+            if (joined == null)
+                return connection.connect(info, tokens);
+            return store.joinListed(joined, context.getUsername(), null, context.getRemoteHost(),
+                    () -> connection.connect(info, tokens));
         }
 
         @Override
