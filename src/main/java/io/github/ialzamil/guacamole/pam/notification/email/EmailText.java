@@ -9,6 +9,7 @@ import java.util.Map;
 
 import io.github.ialzamil.guacamole.pam.notification.Event;
 import io.github.ialzamil.guacamole.pam.notification.EventType;
+import io.github.ialzamil.guacamole.pam.notification.Summary;
 
 /**
  * The subject and text of the email of an event, in one language: from the
@@ -99,10 +100,12 @@ final class EmailText {
         values.put("ends", time(event.getEnds()));
         values.put("reason", oneLine(event.getReason()));
         values.put("detail", oneLine(detail(event)));
-        values.put("client-address", event.getRemoteHost());
+        // Where someone else acted from is not the user's to know
+        boolean byAnother = event.getActor() != null && !event.getActor().equals(event.getUser());
+        values.put("client-address", role == Audience.Role.OWN && byAnother ? null : event.getRemoteHost());
         values.put("server", event.getServer());
         values.put("time", time(event.getTime()));
-        values.put("summary", summary(event, values));
+        values.put("summary", oneLine(Summary.of(event, language::message)));
 
         StringBuilder details = new StringBuilder();
         line(details, "LABEL_CONNECTION", values.get("connection"));
@@ -132,29 +135,6 @@ final class EmailText {
 
     private String message(String key) {
         return language.message(key);
-    }
-
-    /**
-     * What happened, in one sentence, the values unknown said so.
-     */
-    private String summary(Event event, Map<String, String> values) {
-
-        String key;
-        boolean byAnother = event.getActor() != null && !event.getActor().equals(event.getUser());
-        if (event.getType() == EventType.REQUEST_DENIED && !byAnother)
-            key = "SUMMARY_REQUEST_REJECTED";
-        else if (event.getType() == EventType.CHECKOUT_REVOKED && event.getActor() != null)
-            key = "SUMMARY_CHECKOUT_REVOKED_BY";
-        else
-            key = "SUMMARY_" + event.getType().name();
-
-        Map<String, String> known = new HashMap<>(values);
-        for (String name : new String[] { "user", "actor", "connection", "request" }) {
-            if (known.get(name) == null)
-                known.put(name, message("UNKNOWN"));
-        }
-        return oneLine(EmailTemplates.render(message(key), known));
-
     }
 
     /**

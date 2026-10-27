@@ -1,5 +1,7 @@
 package io.github.ialzamil.guacamole.pam;
 
+import java.net.InetAddress;
+
 /**
  * Reading values as stored in Guacamole's tables and in platform settings,
  * where an empty value means unset.
@@ -68,6 +70,31 @@ public final class Values {
         if (port == null)
             throw new IllegalArgumentException("Invalid port: " + value.trim());
         return port;
+    }
+
+    /**
+     * The name of this server, as sessions and events record it,
+     * "guacamole" if unknown.
+     */
+    public static String hostName() {
+        try {
+            return InetAddress.getLocalHost().getHostName();
+        }
+        catch (Exception e) {
+            return "guacamole";
+        }
+    }
+
+    /**
+     * Refuses what cannot be a host name or address, such as a value with
+     * spaces.
+     *
+     * @throws IllegalArgumentException
+     *     If it cannot be one.
+     */
+    public static void checkHost(String host) {
+        if (!host.matches("[A-Za-z0-9._:\\[\\]-]+"))
+            throw new IllegalArgumentException("not a host name or address.");
     }
 
 }

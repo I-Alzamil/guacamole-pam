@@ -27,6 +27,9 @@ import jakarta.mail.internet.AddressException;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 
+import org.eclipse.angus.mail.smtp.SMTPAddressFailedException;
+import org.eclipse.angus.mail.smtp.SMTPSendFailedException;
+
 import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
@@ -60,6 +63,14 @@ public final class EmailNotifier implements Notifier {
     private final EmailPreferences preferences;
 
     private final EmailLanguages languages;
+
+    /**
+     * The event sent last, and the addresses it was emailed to, so trying
+     * it again emails only the others. Used on the event thread only.
+     */
+    private Event lastEvent;
+
+    private final Set<String> emailed = new HashSet<>();
 
     public EmailNotifier(PamSettings settings, Directory directory, EmailPreferences preferences,
             EmailLanguages languages) {
@@ -198,12 +209,20 @@ public final class EmailNotifier implements Notifier {
         if (config.adminAddress != null && seen.add(config.adminAddress.toLowerCase()))
             recipients.put(config.adminAddress, new Recipient(null, config.textOf(event, null)));
 
+        // Tried again (see Events): those emailed already are not again
+        if (event != lastEvent) {
+            lastEvent = event;
+            emailed.clear();
+        }
+        recipients.keySet().removeAll(emailed);
         if (recipients.isEmpty())
             return;
 
         deliver(config, (session, transport) -> {
-            for (Map.Entry<String, Recipient> recipient : recipients.entrySet())
-                sendOne(session, transport, config, event, recipient.getKey(), recipient.getValue());
+            for (Map.Entry<String, Recipient> recipient : recipients.entrySet()) {
+                sendOne(session, transport, config, event, recipient.getKey(), recipient.getValue(), false);
+                emailed.add(recipient.getKey());
+            }
         });
 
     }
@@ -229,7 +248,7 @@ public final class EmailNotifier implements Notifier {
      * refuses.
      */
     private static void sendOne(Session session, Transport transport, Config config, Event event, String to,
-            Recipient recipient) throws MessagingException {
+            Recipient recipient, boolean strict) throws MessagingException {
         Audience.Role role = recipient.role;
         MimeMessage message = new MimeMessage(session);
         message.setFrom(new InternetAddress(config.from, true));
@@ -244,8 +263,28 @@ public final class EmailNotifier implements Notifier {
             transport.sendMessage(message, message.getAllRecipients());
         }
         catch (SendFailedException e) {
+            // Tried again later if only for now (4xx), skipped for good
+            // otherwise, unless testing
+            if (strict || isTemporary(e))
+                throw e;
             logger.warn("The mail server refused to send to \"{}\": {}", to, e.getMessage());
         }
+    }
+
+    /**
+     * Whether the mail server refused for now only (a 4xx reply, such as
+     * greylisting), not for good.
+     */
+    private static boolean isTemporary(MessagingException e) {
+        for (Exception next = e; next != null; next = next instanceof MessagingException
+                ? ((MessagingException) next).getNextException() : null) {
+            int code = next instanceof SMTPSendFailedException ? ((SMTPSendFailedException) next).getReturnCode()
+                    : next instanceof SMTPAddressFailedException ? ((SMTPAddressFailedException) next).getReturnCode()
+                    : 0;
+            if (code >= 400 && code < 500)
+                return true;
+        }
+        return false;
     }
 
     @FunctionalInterface
@@ -356,7 +395,7 @@ public final class EmailNotifier implements Notifier {
         Event event = Event.of(EventType.TEST).actor(username);
         Recipient recipient = own != null ? new Recipient(Audience.Role.ADMINISTRATOR,
                 config.textOf(event, preferences.getLanguage(username))) : new Recipient(null, config.textOf(event, null));
-        deliver(config, (session, transport) -> sendOne(session, transport, config, event, to, recipient));
+        deliver(config, (session, transport) -> sendOne(session, transport, config, event, to, recipient, true));
         return "A test email was sent to " + to + " through mail server " + config.describe() + ".";
 
     }

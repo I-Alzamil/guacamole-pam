@@ -117,7 +117,7 @@ public final class EmailTemplates {
      * The template with each placeholder replaced by its value, or nothing
      * if it has none.
      */
-    static String render(String template, Map<String, String> values) {
+    public static String render(String template, Map<String, String> values) {
         Matcher matcher = PLACEHOLDER.matcher(template);
         StringBuffer text = new StringBuffer();
         while (matcher.find()) {

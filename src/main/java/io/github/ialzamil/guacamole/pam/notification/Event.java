@@ -1,9 +1,10 @@
 package io.github.ialzamil.guacamole.pam.notification;
 
-import java.net.InetAddress;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+
+import io.github.ialzamil.guacamole.pam.Values;
 
 /**
  * Something PAM did, or saw, reported once to every output (see
@@ -15,7 +16,7 @@ public final class Event {
     /**
      * The name of this server, as events report it.
      */
-    static final String SERVER = serverName();
+    static final String SERVER = Values.hostName();
 
     private final EventType type;
     private final long time = System.currentTimeMillis();
@@ -37,15 +38,6 @@ public final class Event {
 
     public static Event of(EventType type) {
         return new Event(type);
-    }
-
-    private static String serverName() {
-        try {
-            return InetAddress.getLocalHost().getHostName();
-        }
-        catch (Exception e) {
-            return "guacamole";
-        }
     }
 
     /**

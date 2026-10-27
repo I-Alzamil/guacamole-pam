@@ -10,6 +10,7 @@ import jakarta.mail.internet.AddressException;
 import jakarta.mail.internet.InternetAddress;
 
 import io.github.ialzamil.guacamole.pam.Certificates;
+import io.github.ialzamil.guacamole.pam.Values;
 import io.github.ialzamil.guacamole.pam.settings.Setting;
 
 /**
@@ -29,7 +30,7 @@ public final class EmailSettings {
     public static final Setting ENABLED = Setting.bool(Setting.Section.EMAIL, "pam-email-enabled", false);
 
     public static final Setting HOST = Setting.string(Setting.Section.EMAIL, "pam-email-host", 253,
-            EmailSettings::checkHost).requiredWhen(ENABLED);
+            Values::checkHost).requiredWhen(ENABLED);
 
     /**
      * Port of mail submission (RFC 6409), with STARTTLS.
@@ -81,11 +82,6 @@ public final class EmailSettings {
     public static final List<Setting> ALL = Collections.unmodifiableList(Arrays.asList(
             ENABLED, HOST, PORT, SECURITY, CA_CERTIFICATES, USERNAME, PASSWORD, FROM, ADMIN_ADDRESS, LINK,
             TIME_ZONE, LANGUAGE));
-
-    static void checkHost(String host) {
-        if (!host.matches("[A-Za-z0-9._:\\[\\]-]+"))
-            throw new IllegalArgumentException("not a host name or address.");
-    }
 
     /**
      * Refuses what is not one email address, such as "pam@example.org".

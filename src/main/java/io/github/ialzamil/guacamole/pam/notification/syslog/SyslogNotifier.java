@@ -45,7 +45,8 @@ public final class SyslogNotifier implements Notifier {
     private final PamSettings settings;
 
     /**
-     * The connection events are sent over, or null until one is sent.
+     * The connection events are sent over, or null until one is sent,
+     * or once closed. Guarded by this object.
      */
     private Sender sender;
 
@@ -269,13 +270,23 @@ public final class SyslogNotifier implements Notifier {
         return "syslog";
     }
 
+    /**
+     * Whether syslog is on, closing the connection once it is off.
+     */
     @Override
-    public boolean isEnabled() throws GuacamoleException {
-        return (Boolean) settings.get(SyslogSettings.ENABLED);
+    public synchronized boolean isEnabled() throws GuacamoleException {
+        boolean enabled = (Boolean) settings.get(SyslogSettings.ENABLED);
+        if (!enabled)
+            close();
+        return enabled;
     }
 
+    /**
+     * Sends an event, holding the connection for it: closing it (at
+     * shutdown) waits.
+     */
     @Override
-    public void send(Event event) throws GuacamoleException {
+    public synchronized void send(Event event) throws GuacamoleException {
 
         Config config = new Config(settings);
         byte[] message = SyslogFormat.format(event, config.facility, config.appName);

@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.List;
 
 import io.github.ialzamil.guacamole.pam.Certificates;
+import io.github.ialzamil.guacamole.pam.Values;
 import io.github.ialzamil.guacamole.pam.settings.Setting;
 
 /**
@@ -28,7 +29,7 @@ public final class SyslogSettings {
     public static final Setting ENABLED = Setting.bool(Setting.Section.SYSLOG, "pam-syslog-enabled", false);
 
     public static final Setting HOST = Setting.string(Setting.Section.SYSLOG, "pam-syslog-host", 253,
-            SyslogSettings::checkHost).requiredWhen(ENABLED);
+            Values::checkHost).requiredWhen(ENABLED);
 
     public static final Setting PORT = Setting.integer(Setting.Section.SYSLOG, "pam-syslog-port", TLS_PORT, 1, 65535);
 
@@ -56,14 +57,6 @@ public final class SyslogSettings {
 
     public static final List<Setting> ALL = Collections.unmodifiableList(Arrays.asList(
             ENABLED, HOST, PORT, TRANSPORT, CA_CERTIFICATES, FACILITY, APP_NAME));
-
-    /**
-     * Refuses what cannot be a host name or address.
-     */
-    static void checkHost(String host) {
-        if (!host.matches("[A-Za-z0-9._:\\[\\]-]+"))
-            throw new IllegalArgumentException("not a host name or address.");
-    }
 
     /**
      * The number of a facility's name.

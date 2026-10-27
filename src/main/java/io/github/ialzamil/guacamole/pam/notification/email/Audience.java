@@ -15,7 +15,7 @@ import io.github.ialzamil.guacamole.pam.notification.Event;
  *
  * <ul>
  * <li>the user it concerns ({@link Role#OWN}): when their request is
- * granted or denied, and when their checkout expires or is ended by
+ * granted, denied or rejected, and when their checkout expires or is ended by
  * someone else;</li>
  * <li>the approvers of its connection ({@link Role#APPROVER}): a request
  * awaiting their approval, and another approver's decision on one;</li>
@@ -93,6 +93,7 @@ final class Audience {
         String user = event.getUser();
         String actor = event.getActor();
         boolean byAnother = actor != null && !actor.equals(user);
+        boolean notByThem = user != null && !user.equals(actor);
 
         switch (event.getType()) {
 
@@ -103,7 +104,7 @@ final class Audience {
 
             case REQUEST_GRANTED:
             case REQUEST_DENIED:
-                if (byAnother)
+                if (notByThem)
                     candidates.get(Role.OWN).add(user);
                 approvers(event, source, candidates);
                 break;

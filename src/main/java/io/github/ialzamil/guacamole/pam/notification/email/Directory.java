@@ -15,6 +15,7 @@ import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
 
 import io.github.ialzamil.guacamole.pam.PamAttributes;
+import io.github.ialzamil.guacamole.pam.Values;
 import io.github.ialzamil.guacamole.pam.approval.ApproverDirectory;
 import io.github.ialzamil.guacamole.pam.db.PamDatabase;
 import io.github.ialzamil.guacamole.pam.db.SqlDialect;
@@ -34,12 +35,14 @@ public class Directory {
 
     private final SqlDialect dialect;
 
-    private final ApproverDirectory approvers;
+    /**
+     * Identifier of the root connection group, containing every connection.
+     */
+    private static final String ROOT_GROUP = "ROOT";
 
-    public Directory(PamDatabase database, ApproverDirectory approvers) {
+    public Directory(PamDatabase database) {
         this.database = database;
         this.dialect = database.getDialect();
-        this.approvers = approvers;
     }
 
     /**
@@ -64,43 +67,97 @@ public class Directory {
 
     /**
      * Usernames of the users whose approval permission covers the given
-     * connection, as {@link ApproverDirectory} decides it.
+     * connection, as {@link ApproverDirectory} decides it: the grants of
+     * enabled users and groups listing the connection, or a connection
+     * group above it, read at once, then the members of the groups.
      */
     public Set<String> getApproversOf(String connectionIdentifier) throws GuacamoleException {
 
-        Set<String> candidates;
+        Integer id = Values.parseId(connectionIdentifier);
+        if (id == null)
+            return Collections.emptySet();
+
         try (Connection connection = database.getConnection()) {
 
-            // Users and groups giving the permission at all
-            Set<Integer> entities = new HashSet<>();
-            try (PreparedStatement statement = connection.prepareStatement(
-                    "SELECT u.entity_id FROM guacamole_user_attribute a JOIN guacamole_user u ON u.user_id = a.user_id"
-                  + " WHERE a.attribute_name = ? AND a.attribute_value = 'true'"
-                  + " UNION SELECT g.entity_id FROM guacamole_user_group_attribute a"
-                  + " JOIN guacamole_user_group g ON g.user_group_id = a.user_group_id"
-                  + " WHERE a.attribute_name = ? AND a.attribute_value = 'true'")) {
-                statement.setString(1, PamAttributes.APPROVER);
-                statement.setString(2, PamAttributes.APPROVER);
-                try (ResultSet results = statement.executeQuery()) {
-                    while (results.next())
-                        entities.add(results.getInt(1));
-                }
+            Set<String> groupsAbove = getGroupsAbove(connection, id);
+            Map<Integer, Map<String, String>> grants = new HashMap<>();
+            readGrants(connection, "SELECT u.entity_id, a.attribute_name, a.attribute_value"
+                  + " FROM guacamole_user_attribute a JOIN guacamole_user u ON u.user_id = a.user_id"
+                  + " WHERE u.disabled = " + dialect.bool(false), grants);
+            readGrants(connection, "SELECT g.entity_id, a.attribute_name, a.attribute_value"
+                  + " FROM guacamole_user_group_attribute a JOIN guacamole_user_group g ON g.user_group_id = a.user_group_id"
+                  + " WHERE g.disabled = " + dialect.bool(false), grants);
+
+            Set<Integer> covering = new HashSet<>();
+            for (Map.Entry<Integer, Map<String, String>> grant : grants.entrySet()) {
+                Map<String, String> attributes = grant.getValue();
+                if (!"true".equals(attributes.get(PamAttributes.APPROVER)))
+                    continue;
+                boolean covers = ApproverDirectory.parseIdentifiers(attributes.get(PamAttributes.APPROVER_CONNECTIONS))
+                        .contains(connectionIdentifier);
+                for (String group : ApproverDirectory.parseIdentifiers(
+                        attributes.get(PamAttributes.APPROVER_CONNECTION_GROUPS)))
+                    covers |= groupsAbove.contains(group);
+                if (covers)
+                    covering.add(grant.getKey());
             }
-            candidates = getUsersOf(connection, entities);
+            return getUsersOf(connection, covering);
 
         }
         catch (SQLException e) {
             throw new GuacamoleServerException("Unable to read the approvers.", e);
         }
 
-        // Each decided as when they approve, so emails go to those who can
-        Set<String> qualified = new HashSet<>();
-        for (String candidate : candidates) {
-            if (approvers.getApprovableConnections(candidate, Collections.<String>emptySet())
-                    .contains(connectionIdentifier))
-                qualified.add(candidate);
+    }
+
+    /**
+     * Adds the approval attributes the given query reads (entity, name,
+     * value), by entity.
+     */
+    private static void readGrants(Connection connection, String query, Map<Integer, Map<String, String>> grants)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(query + " AND a.attribute_name IN (?, ?, ?)")) {
+            statement.setString(1, PamAttributes.APPROVER);
+            statement.setString(2, PamAttributes.APPROVER_CONNECTIONS);
+            statement.setString(3, PamAttributes.APPROVER_CONNECTION_GROUPS);
+            try (ResultSet results = statement.executeQuery()) {
+                while (results.next())
+                    grants.computeIfAbsent(results.getInt(1), entity -> new HashMap<>())
+                            .put(results.getString(2), results.getString(3));
+            }
         }
-        return qualified;
+    }
+
+    /**
+     * Identifiers of the connection groups the connection is within, at
+     * any depth, "ROOT" included.
+     */
+    private static Set<String> getGroupsAbove(Connection connection, int id) throws SQLException {
+
+        Set<String> groups = new HashSet<>();
+        groups.add(ROOT_GROUP);
+
+        Integer parent;
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT parent_id FROM guacamole_connection WHERE connection_id = ?")) {
+            statement.setInt(1, id);
+            try (ResultSet results = statement.executeQuery()) {
+                parent = results.next() ? (Integer) results.getObject(1) : null;
+            }
+        }
+
+        // Up to the root, a group seen twice ending it
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT parent_id FROM guacamole_connection_group WHERE connection_group_id = ?")) {
+            while (parent != null && groups.add(parent.toString())) {
+                statement.setInt(1, parent);
+                try (ResultSet results = statement.executeQuery()) {
+                    parent = results.next() ? (Integer) results.getObject(1) : null;
+                }
+            }
+        }
+
+        return groups;
 
     }
 

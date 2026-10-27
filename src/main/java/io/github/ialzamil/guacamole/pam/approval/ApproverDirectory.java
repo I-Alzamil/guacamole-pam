@@ -269,7 +269,7 @@ public class ApproverDirectory {
      * Reads a list of connection identifiers stored as a JSON array.
      * Anything else counts as no connections.
      */
-    static List<String> parseIdentifiers(String value) {
+    public static List<String> parseIdentifiers(String value) {
         if (value == null || value.trim().isEmpty())
             return Collections.emptyList();
         try {

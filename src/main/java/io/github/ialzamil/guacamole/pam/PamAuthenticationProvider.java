@@ -184,7 +184,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         badgePreferences = new BadgePreferences(database);
         emailLanguages = new EmailLanguages(database, coordination, events);
         emailPreferences = new EmailPreferences(database, emailLanguages);
-        emailDirectory = new Directory(database, approvers);
+        emailDirectory = new Directory(database);
         events.add(new EmailNotifier(settings, emailDirectory, emailPreferences, emailLanguages));
         checkoutService = new CheckoutService(connections, checkouts, platforms, approvals, rotationService,
                 settings, events);

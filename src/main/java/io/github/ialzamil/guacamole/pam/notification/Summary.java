@@ -1,73 +1,59 @@
 package io.github.ialzamil.guacamole.pam.notification;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
+
+import io.github.ialzamil.guacamole.pam.notification.email.EmailLanguage;
+import io.github.ialzamil.guacamole.pam.notification.email.EmailLanguages;
+import io.github.ialzamil.guacamole.pam.notification.email.EmailTemplates;
+
 /**
  * What an event says, in one sentence: "User "bob" checked out "web01".",
- * as outputs give it before its details.
+ * as outputs give it before its details: the SUMMARY_ message of its type
+ * in a language (see {@link EmailLanguage}), English as built in unless
+ * another is given.
  */
 public final class Summary {
+
+    private static final EmailLanguage ENGLISH = EmailLanguages.getBuiltIn();
 
     private Summary() {
     }
 
     public static String of(Event event) {
+        return of(event, ENGLISH::message);
+    }
 
-        String user = quoted(event.getUser());
-        String actor = quoted(event.getActor());
-        String connection = quoted(event.getConnectionName() != null ? event.getConnectionName()
-                : event.getConnectionIdentifier());
-        String request = event.getRequestId() == null ? "A request" : "Request " + event.getRequestId();
+    /**
+     * The sentence of the event from the given messages, by key, values
+     * unknown said so ("UNKNOWN").
+     */
+    public static String of(Event event, Function<String, String> messages) {
 
-        switch (event.getType()) {
-            case ROTATION_SUCCEEDED:
-                return "The password of " + connection + " was rotated.";
-            case ROTATION_FAILED:
-                return "The rotation of the password of " + connection + " failed.";
-            case REQUEST_SUBMITTED:
-                return "User " + user + " requested " + connection + ", which awaits approval.";
-            case REQUEST_APPROVED:
-                return "User " + actor + " approved the request of " + user + " for " + connection
-                        + ", which needs more approvals.";
-            case REQUEST_GRANTED:
-                return "User " + actor + " approved the request of " + user + " for " + connection + ".";
-            case REQUEST_DENIED:
-                return event.getActor() == null || event.getActor().equals(event.getUser())
-                        ? request + " of " + user + " for " + connection + " was rejected."
-                        : "User " + actor + " denied the request of " + user + " for " + connection + ".";
-            case REQUEST_CANCELLED:
-                return request + " of " + user + " for " + connection + " was cancelled.";
-            case CHECKOUT_STARTED:
-                return "User " + user + " checked out " + connection + ".";
-            case CHECKOUT_EXTENDED:
-                return "The checkout of " + connection + " by " + user + " was extended.";
-            case CHECKOUT_RELEASED:
-                return "User " + user + " released " + connection + ".";
-            case CHECKOUT_EXPIRED:
-                return "The checkout of " + connection + " by " + user + " expired.";
-            case CHECKOUT_REVOKED:
-                return "The checkout of " + connection + " by " + user + " was ended"
-                        + (event.getActor() == null ? "" : " by " + actor) + ".";
-            case PASSWORD_REVEALED:
-                return "User " + user + " viewed the password of " + connection + ".";
-            case SESSION_STARTED:
-                return "User " + user + " connected to " + connection + ".";
-            case SESSION_ENDED:
-                return "User " + user + " disconnected from " + connection + ".";
-            case SERVER_STANDBY:
-                return "Guacamole server \"" + event.getServer() + "\" is on standby: PAM is read-only there.";
-            case SERVER_ACTIVE:
-                return "PAM works again on Guacamole server \"" + event.getServer() + "\".";
-            case SETTINGS_CHANGED:
-                return "User " + actor + " changed the PAM settings.";
-            case TEST:
-                return "A test from the PAM settings page, sent by " + actor + ".";
-            default:
-                return event.getType().getId();
-        }
+        String key;
+        boolean byAnother = event.getActor() != null && !event.getActor().equals(event.getUser());
+        if (event.getType() == EventType.REQUEST_DENIED && !byAnother)
+            key = "SUMMARY_REQUEST_REJECTED";
+        else if (event.getType() == EventType.CHECKOUT_REVOKED && event.getActor() != null)
+            key = "SUMMARY_CHECKOUT_REVOKED_BY";
+        else
+            key = "SUMMARY_" + event.getType().name();
+
+        String unknown = messages.apply("UNKNOWN");
+        Map<String, String> values = new HashMap<>();
+        values.put("user", orElse(event.getUser(), unknown));
+        values.put("actor", orElse(event.getActor(), unknown));
+        values.put("connection", orElse(event.getConnectionName() != null ? event.getConnectionName()
+                : event.getConnectionIdentifier(), unknown));
+        values.put("request", orElse(event.getRequestId() == null ? null : event.getRequestId().toString(), unknown));
+        values.put("server", event.getServer());
+        return EmailTemplates.render(messages.apply(key), values);
 
     }
 
-    private static String quoted(String value) {
-        return value == null ? "(unknown)" : "\"" + value + "\"";
+    private static String orElse(String value, String otherwise) {
+        return value != null ? value : otherwise;
     }
 
 }

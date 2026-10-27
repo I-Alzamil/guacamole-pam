@@ -138,7 +138,7 @@ public final class EmailLanguage {
     /**
      * The message of a key, or the key itself if there is none.
      */
-    String message(String key) {
+    public String message(String key) {
         String message = messages.get(key);
         return message != null ? message : key;
     }

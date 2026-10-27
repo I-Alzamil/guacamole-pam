@@ -65,6 +65,9 @@ public class AudienceTest {
                 audience(Event.of(EventType.REQUEST_GRANTED).user("bob").actor("ann").connection("7", "web")));
         assertEquals("abe=approvals admin=everything bob=own root=approvals",
                 audience(Event.of(EventType.REQUEST_DENIED).user("bob").actor("ann").connection("7", "web")));
+        // Rejected as it overlaps a reservation: by no one, still theirs
+        assertEquals("abe=approvals admin=everything ann=approvals bob=own root=approvals",
+                audience(Event.of(EventType.REQUEST_DENIED).user("bob").connection("7", "web")));
         // A partial approval: not yet the requester's concern
         assertEquals("abe=approvals admin=everything root=approvals",
                 audience(Event.of(EventType.REQUEST_APPROVED).user("bob").actor("ann").connection("7", "web")));

@@ -339,10 +339,13 @@ public class RequestService {
                     rejected, Values.forLog(target.getName()), request.getId(), request.getUsername(), approver);
             ApprovalRequest overlapping = approvals.get(rejected);
             if (overlapping != null)
-                events.publish(Event.of(EventType.REQUEST_DENIED).user(overlapping.getUsername()).actor(approver)
+                // Rejected by no one: no actor, so it reads as rejected
+                events.publish(Event.of(EventType.REQUEST_DENIED).user(overlapping.getUsername())
                         .connection(request.getConnectionIdentifier(), target.getName()).request(rejected)
                         .period(overlapping.getStarts(), overlapping.getEnds())
-                        .reason("It overlaps access reserved for someone else."));
+                        .reason("It overlaps access reserved for someone else.")
+                        .detail("Request " + request.getId() + " of \"" + request.getUsername() + "\" was approved by \""
+                                + approver + "\" for that time."));
         }
     }
 

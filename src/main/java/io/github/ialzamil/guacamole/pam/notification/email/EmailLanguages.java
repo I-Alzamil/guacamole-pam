@@ -51,6 +51,11 @@ public class EmailLanguages {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
+    /**
+     * Longest code, as its columns hold.
+     */
+    static final int MAX_CODE = 16;
+
     private static final int MAX_NAME = 64;
 
     private static final int MAX_MESSAGE = 1000;
@@ -187,8 +192,9 @@ public class EmailLanguages {
      *     If it is not one.
      */
     public static void checkCode(String code) {
-        if (code == null || !code.matches("[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,2}"))
-            throw new IllegalArgumentException("not a language code, such as en, fr or pt-BR.");
+        if (code == null || code.length() > MAX_CODE || !code.matches("[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,2}"))
+            throw new IllegalArgumentException("not a language code, such as en, fr or pt-BR, of at most " + MAX_CODE
+                    + " characters.");
     }
 
     /**
