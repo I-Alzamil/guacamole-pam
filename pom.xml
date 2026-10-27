@@ -41,8 +41,12 @@
             <resource>
                 <directory>src/main/resources</directory>
                 <filtering>false</filtering>
+                <!-- The scripts and styles go in merged and minified (see
+                     minify-maven-plugin), as the manifest loads them -->
                 <excludes>
                     <exclude>guac-manifest.json</exclude>
+                    <exclude>**/*.js</exclude>
+                    <exclude>**/*.css</exclude>
                 </excludes>
             </resource>
             <resource>
@@ -79,6 +83,11 @@
                             <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
                         </manifest>
                     </archive>
+                    <!-- Merged but not minified, which nothing loads -->
+                    <excludes>
+                        <exclude>pam.js</exclude>
+                        <exclude>pam.css</exclude>
+                    </excludes>
                 </configuration>
             </plugin>
 
