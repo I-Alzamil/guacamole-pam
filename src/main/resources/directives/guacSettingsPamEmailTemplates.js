@@ -38,6 +38,14 @@ angular.module('guacPam').directive('guacSettingsPamEmailTemplates', [function g
                 'approvals-required', 'starts', 'ends', 'reason', 'detail', 'client-address', 'server', 'time'];
 
             /**
+             * The translation key describing a placeholder: done here, as
+             * Angular expressions have no regular expressions.
+             */
+            $scope.placeholderKey = function placeholderKey(placeholder) {
+                return 'PAM_EMAIL_TEMPLATES.PLACEHOLDER_' + placeholder.replace(/-/g, '_').toUpperCase();
+            };
+
+            /**
              * Every language, or null while loading.
              */
             $scope.languages = null;
