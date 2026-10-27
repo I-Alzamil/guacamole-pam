@@ -630,8 +630,8 @@ Guacamole profile. It's off by default.
 - Nobody is emailed what they did themselves. Each user receives an event
   once, and can turn each kind off under **Preferences → Email
   notifications**, which shows the address emails go to.
-- **Also send administrators' emails to** adds an address receiving what
-  administrators do, such as a security team's; **Guacamole address** adds
+- **Additional recipient** adds an address receiving every event, as
+  administrators do, such as a security team's mailbox; **Guacamole address** adds
   links to Guacamole, such as to the Approvals tab.
 
 Emails are plain text, and never contain a password. The connection to the
@@ -642,6 +642,43 @@ them); unencrypted is offered last. The mail server's password is encrypted
 like other stored secrets. **Send a test email** sends one to your own
 address with the saved settings, and says why it couldn't. Delivery is as
 for syslog: queued, and tried again for a few seconds.
+
+#### Email templates and languages
+
+The **Email Templates** tab (administrators only) holds the languages emails
+are written in. English is built in; others are added there, or imported.
+Each user receives their emails in the language they choose under
+**Preferences → Email notifications**, or in the **Default language** of
+the PAM Settings tab, which also applies to the extra address. A language
+whose users are deleted leaves them the default one.
+
+Each language has:
+
+- **Templates**: a subject and text for each kind of email: requests
+  awaiting approval, decisions, access ending, and everything else.
+  Placeholders such as `{user}`, `{connection}`, `{reason}` or `{starts}`
+  are replaced by the event's values, as plain text (a value is never read
+  as a template); `{summary}`, `{details}`, `{action}` (what to do next,
+  with a link), `{link}` and `{why}` (why the recipient receives it, and
+  how to stop) are the parts of the built-in text. The tab lists every
+  placeholder, refuses a mistyped one, and previews each kind with a
+  sample event. Write `{{` and `}}` for a brace.
+- **Messages**: what PAM writes into them, in that language: the sentence
+  of each event, the labels of the details, what to do next and why.
+
+A field left empty takes English (for English, the built-in text), shown in
+it, so a partial translation still sends complete emails. Details PAM
+records as text, such as a rotation's error, stay in English, as in the
+log. Times are shown in the **Time zone** of the PAM Settings tab (UTC
+unless set), with their offset from UTC.
+
+**Export** saves a language as a JSON file, complete, to translate
+elsewhere; **Import** adds one from such a file, asking before replacing a
+language of the same code. English can be changed, and **Restore built-in**
+brings back what the extension ships; it can't be deleted. Languages are
+stored in the database (`pam_email_language`), so every server has them
+within seconds; each change is logged, and sent to syslog and
+administrators like other setting changes.
 
 Approvers and administrators are found in Guacamole's database: users and
 groups with the approval permission or the **Administer system**

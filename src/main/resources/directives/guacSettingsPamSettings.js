@@ -77,9 +77,16 @@ angular.module('guacPam').directive('guacSettingsPamSettings', [function guacSet
              */
             $scope.standby = null;
 
+            /**
+             * The names of the languages emails are written in, by code.
+             */
+            $scope.languages = {};
+
             pamService.getServer().then(function serverRead(server) {
                 $scope.standby = server.standby;
+                $scope.languages = server.emailLanguages || {};
             }, angular.noop);
+
 
             /**
              * The translation key part naming a setting:
@@ -98,13 +105,15 @@ angular.module('guacPam').directive('guacSettingsPamSettings', [function guacSet
 
             /**
              * A value as shown: "Yes" or "No" for a yes/no, an option's
-             * label, "None" for no text, else as is.
+             * label, "None" for no text, a language's name, else as is.
              */
             $scope.label = function label(entry, value) {
                 if (entry.type === 'BOOLEAN')
                     return value ? 'PAM_SETTINGS.INFO_YES' : 'PAM_SETTINGS.INFO_NO';
                 if (entry.type === 'ENUM')
                     return $scope.optionLabel(entry, value);
+                if (entry.name === 'pam-email-language')
+                    return $scope.languages[value] || value;
                 if (value === null || value === undefined || value === '')
                     return 'PAM_SETTINGS.INFO_NONE';
                 return String(value);

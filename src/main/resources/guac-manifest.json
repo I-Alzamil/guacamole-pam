@@ -49,6 +49,7 @@
         "templates/settingsPamApprovals.html": "text/html",
         "templates/settingsPamHa.html": "text/html",
         "templates/settingsPamSettings.html": "text/html",
+        "templates/settingsPamEmailTemplates.html": "text/html",
         "templates/pamApprovalPermissions.html": "text/html",
         "templates/pamSessionPassword.html": "text/html",
         "templates/pamPlatformImport.html": "text/html",

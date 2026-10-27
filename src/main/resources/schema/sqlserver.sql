@@ -180,6 +180,7 @@ CREATE TABLE pam_user_preference (
   admin_email    bit            NOT NULL DEFAULT 1,
   approval_email bit            NOT NULL DEFAULT 1,
   own_email      bit            NOT NULL DEFAULT 1,
+  email_language nvarchar(16),
 
   CONSTRAINT pam_user_preference_pkey PRIMARY KEY (username)
 
@@ -225,6 +226,19 @@ CREATE TABLE pam_setting (
   modified_by   nvarchar(128),
 
   CONSTRAINT pam_setting_pkey PRIMARY KEY (name)
+
+);
+
+IF OBJECT_ID(N'pam_email_language', N'U') IS NULL
+CREATE TABLE pam_email_language (
+
+  code          nvarchar(16)    NOT NULL,
+  name          nvarchar(64)    NOT NULL,
+  content       nvarchar(max)   NOT NULL,
+  modified      datetime2(3)    NOT NULL DEFAULT SYSUTCDATETIME(),
+  modified_by   nvarchar(128),
+
+  CONSTRAINT pam_email_language_pkey PRIMARY KEY (code)
 
 );
 

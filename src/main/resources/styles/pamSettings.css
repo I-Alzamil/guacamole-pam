@@ -1183,6 +1183,51 @@ a.button.disabled {
     border-bottom: 1px solid rgba(0, 0, 0, 0.125);
 }
 
+.pam-placeholders {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.2em 1em;
+    margin: 0.5em 0 1em;
+    font-size: 0.9em;
+    max-width: 48em;
+}
+
+.pam-placeholders dd {
+    margin: 0;
+}
+
+.pam-email-templates-header {
+    margin: 2em 0 0.5em;
+    padding-bottom: 0.35em;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.pam-email-kind h4 {
+    margin: 1.5em 0 0.25em;
+}
+
+.pam-email-preview {
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    padding: 0.5em 0.75em;
+    margin: 0 0 1em;
+    max-width: 48em;
+}
+
+.pam-email-preview-subject {
+    font-weight: bold;
+    margin: 0 0 0.5em;
+}
+
+.pam-email-preview pre {
+    white-space: pre-wrap;
+    margin: 0;
+    font-family: inherit;
+}
+
+.pam-email-messages input[type="text"] {
+    width: 36em;
+}
+
 .pam-setting-section-actions {
     text-align: left;
     margin-bottom: 1em;

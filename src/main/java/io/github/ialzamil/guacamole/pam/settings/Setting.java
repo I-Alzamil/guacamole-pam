@@ -71,7 +71,14 @@ public final class Setting {
      * A line of text of at most the given length, none by default.
      */
     public static Setting string(Section section, String name, int maxLength, Check check) {
-        return new Setting(section, name, Type.STRING, null, null, maxLength, null, check, null);
+        return string(section, name, null, maxLength, check);
+    }
+
+    /**
+     * A line of text of at most the given length, with its default.
+     */
+    public static Setting string(Section section, String name, String defaultValue, int maxLength, Check check) {
+        return new Setting(section, name, Type.STRING, defaultValue, null, maxLength, null, check, null);
     }
 
     /**

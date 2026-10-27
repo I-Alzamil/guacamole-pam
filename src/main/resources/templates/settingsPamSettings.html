@@ -19,7 +19,11 @@
                             <input ng-if="entry.type === 'INTEGER'" type="number" id="pam-setting-{{ entry.name }}"
                                    name="{{ entry.name }}" required step="1" ng-min="entry.minimum" ng-max="entry.maximum"
                                    ng-model="values[entry.name]">
-                            <input ng-if="entry.type === 'STRING'" type="text" id="pam-setting-{{ entry.name }}"
+                            <select ng-if="entry.name === 'pam-email-language'" id="pam-setting-{{ entry.name }}"
+                                    ng-model="values[entry.name]"
+                                    ng-options="code as name for (code, name) in languages"></select>
+                            <input ng-if="entry.type === 'STRING' && entry.name !== 'pam-email-language'" type="text"
+                                   id="pam-setting-{{ entry.name }}"
                                    name="{{ entry.name }}" ng-maxlength="entry.maximum" ng-model="values[entry.name]">
                             <textarea ng-if="entry.type === 'TEXT'" id="pam-setting-{{ entry.name }}" rows="6"
                                       name="{{ entry.name }}" ng-maxlength="entry.maximum" ng-model="values[entry.name]"

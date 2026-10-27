@@ -1,6 +1,6 @@
 /**
  * Adds the "Platforms", "Password Policies", "Password Rotation",
- * "Checkouts" and "PAM Settings" tabs to the settings panel for
+ * "Checkouts", "PAM Settings" and "Email Templates" tabs to the settings panel for
  * administrators, the "Approvals" tab for approvers, and, when the HA module
  * runs, the "High Availability" tab for those who may see the status of the
  * servers, by decorating userPageService.getSettingsPages().
@@ -59,11 +59,16 @@ angular.module('guacPam').config(['$provide', function pamSettingsPageConfig($pr
                             url       : '/settings/pam-approvals',
                             className : 'pam-approvals-page'
                         }));
-                    if (access.administrator)
+                    if (access.administrator) {
                         pages.push(new PageDefinition({
                             name : 'PAM.TAB_SETTINGS',
                             url  : '/settings/pam-settings'
                         }));
+                        pages.push(new PageDefinition({
+                            name : 'PAM.TAB_EMAIL_TEMPLATES',
+                            url  : '/settings/pam-email-templates'
+                        }));
+                    }
                     if (haDataSource)
                         pages.push(new PageDefinition({
                             name : 'PAM_HA.TAB_HA',

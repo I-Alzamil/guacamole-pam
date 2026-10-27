@@ -8,10 +8,13 @@
 
 SETTINGS="$PAM/settings"
 MAIL_PASSWORD='P@ssw0rd-Mail1'
-EMAIL_NAMES='"pam-email-enabled","pam-email-host","pam-email-port","pam-email-security","pam-email-ca-certificates","pam-email-username","pam-email-password","pam-email-from","pam-email-admin-address","pam-email-link"'
 
+# Every setting of the Email sections back to its default
 reset_email() {
-    api PUT "$SETTINGS" "$ADMIN" "$(python3 -I -c "import json,sys;print(json.dumps({n: None for n in json.loads('[' + sys.argv[1] + ']')}))" "$EMAIL_NAMES")" >/dev/null
+    api PUT "$SETTINGS" "$ADMIN" "$(curl -s "$SETTINGS?token=$ADMIN" | python3 -I -c "
+import sys,json
+print(json.dumps({e['name']: None for e in json.load(sys.stdin) if e['section'] == 'EMAIL'}))")" >/dev/null
+    api DELETE "$PAM/email-languages/en" "$ADMIN" >/dev/null
 }
 
 email_set() { api PUT "$SETTINGS" "$ADMIN" "$1"; }
@@ -197,7 +200,7 @@ sleep 1
 api POST "$PAM/approvals/$(pending_id t46-user)/deny" "$APPROVER2" '{"reason":"Not today"}' >/dev/null
 check "a denial goes to the requester" yes "$(mailed t46-user@example.org "User \"t46-approver2\" denied the request of \"t46-user\"")"
 check_contains "...with its reason" 'Reason: Not today\n' \
-    "$(mails text | grep -F "t46-user@example.org|" | grep -F "denied the request" | tail -1 | cut -d'|' -f3-)"
+    "$(mails text | grep -F "t46-user@example.org|" | grep -F "denied the request" | cut -d'|' -f3-)"
 
 api PUT "$PAM/preferences/emails/own" "$USER" '{"wanted":false}' >/dev/null
 check "a user turns their own emails off" False \
@@ -225,6 +228,94 @@ check "the extra address receives what administrators do" yes "$(mailed soc@exam
 check_contains "...saying why" "This address receives what Guacamole administrators receive" \
     "$(mails text | grep -F "soc@example.org|" | tail -1 | cut -d'|' -f3-)"
 api DELETE "$PAM/requests/$GATED/pending" "$NOBODY" >/dev/null
+
+# ---------------------------------------------------------------- templates
+LANGS="$PAM/email-languages"
+section "Email templates: English"
+check "a user cannot read the languages" 403 "$(status_of "$(api GET "$LANGS" "$USER")")"
+check "English is built in, unchanged" "en True False" \
+    "$(json_get "$(api GET "$LANGS" "$ADMIN" | cut -d' ' -f2-)" "' '.join([d[0]['code'], str(d[0]['builtIn']), str(d[0]['changed'])])")"
+check "...exported in the file format, with every kind" "guacamole-pam-email-language 1 approval decision ended other" \
+    "$(json_get "$(api GET "$LANGS/en" "$ADMIN" | cut -d' ' -f2-)" "' '.join([d['format'], str(d['version'])] + list(d['templates']))")"
+R=$(api PUT "$LANGS/en" "$ADMIN" '{"code":"en","name":"English","templates":{"decision":{"body":"Hello {usr}"}}}')
+check_contains "a mistyped placeholder is refused" "400 The text of \"decision\" has an unknown placeholder {usr}." \
+    "$(status_of "$R") $(message_of "$R")"
+R=$(email_set '{"pam-email-time-zone":"Mars/Olympus"}')
+check_contains "...and an unknown time zone" "400 \"pam-email-time-zone\": not a time zone" "$(status_of "$R") $(message_of "$R")"
+R=$(api POST "$LANGS/preview" "$ADMIN" '{"kind":"decision","language":{"code":"en","name":"English","templates":{"decision":{"subject":"Preview {request}"}}}}')
+check "a preview renders a sample, unsaved" "200 Preview 42" "$(status_of "$R") $(json_get "${R#* }" "d['subject']")"
+api PUT "$LANGS/en" "$ADMIN" "$(python3 -I -c "import json;print(json.dumps({'code': 'en', 'name': 'English', 'templates': {'decision': {
+    'subject': 'Your request {request}: {event}',
+    'body': 'Dear {user},\n\n{actor} decided on {connection} at {time}.\nReason: {reason}\n\n{action}\n\nSecurity team {{PAM}}'}}}))")" >/dev/null
+email_set '{"pam-email-time-zone":"Asia/Riyadh"}' >/dev/null
+check "English, changed, is listed so, as whose" "True $GUAC_ADMIN" \
+    "$(json_get "$(api GET "$LANGS" "$ADMIN" | cut -d' ' -f2-)" "' '.join([str(d[0]['changed']), d[0]['modifiedBy']])")"
+api POST "$PAM/requests/$GATED" "$USER" '{"reason":"T46 templated"}' >/dev/null
+sleep 1
+REQUEST=$(pending_id t46-user)
+api POST "$PAM/approvals/$REQUEST/deny" "$APPROVER" '{"reason":"Use the other one"}' >/dev/null
+check "a decision is sent with its kind's subject" yes "$(mailed t46-user@example.org "Your request $REQUEST: request-denied")"
+BODY=$(mails text | grep -F "t46-user@example.org|Your request $REQUEST:" | tail -1 | cut -d'|' -f3-)
+check_contains "...and text, its placeholders replaced, times in the zone set" \
+    "Dear t46-user,\n\nt46-approver decided on t46 gated ssh at $(TZ=Asia/Riyadh date +%Y-%m-%d)" "$BODY"
+check_contains "...the zone named" "+03:00 (Asia/Riyadh).\nReason: Use the other one\n\nhttps://guac.example.org/guacamole/\n" "$BODY"
+check_contains "...doubled braces written once" 'Security team {PAM}' "$BODY"
+check "other kinds keep the built-in template" yes \
+    "$(mailed t46-approver@example.org "[Guacamole PAM] User \"t46-user\" requested \"t46 gated ssh\"")"
+check "restoring English" 204 "$(status_of "$(api DELETE "$LANGS/en" "$ADMIN")")"
+check "...brings the built-in template back" "False [Guacamole PAM] {summary}" \
+    "$(json_get "$(api GET "$LANGS" "$ADMIN" | cut -d' ' -f2-)" "str(d[0]['changed'])") $(json_get "$(api GET "$LANGS/en" "$ADMIN" | cut -d' ' -f2-)" "d['templates']['decision']['subject']")"
+email_set '{"pam-email-time-zone":null}' >/dev/null
+
+# ---------------------------------------------------------------- languages
+section "Email templates: other languages"
+# Gone already unless a check failed
+delete_french() { api DELETE "$LANGS/fr" "$ADMIN" >/dev/null; }
+on_cleanup delete_french
+FRENCH='{"format":"guacamole-pam-email-language","version":1,"code":"fr","name":"Français","messages":{"SUMMARY_REQUEST_DENIED":"\"{actor}\" a refusé la demande de \"{user}\" pour \"{connection}\".","LABEL_REASON":"Motif"},"templates":{"decision":{"subject":"[PAM] {summary}"}}}'
+REFUSED=yes
+for bad in '{"code":"french","name":"x"}' '{"code":"fr","name":""}' '{"code":"fr","name":"x","messages":{"NOPE":"x"}}' '{"code":"fr","name":"x","templates":{"weekly":{"subject":"x"}}}' '{"format":"platforms","code":"fr","name":"x"}'; do
+    R=$(api PUT "$LANGS/fr" "$ADMIN" "$bad")
+    [ "$(status_of "$R")" = 400 ] || REFUSED="no: $bad -> $R"
+done
+check "invalid languages are refused: a bad code, no name, an unknown message or kind, another format" yes "$REFUSED"
+check "a file of a language is imported" 200 "$(status_of "$(api PUT "$LANGS/fr" "$ADMIN" "$FRENCH")")"
+check "...listed after English" "en fr Français False" \
+    "$(json_get "$(api GET "$LANGS" "$ADMIN" | cut -d' ' -f2-)" "' '.join([d[0]['code'], d[1]['code'], d[1]['name'], str(d[1]['builtIn'])])")"
+check "...offered to users" "Français" "$(json_get "$(api GET "$PAM/access" "$USER" | cut -d' ' -f2-)" "d['emails']['languages'].get('fr')")"
+check "...exported complete: what it leaves out is English" "Motif Connection" \
+    "$(json_get "$(api GET "$LANGS/fr" "$ADMIN" | cut -d' ' -f2-)" "d['messages']['LABEL_REASON'] + ' ' + d['messages']['LABEL_CONNECTION']")"
+check "a language not offered is refused as a user's choice" 400 "$(status_of "$(api PUT "$PAM/preferences/email-language" "$USER" '{"language":"xx"}')")"
+check "a user chooses French" "204 fr" "$(status_of "$(api PUT "$PAM/preferences/email-language" "$USER" '{"language":"fr"}')") $(json_get "$(api GET "$PAM/access" "$USER" | cut -d' ' -f2-)" "d['emails']['language']")"
+api POST "$PAM/requests/$GATED" "$USER" '{"reason":"T46 french"}' >/dev/null
+sleep 1
+api POST "$PAM/approvals/$(pending_id t46-user)/deny" "$APPROVER" '{"reason":"Non"}' >/dev/null
+check "...and receives the denial in French, with French's template" yes \
+    "$(mailed t46-user@example.org "[PAM] \"t46-approver\" a refusé la demande de \"t46-user\"")"
+BODY=$(mails text | grep -F "t46-user@example.org|[PAM]" | tail -1 | cut -d'|' -f3-)
+check_contains "...its messages French, what it leaves out English" 'Connection: t46 gated ssh\n' "$BODY"
+check_contains "...the French one" 'Motif: Non\n' "$BODY"
+check "...while the approver who chose none receives it in English" yes \
+    "$(mailed t46-approver2@example.org "User \"t46-approver\" denied the request of \"t46-user\"")"
+email_set '{"pam-email-language":"fr"}' >/dev/null
+api PUT "$PAM/preferences/email-language" "$USER" '{"language":null}' >/dev/null
+api POST "$PAM/requests/$GATED" "$USER" '{"reason":"T46 default french"}' >/dev/null
+sleep 1
+api POST "$PAM/approvals/$(pending_id t46-user)/deny" "$APPROVER" '{"reason":"Non"}' >/dev/null
+check "French as the default language: for those who chose none" yes \
+    "$(mailed t46-approver2@example.org "[PAM] \"t46-approver\" a refusé")"
+api PUT "$PAM/preferences/email-language" "$USER" '{"language":"fr"}' >/dev/null
+check "French counts its user" 1 "$(json_get "$(api GET "$LANGS" "$ADMIN" | cut -d' ' -f2-)" "[l['users'] for l in d if l['code']=='fr'][0]")"
+check "English cannot be deleted, only restored" 204 "$(status_of "$(api DELETE "$LANGS/en" "$ADMIN")")"
+check "...and is still there" en "$(json_get "$(api GET "$LANGS" "$ADMIN" | cut -d' ' -f2-)" "d[0]['code']")"
+check "French is deleted" 204 "$(status_of "$(api DELETE "$LANGS/fr" "$ADMIN")")"
+email_set '{"pam-email-language":null}' >/dev/null
+api POST "$PAM/requests/$GATED" "$USER" '{"reason":"T46 after french"}' >/dev/null
+sleep 1
+api POST "$PAM/approvals/$(pending_id t46-user)/deny" "$APPROVER" '{"reason":"No"}' >/dev/null
+check "...and its user receives the default language" yes \
+    "$(mailed t46-user@example.org "[Guacamole PAM] User \"t46-approver\" denied the request of \"t46-user\"")"
+check "...an unknown language is not found" 404 "$(status_of "$(api GET "$LANGS/fr" "$ADMIN")")"
 
 # ---------------------------------------------------------------- off
 section "Turned off"

@@ -1,0 +1,73 @@
+{
+    "format": "guacamole-pam-email-language",
+    "version": 1,
+    "code": "en",
+    "name": "English",
+    "messages": {
+        "SUMMARY_ROTATION_SUCCEEDED": "The password of \"{connection}\" was rotated.",
+        "SUMMARY_ROTATION_FAILED": "The rotation of the password of \"{connection}\" failed.",
+        "SUMMARY_REQUEST_SUBMITTED": "User \"{user}\" requested \"{connection}\", which awaits approval.",
+        "SUMMARY_REQUEST_APPROVED": "User \"{actor}\" approved the request of \"{user}\" for \"{connection}\", which needs more approvals.",
+        "SUMMARY_REQUEST_GRANTED": "User \"{actor}\" approved the request of \"{user}\" for \"{connection}\".",
+        "SUMMARY_REQUEST_DENIED": "User \"{actor}\" denied the request of \"{user}\" for \"{connection}\".",
+        "SUMMARY_REQUEST_REJECTED": "Request {request} of \"{user}\" for \"{connection}\" was rejected.",
+        "SUMMARY_REQUEST_CANCELLED": "Request {request} of \"{user}\" for \"{connection}\" was cancelled.",
+        "SUMMARY_CHECKOUT_STARTED": "User \"{user}\" checked out \"{connection}\".",
+        "SUMMARY_CHECKOUT_EXTENDED": "The checkout of \"{connection}\" by \"{user}\" was extended.",
+        "SUMMARY_CHECKOUT_RELEASED": "User \"{user}\" released \"{connection}\".",
+        "SUMMARY_CHECKOUT_EXPIRED": "The checkout of \"{connection}\" by \"{user}\" expired.",
+        "SUMMARY_CHECKOUT_REVOKED": "The checkout of \"{connection}\" by \"{user}\" was ended.",
+        "SUMMARY_CHECKOUT_REVOKED_BY": "The checkout of \"{connection}\" by \"{user}\" was ended by \"{actor}\".",
+        "SUMMARY_PASSWORD_REVEALED": "User \"{user}\" viewed the password of \"{connection}\".",
+        "SUMMARY_SESSION_STARTED": "User \"{user}\" connected to \"{connection}\".",
+        "SUMMARY_SESSION_ENDED": "User \"{user}\" disconnected from \"{connection}\".",
+        "SUMMARY_SERVER_STANDBY": "Guacamole server \"{server}\" is on standby: PAM is read-only there.",
+        "SUMMARY_SERVER_ACTIVE": "PAM works again on Guacamole server \"{server}\".",
+        "SUMMARY_SETTINGS_CHANGED": "User \"{actor}\" changed the PAM settings.",
+        "SUMMARY_TEST": "A test from the PAM settings page, sent by \"{actor}\".",
+        "UNKNOWN": "(unknown)",
+        "LABEL_CONNECTION": "Connection",
+        "LABEL_USER": "User",
+        "LABEL_BY": "By",
+        "LABEL_REQUEST": "Request",
+        "LABEL_CHECKOUT": "Checkout",
+        "LABEL_SINCE": "Since",
+        "LABEL_FROM": "From",
+        "LABEL_UNTIL": "Until",
+        "LABEL_REASON": "Reason",
+        "LABEL_DETAILS": "Details",
+        "LABEL_CLIENT_ADDRESS": "Client address",
+        "LABEL_SERVER": "Server",
+        "LABEL_TIME": "Time",
+        "DETAIL_GRANTED_NOW": "The access starts now.",
+        "DETAIL_GRANTED_RESERVED": "The access is reserved for the time asked.",
+        "DETAIL_GRANTED_EXTENDED": "The checkout is extended.",
+        "ACTION_APPROVE": "Approve or deny it on the Approvals tab",
+        "ACTION_OPEN": "Open the connection in Guacamole",
+        "ACTION_OPEN_DURING": "Open the connection in Guacamole during that time",
+        "ACTION_REQUEST_AGAIN": "To use it again, request it again in Guacamole",
+        "ACTION_ROTATION": "See the Password Rotation tab",
+        "WHY_OWN": "You receive this about your own requests and access. To stop, turn it off under Preferences > Email notifications in Guacamole.",
+        "WHY_APPROVER": "You receive this as an approver of the connection. To stop, turn it off under Preferences > Email notifications in Guacamole.",
+        "WHY_ADMINISTRATOR": "You receive this as a Guacamole administrator, for everything PAM does. To stop, turn it off under Preferences > Email notifications in Guacamole.",
+        "WHY_ADDRESS": "This address receives what Guacamole administrators receive, as set on the PAM Settings tab."
+    },
+    "templates": {
+        "approval": {
+            "subject": "[Guacamole PAM] {summary}",
+            "body": "{summary}\n\n{details}\n\n{action}\n\n-- \n{why}"
+        },
+        "decision": {
+            "subject": "[Guacamole PAM] {summary}",
+            "body": "{summary}\n\n{details}\n\n{action}\n\n-- \n{why}"
+        },
+        "ended": {
+            "subject": "[Guacamole PAM] {summary}",
+            "body": "{summary}\n\n{details}\n\n{action}\n\n-- \n{why}"
+        },
+        "other": {
+            "subject": "[Guacamole PAM] {summary}",
+            "body": "{summary}\n\n{details}\n\n{action}\n\n-- \n{why}"
+        }
+    }
+}

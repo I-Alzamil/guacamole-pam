@@ -1,104 +1,206 @@
 package io.github.ialzamil.guacamole.pam.notification.email;
 
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 
 import io.github.ialzamil.guacamole.pam.notification.Event;
 import io.github.ialzamil.guacamole.pam.notification.EventType;
-import io.github.ialzamil.guacamole.pam.notification.Summary;
 
 /**
- * The subject and text of the email of an event, as its recipient's role
+ * The subject and text of the email of an event, in one language: from the
+ * template of its kind (see {@link EmailTemplates}), filled with that
+ * language's messages (see {@link EmailLanguages}) as its recipient's role
  * calls for: what happened, its details, what to do next with a link to
  * Guacamole if its address is set, and why they receive it. Plain text,
  * never a password.
  */
 final class EmailText {
 
-    private static final String SUBJECT_PREFIX = "[Guacamole PAM] ";
-
     private static final int MAX_SUBJECT = 150;
 
-    private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss 'UTC'")
-            .withZone(ZoneOffset.UTC);
+    private final String subject;
 
-    private EmailText() {
-    }
+    private final String body;
 
-    static String subject(Event event) {
-        String subject = SUBJECT_PREFIX + Summary.of(event).replaceAll("[\\p{Cntrl}\\u2028\\u2029]+", " ");
-        return subject.length() > MAX_SUBJECT ? subject.substring(0, MAX_SUBJECT - 3) + "..." : subject;
-    }
+    private final String link;
+
+    private final DateTimeFormatter time;
+
+    private final EmailLanguage language;
 
     /**
-     * The text, for a user of the given role, or for the address receiving
-     * what administrators receive if the role is null.
+     * @param language
+     *     The language, complete (see {@link EmailLanguage#over}).
+     *
+     * @param kind
+     *     The kind of email, whose templates are used.
      *
      * @param link
      *     Guacamole's address, such as "https://guac.example.org/guacamole/",
      *     or null if unknown.
+     *
+     * @param zone
+     *     The time zone of the times shown.
      */
-    static String body(Event event, Audience.Role role, String link) {
+    EmailText(EmailLanguage language, EmailTemplates.Kind kind, String link, ZoneId zone) {
+        this.language = language;
+        this.subject = language.template(kind).getSubject();
+        this.body = language.template(kind).getBody();
+        this.link = link;
+        this.time = zone.normalized().equals(ZoneOffset.UTC)
+                ? DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss 'UTC'").withZone(ZoneOffset.UTC)
+                : DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss xxx '('VV')'").withZone(zone);
+    }
 
-        StringBuilder text = new StringBuilder();
-        text.append(Summary.of(event)).append("\n\n");
+    /**
+     * The built-in English of the given kind, with times in UTC.
+     */
+    static EmailText standard(EmailTemplates.Kind kind, String link) {
+        return new EmailText(EmailLanguages.getBuiltIn(), kind, link, ZoneOffset.UTC);
+    }
 
-        line(text, "Connection", event.getConnectionName());
-        line(text, "User", event.getUser());
-        line(text, "By", event.getActor());
-        line(text, "Request", event.getRequestId());
-        line(text, "Checkout", event.getCheckoutId());
-        line(text, event.getType() == EventType.CHECKOUT_STARTED || event.getType() == EventType.CHECKOUT_EXTENDED
-                ? "Since" : "From", time(event.getStarts()));
-        line(text, "Until", time(event.getEnds()));
-        line(text, "Reason", event.getReason());
-        line(text, "Details", event.getDetail());
-        line(text, "Client address", event.getRemoteHost());
-        line(text, "Server", event.getServer());
-        line(text, "Time", time(event.getTime()));
+    /**
+     * The subject: one line, cut at {@link #MAX_SUBJECT} characters.
+     */
+    String subject(Event event, Audience.Role role) {
+        String line = oneLine(EmailTemplates.render(subject, values(event, role))).trim();
+        return line.length() > MAX_SUBJECT ? line.substring(0, MAX_SUBJECT - 3) + "..." : line;
+    }
+
+    /**
+     * The text, for a user of the given role, or for the address receiving
+     * what administrators receive if the role is null. Lines left empty by
+     * placeholders without a value never make more than one blank line.
+     */
+    String body(Event event, Audience.Role role) {
+        String text = EmailTemplates.render(body, values(event, role)).replace("\r\n", "\n")
+                .replaceAll("\n(?:[ \t]*\n){2,}", "\n\n");
+        return text.trim() + "\n";
+    }
+
+    /**
+     * The value of each placeholder, null where the event has none.
+     */
+    private Map<String, String> values(Event event, Audience.Role role) {
+
+        Map<String, String> values = new HashMap<>();
+        values.put("event", event.getType().getId());
+        values.put("user", oneLine(event.getUser()));
+        values.put("actor", oneLine(event.getActor()));
+        values.put("connection", oneLine(event.getConnectionName()));
+        values.put("connection-id", event.getConnectionIdentifier());
+        values.put("request", event.getRequestId() == null ? null : event.getRequestId().toString());
+        values.put("checkout", event.getCheckoutId() == null ? null : event.getCheckoutId().toString());
+        values.put("starts", time(event.getStarts()));
+        values.put("ends", time(event.getEnds()));
+        values.put("reason", oneLine(event.getReason()));
+        values.put("detail", oneLine(detail(event)));
+        values.put("client-address", event.getRemoteHost());
+        values.put("server", event.getServer());
+        values.put("time", time(event.getTime()));
+        values.put("summary", summary(event, values));
+
+        StringBuilder details = new StringBuilder();
+        line(details, "LABEL_CONNECTION", values.get("connection"));
+        line(details, "LABEL_USER", values.get("user"));
+        line(details, "LABEL_BY", values.get("actor"));
+        line(details, "LABEL_REQUEST", values.get("request"));
+        line(details, "LABEL_CHECKOUT", values.get("checkout"));
+        line(details, event.getType() == EventType.CHECKOUT_STARTED || event.getType() == EventType.CHECKOUT_EXTENDED
+                ? "LABEL_SINCE" : "LABEL_FROM", values.get("starts"));
+        line(details, "LABEL_UNTIL", values.get("ends"));
+        line(details, "LABEL_REASON", values.get("reason"));
+        line(details, "LABEL_DETAILS", values.get("detail"));
+        line(details, "LABEL_CLIENT_ADDRESS", values.get("client-address"));
+        line(details, "LABEL_SERVER", values.get("server"));
+        line(details, "LABEL_TIME", values.get("time"));
+        values.put("details", details.toString().trim());
 
         String next = next(event, role);
-        if (next != null || link != null) {
-            text.append('\n');
-            if (next != null)
-                text.append(next);
-            if (link != null)
-                text.append(next != null ? ": " : "").append(link(link, event, role));
-            text.append('\n');
+        String page = link == null ? null : link(link, event, role);
+        values.put("link", page);
+        values.put("action", next == null ? page : page == null ? next : next + ": " + page);
+        values.put("why", message(role == null ? "WHY_ADDRESS" : role == Audience.Role.OWN ? "WHY_OWN"
+                : role == Audience.Role.APPROVER ? "WHY_APPROVER" : "WHY_ADMINISTRATOR"));
+        return values;
+
+    }
+
+    private String message(String key) {
+        return language.message(key);
+    }
+
+    /**
+     * What happened, in one sentence, the values unknown said so.
+     */
+    private String summary(Event event, Map<String, String> values) {
+
+        String key;
+        boolean byAnother = event.getActor() != null && !event.getActor().equals(event.getUser());
+        if (event.getType() == EventType.REQUEST_DENIED && !byAnother)
+            key = "SUMMARY_REQUEST_REJECTED";
+        else if (event.getType() == EventType.CHECKOUT_REVOKED && event.getActor() != null)
+            key = "SUMMARY_CHECKOUT_REVOKED_BY";
+        else
+            key = "SUMMARY_" + event.getType().name();
+
+        Map<String, String> known = new HashMap<>(values);
+        for (String name : new String[] { "user", "actor", "connection", "request" }) {
+            if (known.get(name) == null)
+                known.put(name, message("UNKNOWN"));
         }
-
-        text.append("\n-- \n").append(why(role)).append('\n');
-        return text.toString();
+        return oneLine(EmailTemplates.render(message(key), known));
 
     }
 
-    private static void line(StringBuilder text, String name, Object value) {
+    /**
+     * The event's detail, in the language where PAM knows it: that of a
+     * granted request. Others are as recorded, in English.
+     */
+    private String detail(Event event) {
+        if (event.getType() != EventType.REQUEST_GRANTED)
+            return event.getDetail();
+        return message(event.getCheckoutId() != null ? "DETAIL_GRANTED_EXTENDED"
+                : event.getStarts() != null ? "DETAIL_GRANTED_RESERVED" : "DETAIL_GRANTED_NOW");
+    }
+
+    private void line(StringBuilder text, String label, String value) {
         if (value != null)
-            text.append(name).append(": ").append(String.valueOf(value).replaceAll("[\\r\\n]+", " ")).append('\n');
+            text.append(message(label)).append(": ").append(value).append('\n');
     }
 
-    private static String time(Long time) {
-        return time == null ? null : TIME.format(Instant.ofEpochMilli(time));
+    /**
+     * Line breaks and other control characters as spaces, so a value never
+     * adds lines, nor headers to a subject.
+     */
+    private static String oneLine(String value) {
+        return value == null ? null : value.replaceAll("[\\p{Cntrl}\\u2028\\u2029]+", " ");
+    }
+
+    private String time(Long millis) {
+        return millis == null ? null : time.format(Instant.ofEpochMilli(millis));
     }
 
     /**
      * What the recipient may do next, or null.
      */
-    private static String next(Event event, Audience.Role role) {
+    private String next(Event event, Audience.Role role) {
         switch (event.getType()) {
             case REQUEST_SUBMITTED:
             case REQUEST_APPROVED:
-                return role == Audience.Role.OWN ? null : "Approve or deny it on the Approvals tab";
+                return role == Audience.Role.OWN ? null : message("ACTION_APPROVE");
             case REQUEST_GRANTED:
-                return role == Audience.Role.OWN ? (event.getStarts() != null
-                        ? "Open the connection in Guacamole during that time" : "Open the connection in Guacamole")
-                        : null;
+                return role == Audience.Role.OWN
+                        ? message(event.getStarts() != null ? "ACTION_OPEN_DURING" : "ACTION_OPEN") : null;
             case CHECKOUT_EXPIRED:
             case CHECKOUT_REVOKED:
-                return role == Audience.Role.OWN ? "To use it again, request it again in Guacamole" : null;
+                return role == Audience.Role.OWN ? message("ACTION_REQUEST_AGAIN") : null;
             case ROTATION_FAILED:
-                return "See the Password Rotation tab";
+                return message("ACTION_ROTATION");
             default:
                 return null;
         }
@@ -117,22 +219,6 @@ final class EmailText {
                 return base + "#/settings/pam-rotation";
             default:
                 return base;
-        }
-    }
-
-    private static String why(Audience.Role role) {
-        if (role == null)
-            return "This address receives what Guacamole administrators receive, as set on the PAM Settings tab.";
-        switch (role) {
-            case OWN:
-                return "You receive this about your own requests and access. To stop, turn it off under"
-                        + " Preferences > Email notifications in Guacamole.";
-            case APPROVER:
-                return "You receive this as an approver of the connection. To stop, turn it off under"
-                        + " Preferences > Email notifications in Guacamole.";
-            default:
-                return "You receive this as a Guacamole administrator, for everything PAM does. To stop, turn it"
-                        + " off under Preferences > Email notifications in Guacamole.";
         }
     }
 

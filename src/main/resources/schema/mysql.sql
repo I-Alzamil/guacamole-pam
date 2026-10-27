@@ -166,6 +166,7 @@ CREATE TABLE IF NOT EXISTS pam_user_preference (
   admin_email    boolean       NOT NULL DEFAULT TRUE,
   approval_email boolean       NOT NULL DEFAULT TRUE,
   own_email      boolean       NOT NULL DEFAULT TRUE,
+  email_language varchar(16),
 
   PRIMARY KEY (username)
 
@@ -208,6 +209,18 @@ CREATE TABLE IF NOT EXISTS pam_setting (
   modified_by   varchar(128),
 
   PRIMARY KEY (name)
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS pam_email_language (
+
+  code          varchar(16)   NOT NULL,
+  name          varchar(64)   NOT NULL,
+  content       mediumtext    NOT NULL,
+  modified      datetime(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  modified_by   varchar(128),
+
+  PRIMARY KEY (code)
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

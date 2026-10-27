@@ -99,6 +99,50 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
     };
 
     /**
+     * Every language of emails, English first, with how many users chose
+     * each (administrators only).
+     */
+    service.getEmailLanguages = function getEmailLanguages() {
+        return request('GET', 'email-languages');
+    };
+
+    /**
+     * English as built into the extension, to translate from.
+     */
+    service.getBuiltInEmailLanguage = function getBuiltInEmailLanguage() {
+        return request('GET', 'email-languages/built-in');
+    };
+
+    /**
+     * A language of emails as in effect, complete, as its file exports it.
+     */
+    service.getEmailLanguage = function getEmailLanguage(code) {
+        return request('GET', 'email-languages/' + encodeURIComponent(code));
+    };
+
+    /**
+     * Adds or replaces the language of its code.
+     */
+    service.saveEmailLanguage = function saveEmailLanguage(language) {
+        return request('PUT', 'email-languages/' + encodeURIComponent(language.code), language);
+    };
+
+    /**
+     * Deletes an added language; for English, restores what is built in.
+     */
+    service.deleteEmailLanguage = function deleteEmailLanguage(code) {
+        return request('DELETE', 'email-languages/' + encodeURIComponent(code));
+    };
+
+    /**
+     * The subject and text of a kind of email in a language as given,
+     * unsaved, for a sample event. Resolves with "subject" and "body".
+     */
+    service.previewEmailLanguage = function previewEmailLanguage(language, kind) {
+        return request('POST', 'email-languages/preview', { language : language, kind : kind });
+    };
+
+    /**
      * Sends a test through an output of events ("syslog", "email"), as
      * saved. Resolves with whether it was sent ("sent"), and what was sent
      * where, or why not ("message").
@@ -129,6 +173,14 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
      */
     service.setEmailWanted = function setEmailWanted(kind, wanted) {
         return request('PUT', 'preferences/emails/' + encodeURIComponent(kind), { wanted : wanted });
+    };
+
+    /**
+     * Sets the language of the current user's emails, such as "ar", or the
+     * default one for null.
+     */
+    service.setEmailLanguage = function setEmailLanguage(language) {
+        return request('PUT', 'preferences/email-language', { language : language });
     };
 
     /**

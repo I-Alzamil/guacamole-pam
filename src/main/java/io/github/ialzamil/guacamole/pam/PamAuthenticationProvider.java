@@ -35,6 +35,7 @@ import io.github.ialzamil.guacamole.pam.ha.HaAuthenticationProvider;
 import io.github.ialzamil.guacamole.pam.ha.SharedCoordination;
 import io.github.ialzamil.guacamole.pam.notification.Events;
 import io.github.ialzamil.guacamole.pam.notification.email.Directory;
+import io.github.ialzamil.guacamole.pam.notification.email.EmailLanguages;
 import io.github.ialzamil.guacamole.pam.notification.email.EmailNotifier;
 import io.github.ialzamil.guacamole.pam.notification.email.EmailPreferences;
 import io.github.ialzamil.guacamole.pam.notification.syslog.SyslogNotifier;
@@ -89,6 +90,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     private final Directory emailDirectory;
 
+    private final EmailLanguages emailLanguages;
+
     private final ApprovalService approvalService;
 
     private final SecretMigration secretMigration;
@@ -141,6 +144,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             badgePreferences = null;
             emailPreferences = null;
             emailDirectory = null;
+            emailLanguages = null;
             checkoutService = null;
             requestService = null;
             approvalService = null;
@@ -178,9 +182,10 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         approvals = new ApprovalRepository(database);
         approvers = new ApproverDirectory(database);
         badgePreferences = new BadgePreferences(database);
-        emailPreferences = new EmailPreferences(database);
+        emailLanguages = new EmailLanguages(database, coordination, events);
+        emailPreferences = new EmailPreferences(database, emailLanguages);
         emailDirectory = new Directory(database, approvers);
-        events.add(new EmailNotifier(settings, emailDirectory, emailPreferences));
+        events.add(new EmailNotifier(settings, emailDirectory, emailPreferences, emailLanguages));
         checkoutService = new CheckoutService(connections, checkouts, platforms, approvals, rotationService,
                 settings, events);
         requestService = new RequestService(connections, platforms, checkouts, approvals, rotationService,
@@ -307,6 +312,10 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     public EmailPreferences getEmailPreferences() {
         return emailPreferences;
+    }
+
+    public EmailLanguages getEmailLanguages() {
+        return emailLanguages;
     }
 
     /**

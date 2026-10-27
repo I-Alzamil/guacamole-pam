@@ -1,0 +1,132 @@
+<div class="pam-settings pam-email-templates">
+
+    <!-- The languages -->
+    <div class="settings section">
+        <p>{{ 'PAM_EMAIL_TEMPLATES.HELP_LANGUAGES' | translate }}</p>
+
+        <div class="toolbar">
+            <div class="action-buttons">
+                <button ng-click="newLanguage()" ng-disabled="!builtIn">{{ 'PAM_EMAIL_TEMPLATES.ACTION_NEW' | translate }}</button>
+                <button ng-click="chooseImport()" ng-disabled="!builtIn">{{ 'PAM_EMAIL_TEMPLATES.ACTION_IMPORT' | translate }}</button>
+                <input type="file" accept=".json,application/json" class="pam-email-import" style="display: none">
+            </div>
+        </div>
+
+        <table class="pam-connection-table" ng-class="{loading: !languages}">
+            <thead>
+                <tr>
+                    <th>{{ 'PAM_EMAIL_TEMPLATES.TABLE_HEADER_NAME' | translate }}</th>
+                    <th>{{ 'PAM_EMAIL_TEMPLATES.TABLE_HEADER_CODE' | translate }}</th>
+                    <th>{{ 'PAM_EMAIL_TEMPLATES.TABLE_HEADER_STATE' | translate }}</th>
+                    <th>{{ 'PAM_EMAIL_TEMPLATES.TABLE_HEADER_USERS' | translate }}</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr ng-repeat="language in languages" ng-class="{selected: editing.original === language.code}">
+                    <td dir="auto">{{ language.name }}</td>
+                    <td><code>{{ language.code }}</code></td>
+                    <td>
+                        {{ (language.builtIn ? (language.changed ? 'PAM_EMAIL_TEMPLATES.INFO_BUILT_IN_CHANGED'
+                            : 'PAM_EMAIL_TEMPLATES.INFO_BUILT_IN') : 'PAM_EMAIL_TEMPLATES.INFO_ADDED') | translate }}
+                        <span class="pam-empty" ng-if="language.modified">{{ 'PAM_EMAIL_TEMPLATES.INFO_MODIFIED' | translate:{
+                            USER: language.modifiedBy, DATE: ((language.modified | date:'medium') + ' ' + (language.modified | pamZone)) } }}</span>
+                    </td>
+                    <td>{{ language.users }}</td>
+                    <td class="pam-row-actions">
+                        <button ng-click="editLanguage(language)">{{ 'PAM.ACTION_EDIT' | translate }}</button>
+                        <button ng-click="exportLanguage(language)">{{ 'PAM_EMAIL_TEMPLATES.ACTION_EXPORT' | translate }}</button>
+                        <button class="danger" ng-if="!language.builtIn" ng-click="deleteLanguage(language)">{{ 'PAM.ACTION_DELETE' | translate }}</button>
+                        <button ng-if="language.builtIn && language.changed" ng-click="restoreLanguage(language)">{{
+                            'PAM_EMAIL_TEMPLATES.ACTION_RESTORE' | translate }}</button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- The language being edited -->
+    <div ng-if="editing">
+
+        <h2 class="header" dir="auto">{{ editing.original ? editing.language.name
+            : ('PAM_EMAIL_TEMPLATES.SECTION_HEADER_NEW' | translate) }}</h2>
+        <div class="settings section">
+            <form name="languageForm" ng-submit="save()" novalidate autocomplete="off">
+
+                <table class="properties pam-setting-table">
+                    <tr>
+                        <th><label for="pam-email-language-code">{{ 'PAM_EMAIL_TEMPLATES.FIELD_HEADER_CODE' | translate }}</label></th>
+                        <td>
+                            <input type="text" id="pam-email-language-code" ng-model="editing.language.code" required
+                                   ng-disabled="!!editing.original" ng-pattern="/^[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,2}$/" maxlength="16">
+                            <p class="pam-setting-help">{{ 'PAM_EMAIL_TEMPLATES.HELP_CODE' | translate }}</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="pam-email-language-name">{{ 'PAM_EMAIL_TEMPLATES.FIELD_HEADER_NAME' | translate }}</label></th>
+                        <td>
+                            <input type="text" id="pam-email-language-name" dir="auto" ng-model="editing.language.name" required maxlength="64">
+                            <p class="pam-setting-help">{{ 'PAM_EMAIL_TEMPLATES.HELP_NAME' | translate }}</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- Templates of each kind -->
+                <h3 class="pam-email-templates-header">{{ 'PAM_EMAIL_TEMPLATES.SECTION_HEADER_TEMPLATES' | translate }}</h3>
+                <p class="pam-setting-help">{{ 'PAM_EMAIL_TEMPLATES.HELP_TEMPLATES' | translate }}</p>
+                <dl class="pam-placeholders">
+                    <dt ng-repeat-start="placeholder in placeholders"><code>{{ '{' + placeholder + '}' }}</code></dt>
+                    <dd ng-repeat-end>{{ 'PAM_EMAIL_TEMPLATES.PLACEHOLDER_' + (placeholder.replace('-', '_') | uppercase) | translate }}</dd>
+                </dl>
+
+                <div class="pam-email-kind" ng-repeat="kind in kinds">
+                    <h4>{{ 'PAM_EMAIL_TEMPLATES.KIND_' + (kind | uppercase) | translate }}</h4>
+                    <p class="pam-setting-help">{{ 'PAM_EMAIL_TEMPLATES.HELP_KIND_' + (kind | uppercase) | translate }}</p>
+                    <table class="properties pam-setting-table">
+                        <tr>
+                            <th><label for="pam-email-subject-{{ kind }}">{{ 'PAM_EMAIL_TEMPLATES.FIELD_HEADER_SUBJECT' | translate }}</label></th>
+                            <td><input type="text" id="pam-email-subject-{{ kind }}" dir="auto" maxlength="300"
+                                       ng-model="editing.language.templates[kind].subject"
+                                       placeholder="{{ base.templates[kind].subject }}"></td>
+                        </tr>
+                        <tr>
+                            <th><label for="pam-email-body-{{ kind }}">{{ 'PAM_EMAIL_TEMPLATES.FIELD_HEADER_BODY' | translate }}</label></th>
+                            <td><textarea id="pam-email-body-{{ kind }}" dir="auto" rows="8" maxlength="7000" spellcheck="false"
+                                          ng-model="editing.language.templates[kind].body"
+                                          placeholder="{{ base.templates[kind].body }}"></textarea></td>
+                        </tr>
+                    </table>
+                    <div class="action-buttons pam-setting-section-actions">
+                        <button type="button" ng-click="preview(kind)" ng-disabled="previewing">{{ 'PAM_EMAIL_TEMPLATES.ACTION_PREVIEW' | translate }}</button>
+                    </div>
+                    <div class="pam-email-preview" ng-if="previews[kind]" dir="auto">
+                        <p class="pam-email-preview-subject">{{ previews[kind].subject }}</p>
+                        <pre>{{ previews[kind].body }}</pre>
+                    </div>
+                </div>
+
+                <!-- Messages -->
+                <h3 class="pam-email-templates-header">{{ 'PAM_EMAIL_TEMPLATES.SECTION_HEADER_MESSAGES' | translate }}</h3>
+                <p class="pam-setting-help">{{ 'PAM_EMAIL_TEMPLATES.HELP_MESSAGES' | translate }}</p>
+                <table class="properties pam-setting-table pam-email-messages">
+                    <tr ng-repeat="key in messageKeys">
+                        <th><label for="pam-email-message-{{ key }}"><code>{{ key }}</code></label></th>
+                        <td>
+                            <input type="text" id="pam-email-message-{{ key }}" dir="auto" maxlength="1000"
+                                   ng-model="editing.language.messages[key]" placeholder="{{ base.messages[key] }}">
+                            <p class="pam-setting-meta" ng-if="editing.language.code !== 'en'">{{ 'PAM_EMAIL_TEMPLATES.INFO_ENGLISH'
+                                | translate:{ TEXT: builtIn.messages[key] } }}</p>
+                        </td>
+                    </tr>
+                </table>
+
+                <div class="action-buttons">
+                    <button type="submit" ng-disabled="languageForm.$invalid || saving">{{ 'PAM.ACTION_SAVE' | translate }}</button>
+                    <button type="button" ng-click="cancel()">{{ 'PAM.ACTION_CANCEL' | translate }}</button>
+                </div>
+            </form>
+        </div>
+
+    </div>
+
+</div>

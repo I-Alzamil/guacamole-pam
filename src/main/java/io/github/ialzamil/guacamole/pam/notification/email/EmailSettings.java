@@ -1,5 +1,7 @@
 package io.github.ialzamil.guacamole.pam.notification.email;
 
+import java.time.DateTimeException;
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -63,8 +65,22 @@ public final class EmailSettings {
     public static final Setting LINK = Setting.string(Setting.Section.EMAIL, "pam-email-link", 512,
             EmailSettings::checkLink);
 
+    /**
+     * The time zone of the times emails show, such as "Asia/Riyadh".
+     */
+    public static final Setting TIME_ZONE = Setting.string(Setting.Section.EMAIL, "pam-email-time-zone", "UTC", 64,
+            EmailSettings::checkZone);
+
+    /**
+     * The language of emails to users who chose none, and to the address
+     * receiving what administrators receive.
+     */
+    public static final Setting LANGUAGE = Setting.string(Setting.Section.EMAIL, "pam-email-language",
+            EmailLanguages.ENGLISH, 16, EmailLanguages::checkCode);
+
     public static final List<Setting> ALL = Collections.unmodifiableList(Arrays.asList(
-            ENABLED, HOST, PORT, SECURITY, CA_CERTIFICATES, USERNAME, PASSWORD, FROM, ADMIN_ADDRESS, LINK));
+            ENABLED, HOST, PORT, SECURITY, CA_CERTIFICATES, USERNAME, PASSWORD, FROM, ADMIN_ADDRESS, LINK,
+            TIME_ZONE, LANGUAGE));
 
     static void checkHost(String host) {
         if (!host.matches("[A-Za-z0-9._:\\[\\]-]+"))
@@ -83,6 +99,15 @@ public final class EmailSettings {
         }
         catch (AddressException e) {
             throw new IllegalArgumentException("not an email address.");
+        }
+    }
+
+    static void checkZone(String zone) {
+        try {
+            ZoneId.of(zone);
+        }
+        catch (DateTimeException e) {
+            throw new IllegalArgumentException("not a time zone, such as UTC or Europe/Paris.");
         }
     }
 

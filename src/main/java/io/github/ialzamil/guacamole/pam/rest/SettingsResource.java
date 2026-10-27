@@ -47,7 +47,8 @@ public class SettingsResource extends PamResource {
     /**
      * Whether this server runs the HA module ("ha"), and why it is on
      * standby ("standby", or null if PAM works on it), for the tab to say
-     * so.
+     * so; and the languages emails are written in ("emailLanguages", their
+     * names by code).
      */
     @GET
     @Path("server")
@@ -57,6 +58,7 @@ public class SettingsResource extends PamResource {
         Map<String, Object> server = new LinkedHashMap<>();
         server.put("ha", HaAuthenticationProvider.isEnabled());
         server.put("standby", standby == null ? null : standby.name());
+        server.put("emailLanguages", provider.getEmailLanguages().getNames());
         return server;
     }
 

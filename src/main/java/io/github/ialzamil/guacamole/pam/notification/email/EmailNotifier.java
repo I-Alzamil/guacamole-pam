@@ -4,7 +4,11 @@ import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Collection;
 import java.util.Collections;
+import java.time.DateTimeException;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -55,7 +59,11 @@ public final class EmailNotifier implements Notifier {
 
     private final EmailPreferences preferences;
 
-    public EmailNotifier(PamSettings settings, Directory directory, EmailPreferences preferences) {
+    private final EmailLanguages languages;
+
+    public EmailNotifier(PamSettings settings, Directory directory, EmailPreferences preferences,
+            EmailLanguages languages) {
+        this.languages = languages;
         this.settings = settings;
         this.directory = directory;
         this.preferences = preferences;
@@ -75,8 +83,13 @@ public final class EmailNotifier implements Notifier {
         final String from;
         final String adminAddress;
         final String link;
+        final ZoneId zone;
+        final String language;
+        private final EmailLanguages languages;
+        private final Map<String, EmailText> texts = new HashMap<>();
 
-        Config(PamSettings settings) throws GuacamoleException {
+        Config(PamSettings settings, EmailLanguages languages) throws GuacamoleException {
+            this.languages = languages;
             host = (String) settings.get(EmailSettings.HOST);
             port = (Integer) settings.get(EmailSettings.PORT);
             security = (String) settings.get(EmailSettings.SECURITY);
@@ -86,10 +99,38 @@ public final class EmailNotifier implements Notifier {
             from = (String) settings.get(EmailSettings.FROM);
             adminAddress = (String) settings.get(EmailSettings.ADMIN_ADDRESS);
             link = (String) settings.get(EmailSettings.LINK);
+            zone = zone((String) settings.get(EmailSettings.TIME_ZONE));
+            language = (String) settings.get(EmailSettings.LANGUAGE);
             if (host == null)
                 throw new GuacamoleClientException("No mail server is set.");
             if (from == null)
                 throw new GuacamoleClientException("No sender address is set.");
+        }
+
+        private static ZoneId zone(String zone) {
+            try {
+                return ZoneId.of(zone);
+            }
+            catch (DateTimeException e) {
+                return ZoneOffset.UTC;
+            }
+        }
+
+        /**
+         * The texts of the event's kind, in a language, or the default one
+         * if null or no longer offered; English if that is not offered
+         * either.
+         */
+        EmailText textOf(Event event, String code) throws GuacamoleException {
+            String chosen = code != null && languages.isKnown(code) ? code : language;
+            EmailTemplates.Kind kind = EmailTemplates.Kind.of(event.getType());
+            String key = kind + ":" + chosen;
+            EmailText text = texts.get(key);
+            if (text == null) {
+                text = new EmailText(languages.getOrEnglish(chosen), kind, link, zone);
+                texts.put(key, text);
+            }
+            return text;
         }
 
         String describe() {
@@ -135,13 +176,15 @@ public final class EmailNotifier implements Notifier {
     @Override
     public void send(Event event) throws GuacamoleException {
 
-        Config config = new Config(settings);
+        Config config = new Config(settings, languages);
         Map<String, Audience.Role> audience = Audience.of(event, source);
         Map<String, String> addresses = directory.getAddresses(audience.keySet());
+        Map<String, String> chosen = preferences.getLanguages(addresses.keySet());
 
-        // One email per address, as the role of the first user having it;
-        // the extra address as what administrators receive (no role)
-        Map<String, Audience.Role> recipients = new LinkedHashMap<>();
+        // One email per address, as the role of the first user having it,
+        // in their language; the extra address as what administrators
+        // receive (no role), in the default language
+        Map<String, Recipient> recipients = new LinkedHashMap<>();
         Set<String> seen = new HashSet<>();
         for (Map.Entry<String, Audience.Role> entry : audience.entrySet()) {
             String address = addresses.get(entry.getKey());
@@ -149,18 +192,35 @@ public final class EmailNotifier implements Notifier {
                 logger.debug("No email to \"{}\" about {}: no email address.", entry.getKey(),
                         event.getType().getId());
             else if (seen.add(address.toLowerCase()))
-                recipients.put(address, entry.getValue());
+                recipients.put(address, new Recipient(entry.getValue(),
+                        config.textOf(event, chosen.get(entry.getKey()))));
         }
         if (config.adminAddress != null && seen.add(config.adminAddress.toLowerCase()))
-            recipients.put(config.adminAddress, null);
+            recipients.put(config.adminAddress, new Recipient(null, config.textOf(event, null)));
 
         if (recipients.isEmpty())
             return;
 
         deliver(config, (session, transport) -> {
-            for (Map.Entry<String, Audience.Role> recipient : recipients.entrySet())
+            for (Map.Entry<String, Recipient> recipient : recipients.entrySet())
                 sendOne(session, transport, config, event, recipient.getKey(), recipient.getValue());
         });
+
+    }
+
+    /**
+     * Why an address is emailed (null for the extra address), and the text
+     * of its language.
+     */
+    private static final class Recipient {
+
+        final Audience.Role role;
+        final EmailText text;
+
+        Recipient(Audience.Role role, EmailText text) {
+            this.role = role;
+            this.text = text;
+        }
 
     }
 
@@ -169,12 +229,14 @@ public final class EmailNotifier implements Notifier {
      * refuses.
      */
     private static void sendOne(Session session, Transport transport, Config config, Event event, String to,
-            Audience.Role role) throws MessagingException {
+            Recipient recipient) throws MessagingException {
+        Audience.Role role = recipient.role;
         MimeMessage message = new MimeMessage(session);
         message.setFrom(new InternetAddress(config.from, true));
         message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(to, true));
-        message.setSubject(EmailText.subject(event), "UTF-8");
-        message.setText(EmailText.body(event, role, config.link), "UTF-8");
+        EmailText text = recipient.text;
+        message.setSubject(text.subject(event, role), "UTF-8");
+        message.setText(text.body(event, role), "UTF-8");
         message.setSentDate(new Date(event.getTime()));
         message.setHeader("Auto-Submitted", "auto-generated");
         message.saveChanges();
@@ -284,7 +346,7 @@ public final class EmailNotifier implements Notifier {
     @Override
     public String test(String username) throws GuacamoleException {
 
-        Config config = new Config(settings);
+        Config config = new Config(settings, languages);
         String own = directory.getAddresses(Collections.singleton(username)).get(username);
         String to = own != null ? own : config.adminAddress;
         if (to == null)
@@ -292,8 +354,9 @@ public final class EmailNotifier implements Notifier {
                     + " one in your profile (Settings > Users), or the address receiving administrators' emails.");
 
         Event event = Event.of(EventType.TEST).actor(username);
-        deliver(config, (session, transport) -> sendOne(session, transport, config, event, to,
-                own != null ? Audience.Role.ADMINISTRATOR : null));
+        Recipient recipient = own != null ? new Recipient(Audience.Role.ADMINISTRATOR,
+                config.textOf(event, preferences.getLanguage(username))) : new Recipient(null, config.textOf(event, null));
+        deliver(config, (session, transport) -> sendOne(session, transport, config, event, to, recipient));
         return "A test email was sent to " + to + " through mail server " + config.describe() + ".";
 
     }

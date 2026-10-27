@@ -80,6 +80,11 @@ public class PamREST extends PamResource {
         return new SettingsResource(provider, user);
     }
 
+    @Path("email-languages")
+    public EmailLanguagesResource emailLanguages() {
+        return new EmailLanguagesResource(provider, user);
+    }
+
     /**
      * Identifier of the data source whose connections are managed
      * ("identifier"), such as "mysql".
@@ -94,8 +99,9 @@ public class PamREST extends PamResource {
      * Whether the current user may manage platforms and rotations, whether
      * they are an approver, which notification badges they want ("badges",
      * by name), whether the HA module runs ("ha"), and their emails
-     * ("emails": whether emails are sent at all, to which address, and which
-     * kinds they want, by name).
+     * ("emails": whether emails are sent at all, to which address, which
+     * kinds they want, by name, the language they chose, or null for the
+     * default one, and the languages offered, with their names).
      */
     @GET
     @Path("access")
@@ -111,6 +117,9 @@ public class PamREST extends PamResource {
         emails.put("address", provider.getEmailDirectory().getAddresses(Collections.singleton(username()))
                 .get(username()));
         emails.put("wanted", provider.getEmailPreferences().get(username()));
+        emails.put("language", provider.getEmailPreferences().getLanguage(username()));
+        emails.put("defaultLanguage", provider.getSettings().get(EmailSettings.LANGUAGE));
+        emails.put("languages", provider.getEmailLanguages().getNames());
         access.put("emails", emails);
         return access;
     }
@@ -137,6 +146,16 @@ public class PamREST extends PamResource {
             throws GuacamoleException {
         provider.getEmailPreferences().set(username(), kind,
                 body == null || !Boolean.FALSE.equals(body.get("wanted")));
+    }
+
+    /**
+     * Sets the language of the current user's emails ("language", such as
+     * "ar"), or the default one for null.
+     */
+    @PUT
+    @Path("preferences/email-language")
+    public void setEmailLanguage(Map<String, String> body) throws GuacamoleException {
+        provider.getEmailPreferences().setLanguage(username(), body == null ? null : body.get("language"));
     }
 
     /**

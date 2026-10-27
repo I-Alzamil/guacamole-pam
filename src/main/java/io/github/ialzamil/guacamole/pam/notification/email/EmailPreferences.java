@@ -22,7 +22,8 @@ import io.github.ialzamil.guacamole.pam.db.SqlDialect;
  * their badges: "everything" (all PAM events, for administrators),
  * "approvals" (requests awaiting their approval, and other approvers'
  * decisions on them) and "own" (decisions on their requests, and their
- * access ending). Each is sent unless turned off.
+ * access ending). Each is sent unless turned off. Also the language of
+ * their emails, the default one unless chosen.
  */
 public class EmailPreferences {
 
@@ -40,8 +41,11 @@ public class EmailPreferences {
 
     private final PamDatabase database;
 
-    public EmailPreferences(PamDatabase database) {
+    private final EmailLanguages languages;
+
+    public EmailPreferences(PamDatabase database, EmailLanguages languages) {
         this.database = database;
+        this.languages = languages;
     }
 
     /**
@@ -87,6 +91,76 @@ public class EmailPreferences {
         }
 
         return wanted;
+
+    }
+
+    /**
+     * The language each of the given users chose for their emails, by
+     * username; users who chose none, or one no longer offered, are
+     * missing.
+     */
+    Map<String, String> getLanguages(Collection<String> usernames) throws GuacamoleException {
+
+        Map<String, String> languages = new HashMap<>();
+        if (usernames.isEmpty())
+            return languages;
+
+        try (Connection connection = database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "SELECT username, email_language FROM pam_user_preference WHERE email_language IS NOT NULL"
+               + " AND username IN " + SqlDialect.parameters(usernames.size()))) {
+            int index = 1;
+            for (String username : usernames)
+                statement.setString(index++, username);
+            try (ResultSet results = statement.executeQuery()) {
+                while (results.next()) {
+                    if (this.languages.isKnown(results.getString(2)))
+                        languages.put(results.getString(1), results.getString(2));
+                }
+            }
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to read preferences.", e);
+        }
+
+        return languages;
+
+    }
+
+    /**
+     * The language the user chose for their emails, or null for the
+     * default.
+     */
+    public String getLanguage(String username) throws GuacamoleException {
+        return getLanguages(Collections.singleton(username)).get(username);
+    }
+
+    /**
+     * Sets the language of the user's emails, or the default for null.
+     *
+     * @throws GuacamoleClientException
+     *     If emails are not written in that language.
+     */
+    public void setLanguage(String username, String language) throws GuacamoleException {
+
+        if (language != null && !languages.isKnown(language))
+            throw new GuacamoleClientException("Emails are not written in that language.");
+
+        Map<String, String> values = new LinkedHashMap<>();
+        values.put("username", "?");
+        values.put("email_language", "?");
+
+        SqlDialect dialect = database.getDialect();
+        try (Connection connection = database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(dialect.upsert("pam_user_preference",
+                 Collections.singletonList("username"), values, "email_language = EXCLUDED.email_language"))) {
+            statement.setString(1, username);
+            statement.setString(2, language);
+            statement.executeUpdate();
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to save preferences.", e);
+        }
 
     }
 

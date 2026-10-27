@@ -213,7 +213,7 @@ CREATE TABLE IF NOT EXISTS pam_request_approval (
 -- rotations; and which emails they receive: everything (administrators),
 -- requests awaiting their approval and other approvers' decisions, and
 -- decisions on their own requests and their access ending; each on unless
--- turned off
+-- turned off; and the language of their emails, NULL for the default
 CREATE TABLE IF NOT EXISTS pam_user_preference (
 
   username       varchar(128)  NOT NULL,
@@ -222,6 +222,7 @@ CREATE TABLE IF NOT EXISTS pam_user_preference (
   admin_email    boolean       NOT NULL DEFAULT TRUE,
   approval_email boolean       NOT NULL DEFAULT TRUE,
   own_email      boolean       NOT NULL DEFAULT TRUE,
+  email_language varchar(16),
 
   PRIMARY KEY (username)
 
@@ -276,6 +277,21 @@ CREATE TABLE IF NOT EXISTS pam_setting (
   modified_by   varchar(128),
 
   PRIMARY KEY (name)
+
+);
+
+-- Languages of emails, written on the Email Templates tab: added ones, and
+-- English (built into the extension) once changed; content holds their
+-- messages and templates as JSON
+CREATE TABLE IF NOT EXISTS pam_email_language (
+
+  code          varchar(16)   NOT NULL,
+  name          varchar(64)   NOT NULL,
+  content       text          NOT NULL,
+  modified      timestamptz   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  modified_by   varchar(128),
+
+  PRIMARY KEY (code)
 
 );
 

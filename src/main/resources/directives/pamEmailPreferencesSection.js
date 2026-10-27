@@ -2,8 +2,8 @@
  * "Email notifications" section of the Preferences tab: which emails the
  * user wants, among those they can receive: everything PAM does for
  * administrators, requests awaiting their approval for approvers, and
- * their own requests and access for everyone. Shown only while emails are
- * sent, with the address they go to. Placed after the badges by
+ * their own requests and access for everyone, and in which language.
+ * Shown only while emails are sent, with the address they go to. Placed after the badges by
  * templates/pamPreferencesPatch.html.
  */
 angular.module('guacPam').directive('pamEmailPreferencesSection', [function pamEmailPreferencesSection() {
@@ -22,6 +22,12 @@ angular.module('guacPam').directive('pamEmailPreferencesSection', [function pamE
                    + '<td><input id="pam-email-{{ kind }}" type="checkbox" ng-model="choices[kind]"'
                    + '       ng-change="save(kind)" ng-disabled="saving[kind]"></td>'
                    + '</tr>'
+                   + '<tr><th><label for="pam-email-language">{{ \'PAM.FIELD_HEADER_EMAIL_LANGUAGE\' | translate }}</label></th>'
+                   + '<td><select id="pam-email-language" dir="auto" ng-model="choice.language" ng-change="saveLanguage()"'
+                   + '       ng-disabled="saving.language">'
+                   + '<option value="">{{ \'PAM.INFO_EMAIL_LANGUAGE_DEFAULT\' | translate:{ NAME : emails.languages[emails.defaultLanguage] } }}</option>'
+                   + '<option ng-repeat="(code, name) in emails.languages" value="{{ code }}">{{ name }}</option>'
+                   + '</select></td></tr>'
                    + '</table></div>'
                    + '</div>'
                    + '</div>',
@@ -50,9 +56,15 @@ angular.module('guacPam').directive('pamEmailPreferencesSection', [function pamE
 
             $scope.saving = {};
 
+            /**
+             * The language chosen, "" for the default one.
+             */
+            $scope.choice = { language : '' };
+
             pamService.getAccess().then(function accessRetrieved(retrieved) {
                 access = retrieved;
                 $scope.emails = retrieved.emails || {};
+                $scope.choice.language = $scope.emails.language || '';
                 angular.forEach($scope.kinds, function copyChoice(kind) {
                     $scope.choices[kind] = !$scope.emails.wanted || $scope.emails.wanted[kind] !== false;
                 });
@@ -64,6 +76,20 @@ angular.module('guacPam').directive('pamEmailPreferencesSection', [function pamE
                 if (kind === 'approvals')
                     return !!access.approver;
                 return true;
+            };
+
+            $scope.saveLanguage = function saveLanguage() {
+                var language = $scope.choice.language || null;
+                var previous = $scope.emails.language || '';
+                $scope.saving.language = true;
+                pamService.setEmailLanguage(language).then(function saved() {
+                    $scope.emails.language = language;
+                }, function saveFailed(error) {
+                    $scope.choice.language = previous;
+                    guacNotification.SHOW_REQUEST_ERROR(error);
+                })['finally'](function languageSaved() {
+                    delete $scope.saving.language;
+                });
             };
 
             $scope.save = function save(kind) {
