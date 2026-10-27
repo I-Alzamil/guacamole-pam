@@ -113,19 +113,22 @@ holds real sessions open on them (`tests/session.py`), and checks:
 
 - sessions counted on both servers, and ended on both;
 - a connection's limit, a limit per user, and a balancing group's limit
-  (with the connection it picks) across the servers;
+  (with the connection it picks, also for a user who may use the group
+  only) across the servers;
 - logins made on one server working on the other, with their connections
-  and sessions, and logging out on one ending them on both;
+  and sessions, through the database they were made through (the user's
+  own profile shown there), and logging out on one ending them on both;
 - sessions of one server listed on the other, hidden details for other
-  users, ending a session from the other server (with a session joining
-  it), and joining it from there;
-- share links opening on either server, made from either, and ending with
-  the session shared;
+  users, ending a session from the other server (with the sessions
+  joining it), and joining it from there and from its own server;
+- share links opening on either server, made from either, recorded again
+  by their server after the others removed them, and ending with the
+  session shared;
 - a recording made on one server shown and played by the other;
 - a TOTP code used on one server refused on the other;
 - a server stopping cleanly freeing its sessions at once, a server killed
   no longer counting once no longer heard from, and its logins going on on
-  the other;
+  the other, through the database they were made through;
 - failed logins on both servers banning an address on both.
 
 To see the checks fail as with Guacamole alone, start the servers with the
