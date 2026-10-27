@@ -140,8 +140,11 @@ public final class SharedCoordination implements Coordination {
         Connection connection = database.getDedicatedConnection();
 
         try {
+            // Only those free a moment ago, in one query, rather than every
+            // one, as all are taken while too many servers run
+            Set<Integer> taken = dialect.getLocked(connection, SHARED_LOCK, SHARED_KEYS);
             for (int key = 0; key < SHARED_SLOTS; key++) {
-                if (dialect.tryLock(connection, SHARED_LOCK, key)) {
+                if (!taken.contains(key) && dialect.tryLock(connection, SHARED_LOCK, key)) {
                     slot = connection;
                     noSlot = false;
                     return;

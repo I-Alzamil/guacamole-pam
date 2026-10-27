@@ -8,8 +8,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import org.apache.guacamole.GuacamoleException;
 import org.slf4j.Logger;
@@ -40,9 +38,6 @@ public final class SingleServer implements Coordination {
      * connection.
      */
     private static final int VALID_TIMEOUT_SECONDS = 2;
-
-    private static final Collection<Integer> SLOTS = IntStream.range(0, SHARED_SLOTS).boxed()
-            .collect(Collectors.toList());
 
     private final PamDatabase database;
 
@@ -86,7 +81,7 @@ public final class SingleServer implements Coordination {
 
             // Looked for before taking the lock too, so servers of the HA
             // module never find it taken, however briefly
-            if (!dialect.getLocked(lock, SHARED_LOCK, SLOTS).isEmpty()) {
+            if (!dialect.getLocked(lock, SHARED_LOCK, SHARED_KEYS).isEmpty()) {
                 enter(Standby.SHARED_SERVERS, null);
                 return Collections.emptySet();
             }
@@ -97,7 +92,7 @@ public final class SingleServer implements Coordination {
             }
 
             // One starting meanwhile finds the lock taken
-            if (!dialect.getLocked(lock, SHARED_LOCK, SLOTS).isEmpty()) {
+            if (!dialect.getLocked(lock, SHARED_LOCK, SHARED_KEYS).isEmpty()) {
                 closeLock();
                 enter(Standby.SHARED_SERVERS, null);
                 return Collections.emptySet();

@@ -5,6 +5,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
@@ -116,6 +117,19 @@ public abstract class SqlDialect {
      *     Whether the lock was taken.
      */
     public abstract boolean tryLock(Connection connection, int namespace, int key) throws SQLException;
+
+    private static final int MAX_LOCKS_PER_QUERY = 100;
+
+    /**
+     * The given keys in parts small enough for one query each.
+     */
+    protected static List<List<Integer>> parts(Collection<Integer> keys) {
+        List<Integer> all = new ArrayList<>(keys);
+        List<List<Integer>> parts = new ArrayList<>();
+        for (int i = 0; i < all.size(); i += MAX_LOCKS_PER_QUERY)
+            parts.add(all.subList(i, Math.min(all.size(), i + MAX_LOCKS_PER_QUERY)));
+        return parts;
+    }
 
     /**
      * Returns the keys among the given ones whose lock (see {@link #tryLock})

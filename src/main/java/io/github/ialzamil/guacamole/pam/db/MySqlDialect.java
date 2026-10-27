@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -108,16 +109,24 @@ class MySqlDialect extends SqlDialect {
     public Set<Integer> getLocked(Connection connection, int namespace, Collection<Integer> keys)
             throws SQLException {
 
+        // A column per key, in one query per part of them
         Set<Integer> locked = new HashSet<>();
-
-        try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT IS_USED_LOCK(" + LOCK_NAME + ") IS NOT NULL")) {
-            for (int key : keys) {
-                statement.setInt(1, namespace);
-                statement.setInt(2, key);
+        for (List<Integer> part : parts(keys)) {
+            List<String> columns = new ArrayList<>();
+            for (int i = 0; i < part.size(); i++)
+                columns.add("IS_USED_LOCK(" + LOCK_NAME + ") IS NOT NULL");
+            try (PreparedStatement statement = connection.prepareStatement("SELECT " + String.join(", ", columns))) {
+                for (int i = 0; i < part.size(); i++) {
+                    statement.setInt(2 * i + 1, namespace);
+                    statement.setInt(2 * i + 2, part.get(i));
+                }
                 try (ResultSet results = statement.executeQuery()) {
-                    if (results.next() && results.getBoolean(1))
-                        locked.add(key);
+                    if (results.next()) {
+                        for (int column = 0; column < part.size(); column++) {
+                            if (results.getBoolean(column + 1))
+                                locked.add(part.get(column));
+                        }
+                    }
                 }
             }
         }

@@ -133,16 +133,23 @@ class SqlServerDialect extends SqlDialect {
     public Set<Integer> getLocked(Connection connection, int namespace, Collection<Integer> keys)
             throws SQLException {
 
+        // 0 if this session could not take it: another one holds it. A
+        // column per key, in one query per part of them
         Set<Integer> locked = new HashSet<>();
-
-        // 0 if this session could not take it: another one holds it
-        try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT APPLOCK_TEST('public', ?, 'Exclusive', 'Session')")) {
-            for (int key : keys) {
-                statement.setString(1, resource(namespace, key));
+        for (List<Integer> part : parts(keys)) {
+            List<String> columns = new ArrayList<>();
+            for (int i = 0; i < part.size(); i++)
+                columns.add("APPLOCK_TEST('public', ?, 'Exclusive', 'Session')");
+            try (PreparedStatement statement = connection.prepareStatement("SELECT " + String.join(", ", columns))) {
+                for (int i = 0; i < part.size(); i++)
+                    statement.setString(i + 1, resource(namespace, part.get(i)));
                 try (ResultSet results = statement.executeQuery()) {
-                    if (results.next() && results.getInt(1) == 0)
-                        locked.add(key);
+                    if (results.next()) {
+                        for (int column = 0; column < part.size(); column++) {
+                            if (results.getInt(column + 1) == 0)
+                                locked.add(part.get(column));
+                        }
+                    }
                 }
             }
         }

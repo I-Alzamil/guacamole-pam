@@ -3,6 +3,8 @@ package io.github.ialzamil.guacamole.pam.coordination;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
@@ -36,6 +38,12 @@ public interface Coordination {
     int SHARED_LOCK = 0x70616d68;
 
     int SHARED_SLOTS = 64;
+
+    /**
+     * Those keys, from 0 to {@link #SHARED_SLOTS} - 1.
+     */
+    Collection<Integer> SHARED_KEYS = IntStream.range(0, SHARED_SLOTS).boxed()
+            .collect(Collectors.toUnmodifiableList());
 
     /**
      * A claim on a connection being rotated, released when closed.
