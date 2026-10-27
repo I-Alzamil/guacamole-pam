@@ -35,6 +35,10 @@
 #         mysyslogtest     syslog receiver: TLS on 6514 (a certificate of the
 #                          same CA), TCP and UDP on 514, writing what it
 #                          receives to /tmp/tls.log, tcp.log and udp.log
+#         mymailtest       Mailpit mail server: SMTP on 1025 requiring
+#                          STARTTLS (a certificate of the same CA) and the
+#                          login "pammail" / "P@ssw0rd-Mail1"; what it
+#                          receives at http://localhost:8025/api/v1/ inside
 #   lab.sh seed
 #       Adds the test platforms, connections, users and group (seed.sh).
 #   lab.sh reset
@@ -56,7 +60,7 @@ source ./database.sh
 
 PAM_TEST_ENCRYPTION_KEY="${PAM_ENCRYPTION_KEY-um/hqZa6cc89CtHmc9vYOuoDd8S1jY8IaASlz5S00iY=}"
 LAB_CONTAINERS="myguactest myguactest2 myguacdtest myguacdbtest mysshtest myldaptest myadtest mykdctest
-    mytacacstest mypgtarget mymysqltarget mymariadbtarget mymssqltarget mysyslogtest"
+    mytacacstest mypgtarget mymysqltarget mymariadbtarget mymssqltarget mysyslogtest mymailtest"
 
 running() { [ "$(podman inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = true ]; }
 
@@ -388,9 +392,25 @@ start_syslog() {
             wait' >/dev/null
 }
 
+# A mail server, keeping what it receives
+start_mail() {
+    running mymailtest && return 0
+    certify mymailtest || return 1
+    podman run --rm -d \
+        --name mymailtest \
+        --hostname mymailtest \
+        --net myguacnet \
+        -v "./targets/certs:/certs:ro,Z" \
+        -e MP_SMTP_TLS_CERT=/certs/mymailtest.crt \
+        -e MP_SMTP_TLS_KEY=/certs/mymailtest.key \
+        -e MP_SMTP_REQUIRE_STARTTLS=true \
+        -e MP_SMTP_AUTH='pammail:P@ssw0rd-Mail1' \
+        docker.io/axllent/mailpit:v1.31.5 >/dev/null
+}
+
 start_services() {
     local service
-    for service in ssh ldap ad kdc tacacs databases syslog; do
+    for service in ssh ldap ad kdc tacacs databases syslog mail; do
         "start_$service" || { echo "The $service test server did not start." >&2; return 1; }
     done
     echo "Test servers running."

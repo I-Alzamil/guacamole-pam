@@ -22,6 +22,7 @@ import io.github.ialzamil.guacamole.pam.PamAuthenticationProvider;
 import io.github.ialzamil.guacamole.pam.ha.HaAuthenticationProvider;
 import io.github.ialzamil.guacamole.pam.management.ManagementType;
 import io.github.ialzamil.guacamole.pam.management.ManagementTypes;
+import io.github.ialzamil.guacamole.pam.notification.email.EmailSettings;
 import io.github.ialzamil.guacamole.pam.ssh.SequenceScript;
 import io.github.ialzamil.guacamole.pam.ssh.ValidationResult;
 
@@ -92,7 +93,9 @@ public class PamREST extends PamResource {
     /**
      * Whether the current user may manage platforms and rotations, whether
      * they are an approver, which notification badges they want ("badges",
-     * by name), and whether the HA module runs ("ha").
+     * by name), whether the HA module runs ("ha"), and their emails
+     * ("emails": whether emails are sent at all, to which address, and which
+     * kinds they want, by name).
      */
     @GET
     @Path("access")
@@ -102,6 +105,13 @@ public class PamREST extends PamResource {
         access.put("approver", provider.getApprover(user).isApprover());
         access.put("badges", provider.getBadgePreferences().get(username()));
         access.put("ha", HaAuthenticationProvider.isEnabled());
+
+        Map<String, Object> emails = new LinkedHashMap<>();
+        emails.put("enabled", provider.getSettings().get(EmailSettings.ENABLED));
+        emails.put("address", provider.getEmailDirectory().getAddresses(Collections.singleton(username()))
+                .get(username()));
+        emails.put("wanted", provider.getEmailPreferences().get(username()));
+        access.put("emails", emails);
         return access;
     }
 
@@ -115,6 +125,18 @@ public class PamREST extends PamResource {
             throws GuacamoleException {
         provider.getBadgePreferences().set(username(), badge,
                 body == null || !Boolean.FALSE.equals(body.get("shown")));
+    }
+
+    /**
+     * Turns one kind of email of the current user ("everything", "approvals"
+     * or "own") on or off.
+     */
+    @PUT
+    @Path("preferences/emails/{kind}")
+    public void setEmailWanted(@PathParam("kind") String kind, Map<String, Boolean> body)
+            throws GuacamoleException {
+        provider.getEmailPreferences().set(username(), kind,
+                body == null || !Boolean.FALSE.equals(body.get("wanted")));
     }
 
     /**

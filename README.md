@@ -57,7 +57,8 @@ Privileged access management for [Apache Guacamole](https://guacamole.apache.org
   cancellations, checkouts, and their release or revocation. In both
   histories, click a user, an approver or who ended a checkout for when and
   from where they acted, or a scheduled request for its start and end.
-  Every event can also go to a [syslog server](#syslog), over TLS.
+  Every event can also go to a [syslog server](#syslog), over TLS, and by
+  [email](#email) to those it concerns.
 - **High availability, if wanted.** Several Guacamole servers can share the
   database as one, active-active: the optional
   [HA module](#high-availability-the-ha-module) shares sessions, connection
@@ -615,6 +616,39 @@ Passwords are never sent.
   works again. **Send a test message** sends one with the saved settings, and
   says why it couldn't.
 
+### Email
+
+The **Email** section of the **PAM Settings** tab emails PAM events, through
+your mail server, to those they concern, at the email address of their
+Guacamole profile. It's off by default.
+
+- **Administrators** receive every event (the same as syslog).
+- **Approvers** receive requests awaiting their approval, and the other
+  approvers' approvals and denials of requests for their connections.
+- **Users** receive the approval or denial of their requests, and the end
+  of their access: expired, or ended by an administrator.
+- Nobody is emailed what they did themselves. Each user receives an event
+  once, and can turn each kind off under **Preferences → Email
+  notifications**, which shows the address emails go to.
+- **Also send administrators' emails to** adds an address receiving what
+  administrators do, such as a security team's; **Guacamole address** adds
+  links to Guacamole, such as to the Approvals tab.
+
+Emails are plain text, and never contain a password. The connection to the
+mail server requires STARTTLS by default (a server not offering it is
+refused), or uses TLS from the start, checking the server's certificate and
+name either way (paste the CA certificates, in PEM, unless Java trusts
+them); unencrypted is offered last. The mail server's password is encrypted
+like other stored secrets. **Send a test email** sends one to your own
+address with the saved settings, and says why it couldn't. Delivery is as
+for syslog: queued, and tried again for a few seconds.
+
+Approvers and administrators are found in Guacamole's database: users and
+groups with the approval permission or the **Administer system**
+permission, with their group memberships stored there. Users who belong to
+a group only through another extension, such as LDAP, aren't found through
+it; give them the permission directly, or through a group in the database.
+
 ### Password policies
 
 New passwords are random, and follow a *password policy*, so they meet each
@@ -878,7 +912,7 @@ passwords. Its commands run in the order given:
 | `lab/lab.sh app` | (Re)starts Guacamole's database, guacd and Guacamole with the built jar, on http://localhost:8080. Run it again after each build. Stored secrets are encrypted with a fixed test key; set `PAM_ENCRYPTION_KEY=` to store them unencrypted |
 | `lab/lab.sh app --ha` | Also a second Guacamole sharing the database and guacd, on http://localhost:8081, with the [HA module](#high-availability-the-ha-module) on in both, for the two-server tests (`--ha` alone restarts both servers that way, keeping the database and guacd running) |
 | `lab/lab.sh app --ha=off` | The same two servers with the HA module off: the second, started once the first answers, stays on standby (alone, likewise restarts both) |
-| `lab/lab.sh services` | The servers whose accounts the lab manages, keeping those already running: SSH `mysshtest` (user `mysshtest`; its ECDSA host key has a certificate of a test SSH CA, `lab/targets/certs/ssh_ca.pub`), OpenLDAP `myldaptest` (`uid=ldaptest,ou=people,dc=example,dc=org`), Samba AD `myadtest` (LDAPS and Kerberos, `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`), MIT Kerberos `mykdctest` (realm `EXAMPLE.ORG`, `kdctest`), TACACS+ `mytacacstest` (tac_plus-ng, built from source into `localhost/pam-tacacs-test` the first time; `tactest`), and databases over TLS with certificates of a test CA generated into `lab/targets/certs`: PostgreSQL `mypgtarget`, MySQL `mymysqltarget`, MariaDB `mymariadbtarget`, SQL Server `mymssqltarget` (`dbtest`); and a syslog receiver `mysyslogtest` (TLS with a certificate of the same CA, TCP, UDP). Passwords are listed at the top of `lab/lab.sh` |
+| `lab/lab.sh services` | The servers whose accounts the lab manages, keeping those already running: SSH `mysshtest` (user `mysshtest`; its ECDSA host key has a certificate of a test SSH CA, `lab/targets/certs/ssh_ca.pub`), OpenLDAP `myldaptest` (`uid=ldaptest,ou=people,dc=example,dc=org`), Samba AD `myadtest` (LDAPS and Kerberos, `CN=adtest,CN=Users,DC=ad,DC=example,DC=org`), MIT Kerberos `mykdctest` (realm `EXAMPLE.ORG`, `kdctest`), TACACS+ `mytacacstest` (tac_plus-ng, built from source into `localhost/pam-tacacs-test` the first time; `tactest`), and databases over TLS with certificates of a test CA generated into `lab/targets/certs`: PostgreSQL `mypgtarget`, MySQL `mymysqltarget`, MariaDB `mymariadbtarget`, SQL Server `mymssqltarget` (`dbtest`); a syslog receiver `mysyslogtest` (TLS with a certificate of the same CA, TCP, UDP); and a mail server `mymailtest` (Mailpit, STARTTLS with a certificate of the same CA, login `pammail`). Passwords are listed at the top of `lab/lab.sh` |
 | `lab/lab.sh seed` | Adds the test platforms, connections, users and group to a fresh database, through the REST API (`lab/seed.sh`) |
 | `lab/lab.sh reset` | Recreates Guacamole's database, with only Guacamole's schema and `guacadmin` / `guacadmin` |
 | `lab/lab.sh stop` | Stops every container of the lab |

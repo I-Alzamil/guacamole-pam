@@ -34,6 +34,9 @@ import io.github.ialzamil.guacamole.pam.db.PamDatabase;
 import io.github.ialzamil.guacamole.pam.ha.HaAuthenticationProvider;
 import io.github.ialzamil.guacamole.pam.ha.SharedCoordination;
 import io.github.ialzamil.guacamole.pam.notification.Events;
+import io.github.ialzamil.guacamole.pam.notification.email.Directory;
+import io.github.ialzamil.guacamole.pam.notification.email.EmailNotifier;
+import io.github.ialzamil.guacamole.pam.notification.email.EmailPreferences;
 import io.github.ialzamil.guacamole.pam.notification.syslog.SyslogNotifier;
 import io.github.ialzamil.guacamole.pam.password.PasswordPolicyRepository;
 import io.github.ialzamil.guacamole.pam.platform.PlatformImport;
@@ -81,6 +84,10 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
     private final ApproverDirectory approvers;
 
     private final BadgePreferences badgePreferences;
+
+    private final EmailPreferences emailPreferences;
+
+    private final Directory emailDirectory;
 
     private final ApprovalService approvalService;
 
@@ -132,6 +139,8 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             approvals = null;
             approvers = null;
             badgePreferences = null;
+            emailPreferences = null;
+            emailDirectory = null;
             checkoutService = null;
             requestService = null;
             approvalService = null;
@@ -169,6 +178,9 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         approvals = new ApprovalRepository(database);
         approvers = new ApproverDirectory(database);
         badgePreferences = new BadgePreferences(database);
+        emailPreferences = new EmailPreferences(database);
+        emailDirectory = new Directory(database, approvers);
+        events.add(new EmailNotifier(settings, emailDirectory, emailPreferences));
         checkoutService = new CheckoutService(connections, checkouts, platforms, approvals, rotationService,
                 settings, events);
         requestService = new RequestService(connections, platforms, checkouts, approvals, rotationService,
@@ -291,6 +303,17 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
 
     public BadgePreferences getBadgePreferences() {
         return badgePreferences;
+    }
+
+    public EmailPreferences getEmailPreferences() {
+        return emailPreferences;
+    }
+
+    /**
+     * Where emails go: the administrators, approvers and email addresses.
+     */
+    public Directory getEmailDirectory() {
+        return emailDirectory;
     }
 
     public PasswordPolicyRepository getPasswordPolicies() {

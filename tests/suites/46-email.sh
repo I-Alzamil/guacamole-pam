@@ -1,0 +1,237 @@
+#!/bin/bash
+# Events emailed through the lab's mail server (mymailtest, Mailpit):
+# settings checked, the password kept secret, the test button saying why it
+# failed, then who receives what: approvers a request and other approvers'
+# decisions, the requester the decision and their access ending,
+# administrators everything, the extra address too; nobody what they did
+# themselves; each kind turned off under Preferences.
+
+SETTINGS="$PAM/settings"
+MAIL_PASSWORD='P@ssw0rd-Mail1'
+EMAIL_NAMES='"pam-email-enabled","pam-email-host","pam-email-port","pam-email-security","pam-email-ca-certificates","pam-email-username","pam-email-password","pam-email-from","pam-email-admin-address","pam-email-link"'
+
+reset_email() {
+    api PUT "$SETTINGS" "$ADMIN" "$(python3 -I -c "import json,sys;print(json.dumps({n: None for n in json.loads('[' + sys.argv[1] + ']')}))" "$EMAIL_NAMES")" >/dev/null
+}
+
+email_set() { api PUT "$SETTINGS" "$ADMIN" "$1"; }
+
+# The messages received since the suite started, as "TO|SUBJECT" lines, or
+# with TEXT their text too (as "TO|SUBJECT|TEXT", newlines as "\n")
+MAIL_SINCE=$(date -u +%Y-%m-%dT%H:%M:%S)
+mails() { # [text]
+    podman exec mymailtest wget -qO- "http://localhost:8025/api/v1/messages?limit=500" | python3 -I -c "
+import sys, json, subprocess
+since, text = sys.argv[1], len(sys.argv) > 2
+for m in reversed(json.load(sys.stdin)['messages']):
+    if m['Created'][:19] < since:
+        continue
+    to = ','.join(a['Address'] for a in m['To'])
+    line = to + '|' + m['Subject']
+    if text:
+        body = json.loads(subprocess.run(['podman', 'exec', 'mymailtest', 'wget', '-qO-',
+            'http://localhost:8025/api/v1/message/' + m['ID']], capture_output=True, text=True).stdout)
+        line += '|' + body['Text'].replace('\r', '').replace('\n', '\\\\n')
+    print(line)" "$MAIL_SINCE" $1
+}
+
+# Waits up to 10 s for an email to ADDRESS whose subject contains TEXT,
+# printing yes or no
+mailed() { # ADDRESS TEXT
+    local i
+    for i in $(seq 20); do
+        mails | grep -F -- "$1|" | grep -qF -- "$2" && { echo yes; return; }
+        sleep 0.5
+    done
+    echo no
+}
+
+# Who was emailed a subject containing TEXT, sorted (after waiting for
+# the emails of an event to be sent)
+mailed_to() { sleep 3; mails | grep -F -- "$1" | cut -d'|' -f1 | sort -u | tr '\n' ' ' | sed 's/ $//'; }
+
+# How many emails to ADDRESS have a subject containing TEXT
+count_mailed() { mails | grep -F -- "$1|" | grep -cF -- "$2"; }
+
+test_email() { api POST "$SETTINGS/test/email" "$1"; }
+
+CA=$(python3 -I -c "import json,sys;print(json.dumps(open(sys.argv[1]).read()))" ../lab/targets/certs/ca.crt)
+
+section "Setup"
+create_connection GATED "{\"name\":\"t46 gated ssh\",\"parentIdentifier\":\"ROOT\",\"protocol\":\"ssh\",
+    \"parameters\":{\"hostname\":\"mysshtest\",\"port\":\"22\"},\"attributes\":{\"pam-approvals-required\":\"1\"}}"
+create_user t46-admin t46-admin-pw '{"guac-email-address":"t46-admin@example.org"}'
+grant t46-admin '[{"op":"add","path":"/systemPermissions","value":"ADMINISTER"}]'
+create_user t46-approver t46-approver-pw "{\"guac-email-address\":\"t46-approver@example.org\",\"pam-approver\":\"true\",\"pam-approver-connections\":\"[\\\"$GATED\\\"]\"}"
+create_user t46-approver2 t46-approver2-pw "{\"guac-email-address\":\"t46-approver2@example.org\"}"
+create_user_group t46-approvers "{\"pam-approver\":\"true\",\"pam-approver-connections\":\"[\\\"$GATED\\\"]\"}" t46-approver2
+create_user t46-user t46-user-pw '{"guac-email-address":"t46-user@example.org"}'
+create_user t46-nobody t46-nobody-pw
+for u in t46-user t46-nobody t46-approver t46-approver2; do grant_read "$u" "$GATED"; done
+T46_ADMIN=$(token t46-admin t46-admin-pw)
+APPROVER=$(token t46-approver t46-approver-pw)
+APPROVER2=$(token t46-approver2 t46-approver2-pw)
+USER=$(token t46-user t46-user-pw)
+NOBODY=$(token t46-nobody t46-nobody-pw)
+reset_email
+on_cleanup reset_email
+check "setup: a connection, users, and the mail server exist" yes \
+    "$([ -n "$GATED" ] && [ -n "$T46_ADMIN" ] && [ -n "$USER" ] && [ "$(podman inspect -f '{{.State.Running}}' mymailtest 2>/dev/null)" = true ] && echo yes)"
+
+pending_id() {
+    curl -s "$PAM/approvals/pending?token=$ADMIN" | python3 -I -c "
+import sys,json
+m=[r['id'] for r in json.load(sys.stdin) if r['username']==sys.argv[1]]
+print(m[0] if m else '')" "$1"
+}
+
+# ---------------------------------------------------------------- settings
+section "Settings"
+check "off by default, with STARTTLS on 587" "False starttls 587" \
+    "$(curl -s "$SETTINGS?token=$ADMIN" | python3 -I -c "
+import sys,json
+e={e['name']: e for e in json.load(sys.stdin)}
+print(e['pam-email-enabled']['value'], e['pam-email-security']['value'], e['pam-email-port']['value'])")"
+check "...unencrypted last" "starttls tls none" \
+    "$(curl -s "$SETTINGS?token=$ADMIN" | python3 -I -c "
+import sys,json
+print(' '.join([e for e in json.load(sys.stdin) if e['name']=='pam-email-security'][0]['options']))")"
+R=$(email_set '{"pam-email-enabled":true,"pam-email-host":"mymailtest"}')
+check "turning it on needs a sender" "400 \"pam-email-from\" is needed while \"pam-email-enabled\" is on." \
+    "$(status_of "$R") $(message_of "$R")"
+R=$(email_set '{"pam-email-from":"pam"}')
+check "a sender must be an address" "400 \"pam-email-from\": not an email address." "$(status_of "$R") $(message_of "$R")"
+R=$(email_set '{"pam-email-admin-address":"a@example.org, b@example.org"}')
+check "...one address" "400 \"pam-email-admin-address\": not an email address." "$(status_of "$R") $(message_of "$R")"
+R=$(email_set '{"pam-email-link":"guac.example.org"}')
+check "a link must be http:// or https://" "400 \"pam-email-link\": not an http:// or https:// address." \
+    "$(status_of "$R") $(message_of "$R")"
+
+email_set "{\"pam-email-password\":\"$MAIL_PASSWORD\"}" >/dev/null
+check "the password is never shown again, only that it is set" "None True" \
+    "$(curl -s "$SETTINGS?token=$ADMIN" | python3 -I -c "
+import sys,json
+e=[e for e in json.load(sys.stdin) if e['name']=='pam-email-password'][0]
+print(e['value'], e['set'])")"
+STORED=$(sql "SELECT value FROM pam_setting WHERE name = 'pam-email-password'")
+if [ -n "$(podman exec myguactest printenv PAM_ENCRYPTION_KEY 2>/dev/null)" ]; then
+    check "...and stored encrypted" yes "$([ "$STORED" != "$MAIL_PASSWORD" ] && [ -n "$STORED" ] && echo yes)"
+fi
+check_contains "...nor logged" "set \"pam-email-password\" to a new secret (was none)" "$(podman logs --since 1m myguactest 2>&1)"
+check "...nor its plaintext anywhere in the log" no \
+    "$(podman logs --since 1m myguactest 2>&1 | grep -qF "$MAIL_PASSWORD" && echo yes || echo no)"
+
+# ---------------------------------------------------------------- test
+section "The test button"
+check "a user cannot test" 403 "$(status_of "$(test_email "$USER")")"
+R=$(test_email "$T46_ADMIN")
+check "without a server, it says so" "False No mail server is set." "$(json_get "${R#* }" "d['sent']") $(message_of "$R")"
+email_set '{"pam-email-host":"mymailtest","pam-email-port":1025,"pam-email-from":"Guacamole PAM <pam@example.org>"}' >/dev/null
+R=$(test_email "$ADMIN")
+check_contains "an administrator without an address is told to set one" "False Your Guacamole user has no email address" \
+    "$(json_get "${R#* }" "d['sent']") $(message_of "$R")"
+R=$(test_email "$T46_ADMIN")
+check_contains "a certificate of a CA Java does not trust is refused" \
+    "The certificate of mail server mymailtest:1025 with STARTTLS is not trusted" "$(message_of "$R")"
+check_contains "...which is logged" "User \"t46-admin\" tested email: The certificate of mail server" \
+    "$(podman logs --since 1m myguactest 2>&1)"
+email_set "{\"pam-email-ca-certificates\":$CA,\"pam-email-security\":\"none\"}" >/dev/null
+R=$(test_email "$T46_ADMIN")
+check_contains "unencrypted, a server requiring STARTTLS refuses" "False Mail server mymailtest:1025 unencrypted" \
+    "$(json_get "${R#* }" "d['sent']") $(message_of "$R")"
+email_set '{"pam-email-security":"tls"}' >/dev/null
+R=$(test_email "$T46_ADMIN")
+check_contains "TLS from the start, to a STARTTLS port, fails" "False" "$(json_get "${R#* }" "d['sent']")"
+email_set '{"pam-email-security":null}' >/dev/null
+R=$(test_email "$T46_ADMIN")
+check_contains "with STARTTLS and the CA trusted, a login is still needed" "False Mail server mymailtest:1025 with STARTTLS" \
+    "$(json_get "${R#* }" "d['sent']") $(message_of "$R")"
+email_set '{"pam-email-username":"pammail","pam-email-password":"wrong"}' >/dev/null
+R=$(test_email "$T46_ADMIN")
+check_contains "a wrong password is refused" "refused the username or password" "$(message_of "$R")"
+email_set "{\"pam-email-password\":\"$MAIL_PASSWORD\"}" >/dev/null
+R=$(test_email "$T46_ADMIN")
+check "the right one: the test is sent to the administrator" \
+    "True A test email was sent to t46-admin@example.org through mail server mymailtest:1025 with STARTTLS." \
+    "$(json_get "${R#* }" "d['sent']") $(message_of "$R")"
+check "...and received, from the sender set" yes "$(mailed t46-admin@example.org "[Guacamole PAM] A test from the PAM settings page, sent by \"t46-admin\".")"
+
+# ---------------------------------------------------------------- preferences
+section "Preferences"
+EMAILS=$(json_get "$(api GET "$PAM/access" "$USER" | cut -d' ' -f2-)" "' '.join([str(d['emails']['enabled']), str(d['emails']['address']), str(d['emails']['wanted']['own'])])")
+check "a user is told emails are off, their address, and what they want" "False t46-user@example.org True" "$EMAILS"
+check "a user without an address is told so" None \
+    "$(json_get "$(api GET "$PAM/access" "$NOBODY" | cut -d' ' -f2-)" "str(d['emails']['address'])")"
+check "an unknown kind" 400 "$(status_of "$(api PUT "$PAM/preferences/emails/pager" "$USER" '{"wanted":false}')")"
+
+# ---------------------------------------------------------------- events
+section "Who receives what"
+email_set '{"pam-email-enabled":true,"pam-email-link":"https://guac.example.org/guacamole/"}' >/dev/null
+check "an administrator is emailed another's setting change" yes \
+    "$(mailed t46-admin@example.org "[Guacamole PAM] User \"$GUAC_ADMIN\" changed the PAM settings.")"
+
+api POST "$PAM/requests/$GATED" "$USER" '{"reason":"T46 ticket 1"}' >/dev/null
+check "a request goes to its approvers (directly and through a group) and administrators, not the requester" \
+    "t46-admin@example.org t46-approver2@example.org t46-approver@example.org" \
+    "$(mailed_to "User \"t46-user\" requested \"t46 gated ssh\"")"
+BODY=$(mails text | grep -F "t46-approver@example.org|" | grep -F "requested \"t46 gated ssh\"" | tail -1 | cut -d'|' -f3-)
+check_contains "...the approver's with its reason and a link to the Approvals tab" \
+    'Reason: T46 ticket 1\n' "$BODY"
+check_contains "...the link" 'Approve or deny it on the Approvals tab: https://guac.example.org/guacamole/#/settings/pam-approvals\n' "$BODY"
+check_contains "...and why they receive it" "You receive this as an approver of the connection." "$BODY"
+
+ID=$(pending_id t46-user)
+api POST "$PAM/approvals/$ID/approve" "$APPROVER" >/dev/null
+check "the approval goes to the requester, the other approver and administrators, not the approver" \
+    "t46-admin@example.org t46-approver2@example.org t46-user@example.org" \
+    "$(mailed_to "User \"t46-approver\" approved the request of \"t46-user\"")"
+BODY=$(mails text | grep -F "t46-user@example.org|" | grep -F "approved the request" | tail -1 | cut -d'|' -f3-)
+check_contains "...the requester's telling them to connect" 'Open the connection in Guacamole: https://guac.example.org/guacamole/\n' "$BODY"
+check "...and no email says a password" no "$(mails text | grep -qiF "password:" && echo yes || echo no)"
+
+sql "UPDATE pam_checkout SET expires = $(sql_ago 1) WHERE connection_id = $GATED AND released IS NULL" >/dev/null
+check "the checkout expiring goes to its holder" yes "$(mailed t46-user@example.org "The checkout of \"t46 gated ssh\" by \"t46-user\" expired.")"
+
+api POST "$PAM/requests/$GATED" "$USER" '{"reason":"T46 ticket 2"}' >/dev/null
+sleep 1
+api POST "$PAM/approvals/$(pending_id t46-user)/deny" "$APPROVER2" '{"reason":"Not today"}' >/dev/null
+check "a denial goes to the requester" yes "$(mailed t46-user@example.org "User \"t46-approver2\" denied the request of \"t46-user\"")"
+check_contains "...with its reason" 'Reason: Not today\n' \
+    "$(mails text | grep -F "t46-user@example.org|" | grep -F "denied the request" | tail -1 | cut -d'|' -f3-)"
+
+api PUT "$PAM/preferences/emails/own" "$USER" '{"wanted":false}' >/dev/null
+check "a user turns their own emails off" False \
+    "$(json_get "$(api GET "$PAM/access" "$USER" | cut -d' ' -f2-)" "str(d['emails']['wanted']['own'])")"
+APPROVED="User \"t46-approver\" approved the request of \"t46-user\""
+BEFORE="$(count_mailed t46-user@example.org "$APPROVED") $(count_mailed t46-approver2@example.org "$APPROVED")"
+api POST "$PAM/requests/$GATED" "$USER" '{"reason":"T46 ticket 3"}' >/dev/null
+sleep 1
+api POST "$PAM/approvals/$(pending_id t46-user)/approve" "$APPROVER" >/dev/null
+sleep 3
+check "...and is no longer emailed the decision, which the other approver still is" \
+    "${BEFORE% *} $(( ${BEFORE#* } + 1 ))" \
+    "$(count_mailed t46-user@example.org "$APPROVED") $(count_mailed t46-approver2@example.org "$APPROVED")"
+api PUT "$PAM/preferences/emails/own" "$USER" '{"wanted":true}' >/dev/null
+
+ACTIVE=$(sql "SELECT checkout_id FROM pam_checkout WHERE connection_id = $GATED AND released IS NULL")
+api POST "$PAM/checkouts/$ACTIVE/revoke" "$T46_ADMIN" >/dev/null
+check "an administrator revoking a checkout: emailed to its holder" yes \
+    "$(mailed t46-user@example.org "was ended by \"t46-admin\"")"
+check "...not to that administrator" 0 "$(count_mailed t46-admin@example.org "was ended by \"t46-admin\"")"
+
+email_set '{"pam-email-admin-address":"soc@example.org"}' >/dev/null
+api POST "$PAM/requests/$GATED" "$NOBODY" '{"reason":"T46 nobody"}' >/dev/null
+check "the extra address receives what administrators do" yes "$(mailed soc@example.org "User \"t46-nobody\" requested \"t46 gated ssh\"")"
+check_contains "...saying why" "This address receives what Guacamole administrators receive" \
+    "$(mails text | grep -F "soc@example.org|" | tail -1 | cut -d'|' -f3-)"
+api DELETE "$PAM/requests/$GATED/pending" "$NOBODY" >/dev/null
+
+# ---------------------------------------------------------------- off
+section "Turned off"
+email_set '{"pam-email-enabled":false}' >/dev/null
+REQUESTED="User \"t46-user\" requested \"t46 gated ssh\""
+BEFORE=$(count_mailed t46-approver@example.org "$REQUESTED")
+api POST "$PAM/requests/$GATED" "$USER" '{"reason":"T46 while off"}' >/dev/null
+sleep 3
+check "nothing is sent" "$BEFORE" "$(count_mailed t46-approver@example.org "$REQUESTED")"
+api DELETE "$PAM/requests/$GATED/pending" "$USER" >/dev/null

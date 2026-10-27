@@ -177,6 +177,9 @@ CREATE TABLE pam_user_preference (
   username       nvarchar(128)  NOT NULL,
   approval_badge bit            NOT NULL DEFAULT 1,
   rotation_badge bit            NOT NULL DEFAULT 1,
+  admin_email    bit            NOT NULL DEFAULT 1,
+  approval_email bit            NOT NULL DEFAULT 1,
+  own_email      bit            NOT NULL DEFAULT 1,
 
   CONSTRAINT pam_user_preference_pkey PRIMARY KEY (username)
 

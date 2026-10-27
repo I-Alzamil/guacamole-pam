@@ -195,6 +195,24 @@
                                         <exclude>META-INF/MANIFEST.MF</exclude>
                                     </excludes>
                                 </filter>
+                                <!-- Angus Mail's and Jakarta's licenses are kept
+                                     apart (see NOTICE), as they share names -->
+                                <filter>
+                                    <artifact>org.eclipse.angus:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                        <exclude>META-INF/LICENSE.md</exclude>
+                                        <exclude>META-INF/NOTICE.md</exclude>
+                                    </excludes>
+                                </filter>
+                                <filter>
+                                    <artifact>jakarta.*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                        <exclude>META-INF/LICENSE.md</exclude>
+                                        <exclude>META-INF/NOTICE.md</exclude>
+                                    </excludes>
+                                </filter>
                                 <filter>
                                     <artifact>com.github.mwiede:jsch</artifact>
                                     <excludes>
@@ -203,6 +221,8 @@
                                 </filter>
                             </filters>
                             <transformers>
+                                <!-- Jakarta Mail finds its providers as services -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                                 <!-- The libraries' classes for newer Java releases
                                      (META-INF/versions), such as JSch's Ed25519
                                      on Java 15 and later, are only used if the jar
@@ -316,6 +336,14 @@
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
             <version>6.3.3</version>
+        </dependency>
+
+        <!-- Email notifications over SMTP (Jakarta Mail, with Jakarta
+             Activation) -->
+        <dependency>
+            <groupId>org.eclipse.angus</groupId>
+            <artifactId>angus-mail</artifactId>
+            <version>2.0.5</version>
         </dependency>
 
         <!-- Provided by Guacamole, so not bundled from the libraries above -->

@@ -272,7 +272,13 @@
         },
         "SESSION": {
             "SECTION_HEADER_PASSWORD": "Password"
-        }
+        },
+        "SECTION_HEADER_EMAILS": "Email notifications",
+        "HELP_EMAILS": "Emails about PAM, sent to {ADDRESS}, the address of your Guacamole profile. Each kind is sent unless turned off here.",
+        "HELP_EMAILS_NO_ADDRESS": "Your Guacamole profile has no email address, so you receive no emails: ask an administrator to set one.",
+        "FIELD_HEADER_EMAIL_EVERYTHING": "Everything PAM does (administrators):",
+        "FIELD_HEADER_EMAIL_APPROVALS": "Requests awaiting my approval, and other approvers' decisions:",
+        "FIELD_HEADER_EMAIL_OWN": "Decisions on my requests, and my access ending:"
     },
     "PROTOCOL_PAM_ACCOUNT": {
         "NAME": "Account",
@@ -582,7 +588,33 @@
         "OPTION_SYSLOG_FACILITY_DAEMON": "daemon",
         "FIELD_HEADER_SYSLOG_APP_NAME": "Application name:",
         "HELP_SYSLOG_APP_NAME": "What the messages say they come from: \"guacamole-pam\" if empty. Letters, digits and punctuation, without spaces.",
-        "INFO_TEST_FAILED": "The test could not be sent: {MESSAGE}"
+        "INFO_TEST_FAILED": "The test could not be sent: {MESSAGE}",
+        "SECTION_HEADER_EMAIL": "Email",
+        "SECTION_HELP_EMAIL": "Emails PAM events to those they concern, at the address of their Guacamole profile: administrators receive every event; approvers, requests awaiting their approval and other approvers' decisions on them; users, decisions on their requests and their access ending (expired, or ended by someone else). Nobody is emailed what they did themselves. Each user can turn each kind off under Preferences. Passwords are never sent.",
+        "ACTION_TEST_EMAIL": "Send a test email",
+        "FIELD_HEADER_EMAIL_ENABLED": "Send emails:",
+        "HELP_EMAIL_ENABLED": "Off by default. Needs a mail server and a sender address below.",
+        "FIELD_HEADER_EMAIL_HOST": "Mail server:",
+        "HELP_EMAIL_HOST": "Host name or address of the SMTP server. With STARTTLS or TLS, its certificate must name it.",
+        "FIELD_HEADER_EMAIL_PORT": "Port:",
+        "HELP_EMAIL_PORT": "587 for STARTTLS (mail submission), 465 for TLS, 25 unencrypted.",
+        "FIELD_HEADER_EMAIL_SECURITY": "Security:",
+        "HELP_EMAIL_SECURITY": "STARTTLS is required, not just tried: a server not offering it is refused. With either, the server's certificate is checked. Unencrypted sends the emails, and the password below, in the clear.",
+        "OPTION_EMAIL_SECURITY_STARTTLS": "STARTTLS (required)",
+        "OPTION_EMAIL_SECURITY_TLS": "TLS (from the start)",
+        "OPTION_EMAIL_SECURITY_NONE": "None (not encrypted)",
+        "FIELD_HEADER_EMAIL_CA_CERTIFICATES": "CA certificates:",
+        "HELP_EMAIL_CA_CERTIFICATES": "The certificates, in PEM, of the CAs issuing the mail server's certificate. If empty, those Java trusts are used.",
+        "FIELD_HEADER_EMAIL_USERNAME": "Username:",
+        "HELP_EMAIL_USERNAME": "To log in to the mail server, if it requires it.",
+        "FIELD_HEADER_EMAIL_PASSWORD": "Password:",
+        "HELP_EMAIL_PASSWORD": "The password of that username.",
+        "FIELD_HEADER_EMAIL_FROM": "Sender:",
+        "HELP_EMAIL_FROM": "The address emails come from, such as pam@example.org or \"Guacamole PAM <pam@example.org>\".",
+        "FIELD_HEADER_EMAIL_ADMIN_ADDRESS": "Also send administrators' emails to:",
+        "HELP_EMAIL_ADMIN_ADDRESS": "An address receiving every event, as administrators do, such as a security team's. Optional.",
+        "FIELD_HEADER_EMAIL_LINK": "Guacamole address:",
+        "HELP_EMAIL_LINK": "Guacamole's address as users open it, such as https://guac.example.org/guacamole/, for links in emails. Optional: without it, emails have no links."
     },
     "PAM_PLATFORM_TRANSFER": {
         "ACTION_EXPORT": "Export",

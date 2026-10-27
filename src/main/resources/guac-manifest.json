@@ -24,7 +24,7 @@
         "templates/pamBadgeUserMenu.html",
         "templates/pamBadgePageList.html",
         "templates/pamConnectionStatus.html",
-        "templates/pamBadgePreferencesPatch.html",
+        "templates/pamPreferencesPatch.html",
         "templates/pamSessionPasswordPatch.html",
         "templates/pamFieldHelpPatch.html",
         "templates/pamSectionHelpPatch.html"

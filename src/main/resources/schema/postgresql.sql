@@ -210,12 +210,18 @@ CREATE TABLE IF NOT EXISTS pam_request_approval (
 
 -- Per-user preferences: whether a user sees the badge counting requests
 -- awaiting their decision, and (administrators) the badge counting failed
--- rotations; each shown unless turned off
+-- rotations; and which emails they receive: everything (administrators),
+-- requests awaiting their approval and other approvers' decisions, and
+-- decisions on their own requests and their access ending; each on unless
+-- turned off
 CREATE TABLE IF NOT EXISTS pam_user_preference (
 
   username       varchar(128)  NOT NULL,
   approval_badge boolean       NOT NULL DEFAULT TRUE,
   rotation_badge boolean       NOT NULL DEFAULT TRUE,
+  admin_email    boolean       NOT NULL DEFAULT TRUE,
+  approval_email boolean       NOT NULL DEFAULT TRUE,
+  own_email      boolean       NOT NULL DEFAULT TRUE,
 
   PRIMARY KEY (username)
 

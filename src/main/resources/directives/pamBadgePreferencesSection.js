@@ -2,7 +2,7 @@
  * "Notification badges" section of the Preferences tab: which badges the
  * user wants, among those they can have. Hidden for users who can have
  * none. Placed after the appearance settings by
- * templates/pamBadgePreferencesPatch.html.
+ * templates/pamPreferencesPatch.html.
  */
 angular.module('guacPam').directive('pamBadgePreferencesSection', [function pamBadgePreferencesSection() {
 

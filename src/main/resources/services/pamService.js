@@ -124,6 +124,14 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
     };
 
     /**
+     * Turns one kind of email of the current user ("everything",
+     * "approvals" or "own") on or off.
+     */
+    service.setEmailWanted = function setEmailWanted(kind, wanted) {
+        return request('PUT', 'preferences/emails/' + encodeURIComponent(kind), { wanted : wanted });
+    };
+
+    /**
      * Management types with the forms of their platform settings.
      */
     service.getPlatformTypes = function getPlatformTypes() {

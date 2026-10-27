@@ -31,3 +31,17 @@ text is also in the jar:
     Copyright 2002-2015 Atsuhiko Yamanaka, JCraft, Inc.
     It includes JZlib (BSD-style, META-INF/LICENSE.JZlib.txt) and jBCrypt
     (ISC-style, META-INF/LICENSE.jBCrypt.txt).
+
+  Angus Mail 2.0.5 and Jakarta Mail 2.1.5
+    Eclipse Public License 2.0, or GNU General Public License 2.0 with the
+    Classpath Exception (META-INF/LICENSE.JakartaMail.md; notices in
+    META-INF/NOTICE.AngusMail.md and META-INF/NOTICE.JakartaMail.md)
+    Copyright Oracle and/or its affiliates, and Eclipse Foundation contributors
+    Source: https://github.com/eclipse-ee4j/angus-mail and
+    https://github.com/jakartaee/mail-api
+
+  Angus Activation 2.0.3 and Jakarta Activation 2.1.4
+    Eclipse Distribution License 1.0, BSD-3-Clause
+    (META-INF/LICENSE.JakartaActivation.md; notices in
+    META-INF/NOTICE.AngusActivation.md and META-INF/NOTICE.JakartaActivation.md)
+    Copyright 2018 Oracle and/or its affiliates

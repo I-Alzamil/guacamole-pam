@@ -163,6 +163,9 @@ CREATE TABLE IF NOT EXISTS pam_user_preference (
   username       varchar(128)  NOT NULL,
   approval_badge boolean       NOT NULL DEFAULT TRUE,
   rotation_badge boolean       NOT NULL DEFAULT TRUE,
+  admin_email    boolean       NOT NULL DEFAULT TRUE,
+  approval_email boolean       NOT NULL DEFAULT TRUE,
+  own_email      boolean       NOT NULL DEFAULT TRUE,
 
   PRIMARY KEY (username)
 
