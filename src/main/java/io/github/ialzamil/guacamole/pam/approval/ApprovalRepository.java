@@ -21,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.github.ialzamil.guacamole.pam.AccountProtocol;
+import io.github.ialzamil.guacamole.pam.Values;
 import io.github.ialzamil.guacamole.pam.checkout.Checkout;
 import io.github.ialzamil.guacamole.pam.db.PamDatabase;
 import io.github.ialzamil.guacamole.pam.db.SearchPattern;
@@ -57,6 +58,11 @@ public class ApprovalRepository {
     static final int CLAIM_SECONDS = 300;
 
     private volatile long lastExpiry = 0;
+
+    /**
+     * The most connections listed in one query.
+     */
+    private static final int MAX_IDS = 1000;
 
     /**
      * The connection's current name, or the one it had once deleted; and
@@ -478,19 +484,6 @@ public class ApprovalRepository {
         StringBuilder sql = new StringBuilder(SELECT).append(" WHERE r.status <> 'PENDING' AND r.approvals_required > 0");
         List<Object> parameters = new ArrayList<>();
 
-        if (connections != null) {
-            List<Integer> ids = new ArrayList<>();
-            for (String identifier : connections) {
-                try {
-                    ids.add(Integer.valueOf(identifier));
-                }
-                catch (NumberFormatException e) {
-                    // Not a connection of this data source
-                }
-            }
-            sql.append(" AND r.connection_id IN ").append(SqlDialect.in(ids));
-        }
-
         for (String term : terms) {
             if (term == null || term.trim().isEmpty())
                 continue;
@@ -511,13 +504,37 @@ public class ApprovalRepository {
             for (int i = 0; i < 11; i++)
                 parameters.add(pattern);
         }
-
-        sql.append(" ORDER BY coalesce(r.decided, r.requested) DESC, r.request_id DESC").append(dialect.limit());
         parameters.add(limit);
 
-        return query(sql.toString(), parameters.toArray());
+        String order = " ORDER BY coalesce(r.decided, r.requested) DESC, r.request_id DESC" + dialect.limit();
+        if (connections == null)
+            return query(sql + order, parameters.toArray());
+
+        List<Integer> ids = new ArrayList<>();
+        for (String identifier : connections) {
+            Integer id = Values.parseId(identifier);
+            if (id != null)
+                ids.add(id);
+        }
+
+        // The latest of each part of the connections, then of them all: one
+        // list of every connection may be too long for the database
+        List<ApprovalRequest> found = new ArrayList<>();
+        for (int i = 0; i < Math.max(ids.size(), 1); i += MAX_IDS) {
+            List<Integer> part = ids.subList(i, Math.min(ids.size(), i + MAX_IDS));
+            found.addAll(query(sql + " AND r.connection_id IN " + SqlDialect.in(part) + order,
+                    parameters.toArray()));
+        }
+        if (ids.size() <= MAX_IDS)
+            return found;
+        found.sort((a, b) -> {
+            int byTime = Long.compare(decidedOrRequested(b), decidedOrRequested(a));
+            return byTime != 0 ? byTime : Integer.compare(b.getId(), a.getId());
+        });
+        return new ArrayList<>(found.subList(0, Math.min(limit, found.size())));
 
     }
+
 
     /**
      * Records an approval of a pending request, returning the request with
@@ -863,6 +880,11 @@ public class ApprovalRepository {
 
         lastExpiry = now;
 
+    }
+
+    private static long decidedOrRequested(ApprovalRequest request) {
+        Long decided = request.getDecided();
+        return decided != null ? decided : request.getRequested();
     }
 
     private void requirePending(Connection connection, int requestId)
