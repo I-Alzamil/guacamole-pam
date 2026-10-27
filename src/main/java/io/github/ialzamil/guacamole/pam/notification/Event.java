@@ -28,6 +28,10 @@ public final class Event {
     private Integer checkoutId;
     private String reason;
     private String detail;
+    private String detailKey;
+    private Integer minutes;
+    private Integer approvals;
+    private Integer approvalsRequired;
     private String remoteHost;
     private Long starts;
     private Long ends;
@@ -91,6 +95,33 @@ public final class Event {
     }
 
     /**
+     * What else to know, in words PAM has in every language: the message
+     * of the given key (DETAIL_...), with the event's values. Emails show it
+     * in the recipient's language; the detail is it in English unless set.
+     */
+    public Event detailMessage(String key) {
+        this.detailKey = key;
+        return this;
+    }
+
+    /**
+     * The minutes a checkout is, or would be, extended by.
+     */
+    public Event minutes(Integer minutes) {
+        this.minutes = minutes;
+        return this;
+    }
+
+    /**
+     * The approvals a request has, if known, and needs.
+     */
+    public Event approvals(Integer given, Integer required) {
+        this.approvals = given;
+        this.approvalsRequired = required;
+        return this;
+    }
+
+    /**
      * Where the user acted from.
      */
     public Event remoteHost(String remoteHost) {
@@ -148,8 +179,27 @@ public final class Event {
         return reason;
     }
 
+    /**
+     * What else to know, in English.
+     */
     public String getDetail() {
-        return detail;
+        return detail != null || detailKey == null ? detail : Summary.detail(this);
+    }
+
+    public String getDetailKey() {
+        return detailKey;
+    }
+
+    public Integer getMinutes() {
+        return minutes;
+    }
+
+    public Integer getApprovals() {
+        return approvals;
+    }
+
+    public Integer getApprovalsRequired() {
+        return approvalsRequired;
     }
 
     public String getRemoteHost() {
@@ -176,11 +226,14 @@ public final class Event {
         put(fields, "connection-id", connectionIdentifier);
         put(fields, "request", requestId);
         put(fields, "checkout", checkoutId);
+        put(fields, "minutes", minutes);
+        put(fields, "approvals", approvals);
+        put(fields, "approvals-required", approvalsRequired);
         put(fields, "starts", starts == null ? null : Instant.ofEpochMilli(starts).toString());
         put(fields, "ends", ends == null ? null : Instant.ofEpochMilli(ends).toString());
         put(fields, "remote-host", remoteHost);
         put(fields, "reason", reason);
-        put(fields, "detail", detail);
+        put(fields, "detail", getDetail());
         return fields;
     }
 

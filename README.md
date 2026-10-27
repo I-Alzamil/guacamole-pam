@@ -607,6 +607,7 @@ PAM settings. Passwords are never sent.
 
   Fields: `user` (whose request, checkout or session), `actor` (who decided,
   revoked or changed), `connection`, `connection-id`, `request`, `checkout`,
+  `minutes` (of an extension), `approvals` and `approvals-required`,
   `starts`, `ends`, `remote-host`, `reason`, `detail`. Severities: error for
   failed rotations, warning for revoked checkouts and standby, notice for
   checkouts, grants, denials, viewed passwords and setting changes,
@@ -672,9 +673,10 @@ Each language has:
 
 A field left empty takes English (for English, the built-in text), shown in
 it, so a partial translation still sends complete emails. Details PAM
-records as text, such as a rotation's error, stay in English, as in the
-log. Times are shown in the **Time zone** of the PAM Settings tab (UTC
-unless set), with their offset from UTC.
+writes are in the language too; those it passes on, such as a target
+system's error when a rotation fails, stay as received, as in the log.
+Times are shown in the **Time zone** of the PAM Settings tab (UTC unless
+set), with their offset from UTC.
 
 **Export** saves a language as a JSON file, complete, to translate
 elsewhere; **Import** adds one from such a file, asking before replacing a

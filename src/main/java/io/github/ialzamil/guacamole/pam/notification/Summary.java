@@ -40,6 +40,28 @@ public final class Summary {
         else
             key = "SUMMARY_" + event.getType().name();
 
+        return EmailTemplates.render(messages.apply(key), values(event, messages));
+
+    }
+
+    /**
+     * The event's detail in English, from its message (see
+     * {@link Event#detailMessage}).
+     */
+    static String detail(Event event) {
+        return detail(event, ENGLISH::message);
+    }
+
+    /**
+     * The event's detail from its message in the given messages, or null
+     * if it has none.
+     */
+    public static String detail(Event event, Function<String, String> messages) {
+        return event.getDetailKey() == null ? null
+                : EmailTemplates.render(messages.apply(event.getDetailKey()), values(event, messages));
+    }
+
+    private static Map<String, String> values(Event event, Function<String, String> messages) {
         String unknown = messages.apply("UNKNOWN");
         Map<String, String> values = new HashMap<>();
         values.put("user", orElse(event.getUser(), unknown));
@@ -48,8 +70,12 @@ public final class Summary {
                 : event.getConnectionIdentifier(), unknown));
         values.put("request", orElse(event.getRequestId() == null ? null : event.getRequestId().toString(), unknown));
         values.put("server", event.getServer());
-        return EmailTemplates.render(messages.apply(key), values);
-
+        values.put("minutes", orElse(event.getMinutes() == null ? null : event.getMinutes().toString(), unknown));
+        values.put("approvals", orElse(event.getApprovals() == null ? null : event.getApprovals().toString(),
+                unknown));
+        values.put("approvals-required", orElse(event.getApprovalsRequired() == null ? null
+                : event.getApprovalsRequired().toString(), unknown));
+        return values;
     }
 
     private static String orElse(String value, String otherwise) {

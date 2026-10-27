@@ -84,6 +84,29 @@ public class EmailTextTest {
         assertTrue(body, body.contains("You receive this about your own requests and access."));
     }
 
+    /**
+     * What PAM writes as the detail: in the recipient's language, and in
+     * English for syslog; what it passes on, as recorded.
+     */
+    @Test
+    public void detailsPamWritesAreInTheLanguageGiven() throws Exception {
+        EmailLanguage french = new EmailLanguage();
+        french.setCode("fr");
+        french.setName("Français");
+        french.getMessages().put("DETAIL_GRANTED_EXTENDED", "Le checkout est prolongé de {minutes} minutes.");
+        EmailText text = new EmailText(EmailLanguages.validate(french).over(EmailLanguages.getBuiltIn()),
+                EmailTemplates.Kind.DECISION, null, java.time.ZoneOffset.UTC);
+        Event event = Event.of(EventType.REQUEST_GRANTED).user("bob").actor("ann").connection("7", "web")
+                .checkout(3).minutes(30).detailMessage("DETAIL_GRANTED_EXTENDED");
+        String body = text.body(event, Audience.Role.OWN);
+        assertTrue(body, body.contains("\nDetails: Le checkout est prolongé de 30 minutes.\n"));
+        assertEquals("The checkout is extended by 30 minutes.", event.getDetail());
+        assertEquals("30", String.valueOf(event.getFields().get("minutes")));
+
+        Event failed = Event.of(EventType.ROTATION_FAILED).connection("7", "web").detail("host refused");
+        assertTrue(text.body(failed, null).contains("\nDetails: host refused\n"));
+    }
+
     @Test
     public void refusesWhatIsNotALanguage() {
         refused("not a language code", lang("english", "English"));

@@ -97,6 +97,10 @@ final class EmailText {
         values.put("connection-id", event.getConnectionIdentifier());
         values.put("request", event.getRequestId() == null ? null : event.getRequestId().toString());
         values.put("checkout", event.getCheckoutId() == null ? null : event.getCheckoutId().toString());
+        values.put("minutes", event.getMinutes() == null ? null : event.getMinutes().toString());
+        values.put("approvals", event.getApprovals() == null ? null : event.getApprovals().toString());
+        values.put("approvals-required", event.getApprovalsRequired() == null ? null
+                : event.getApprovalsRequired().toString());
         values.put("starts", time(event.getStarts()));
         values.put("ends", time(event.getEnds()));
         values.put("reason", oneLine(event.getReason()));
@@ -139,14 +143,11 @@ final class EmailText {
     }
 
     /**
-     * The event's detail, in the language where PAM knows it: that of a
-     * granted request. Others are as recorded, in English.
+     * The event's detail, in the language where PAM wrote it; as recorded,
+     * in English, where it came from elsewhere, such as a rotation's error.
      */
     private String detail(Event event) {
-        if (event.getType() != EventType.REQUEST_GRANTED)
-            return event.getDetail();
-        return message(event.getCheckoutId() != null ? "DETAIL_GRANTED_EXTENDED"
-                : event.getStarts() != null ? "DETAIL_GRANTED_RESERVED" : "DETAIL_GRANTED_NOW");
+        return event.getDetailKey() != null ? Summary.detail(event, language::message) : event.getDetail();
     }
 
     private void line(StringBuilder text, String label, String value) {

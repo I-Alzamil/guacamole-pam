@@ -29,7 +29,8 @@ public final class EmailTemplates {
      */
     static final Set<String> PLACEHOLDERS = Collections.unmodifiableSet(new LinkedHashSet<>(Arrays.asList(
             "summary", "details", "action", "link", "why", "event", "user", "actor", "connection", "connection-id",
-            "request", "checkout", "starts", "ends", "reason", "detail", "client-address", "server", "time")));
+            "request", "checkout", "minutes", "approvals", "approvals-required", "starts", "ends", "reason",
+            "detail", "client-address", "server", "time")));
 
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{|\\}\\}|\\{([a-z-]+)\\}");
 

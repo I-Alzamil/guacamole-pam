@@ -274,7 +274,7 @@ public class RequestService {
         events.publish(Event.of(EventType.REQUEST_SUBMITTED).user(username)
                 .connection(Integer.toString(target.getId()), target.getName()).request(pending.getId())
                 .period(starts, ends).reason(trimmed).remoteHost(remoteHost)
-                .detail(approvalsRequired + " approval(s) needed."));
+                .approvals(null, approvalsRequired).detailMessage("DETAIL_APPROVALS_NEEDED"));
 
     }
 
@@ -344,9 +344,10 @@ public class RequestService {
                 events.publish(Event.of(EventType.REQUEST_DENIED).user(overlapping.getUsername())
                         .connection(request.getConnectionIdentifier(), target.getName()).request(rejected)
                         .period(overlapping.getStarts(), overlapping.getEnds())
-                        .reason("It overlaps access reserved for someone else.")
-                        .detail("Request " + request.getId() + " of \"" + request.getUsername() + "\" was approved by \""
-                                + approver + "\" for that time."));
+                        .detailMessage("DETAIL_OVERLAP")
+                        .detail("It overlaps access reserved for someone else: request " + request.getId()
+                                + " of \"" + request.getUsername() + "\" was approved by \"" + approver
+                                + "\" for that time."));
         }
     }
 
@@ -406,8 +407,8 @@ public class RequestService {
             events.publish(Event.of(EventType.REQUEST_SUBMITTED).user(username)
                     .connection(Integer.toString(target.getId()), target.getName()).request(request.getId())
                     .checkout(checkout.getId()).reason(trimmed).remoteHost(remoteHost)
-                    .detail("To extend the checkout by " + minutes + " minutes; " + approvalsRequired
-                            + " approval(s) needed."));
+                    .minutes(minutes).approvals(null, approvalsRequired)
+                    .detailMessage("DETAIL_EXTENSION_NEEDED"));
 
         if (approvalsRequired == 0) {
             try {
@@ -450,7 +451,7 @@ public class RequestService {
                 .connection(checkout.getConnectionIdentifier(), checkout.getConnectionName())
                 .checkout(checkout.getId()).request(request.getId())
                 .period(checkout.getCheckedOut(), checkout.getExpires())
-                .detail("Extended by " + request.getExtensionMinutes() + " minutes."));
+                .minutes(request.getExtensionMinutes()).detailMessage("DETAIL_EXTENDED"));
         return checkout;
     }
 

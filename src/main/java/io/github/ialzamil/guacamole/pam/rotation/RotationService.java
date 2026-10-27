@@ -427,7 +427,7 @@ public final class RotationService {
         if (standby != null)
             events.publish(Event.of(EventType.SERVER_STANDBY).detail(standby.getMessage()));
         else if (lastStandby != Standby.STARTING)
-            events.publish(Event.of(EventType.SERVER_ACTIVE).detail("PAM works on this server again."));
+            events.publish(Event.of(EventType.SERVER_ACTIVE).detailMessage("DETAIL_SERVER_ACTIVE"));
         lastStandby = standby;
     }
 

@@ -104,8 +104,8 @@ public class ApprovalService {
 
         if (request.getApprovers().size() < request.getApprovalsRequired()) {
             events.publish(decision(EventType.REQUEST_APPROVED, request, approver, remoteHost)
-                    .detail(request.getApprovers().size() + " of " + request.getApprovalsRequired()
-                            + " approval(s) given."));
+                    .approvals(request.getApprovers().size(), request.getApprovalsRequired())
+                    .detailMessage("DETAIL_APPROVALS_GIVEN"));
             return request;
         }
 
@@ -140,10 +140,9 @@ public class ApprovalService {
         if (checkout != null)
             approvals.markApproved(requestId, checkout.getId(), approver.getUsername());
         events.publish(decision(EventType.REQUEST_GRANTED, request, approver, remoteHost)
-                .detail(request.getExtendsCheckout() != null ? "The checkout is extended by "
-                        + request.getExtensionMinutes() + " minutes."
-                        : request.getStarts() != null ? "The access is reserved for the time asked."
-                        : "The access starts now."));
+                .minutes(request.getExtensionMinutes())
+                .detailMessage(request.getExtendsCheckout() != null ? "DETAIL_GRANTED_EXTENDED"
+                        : request.getStarts() != null ? "DETAIL_GRANTED_RESERVED" : "DETAIL_GRANTED_NOW"));
         return approvals.get(requestId);
 
     }

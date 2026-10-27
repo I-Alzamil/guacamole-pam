@@ -254,7 +254,7 @@ public class CheckoutService {
                     approvals.decide(request.getId(), ApprovalRequest.CANCELLED, username, null);
                     events.publish(Event.of(EventType.REQUEST_CANCELLED).user(request.getUsername()).actor(username)
                             .connection(request.getConnectionIdentifier(), request.getConnectionName())
-                            .request(request.getId()).detail("The connection was deleted."));
+                            .request(request.getId()).detailMessage("DETAIL_CONNECTION_DELETED"));
                 }
                 catch (GuacamoleClientException e) {
                     // Decided meanwhile
@@ -266,7 +266,7 @@ public class CheckoutService {
                     events.publish(Event.of(EventType.REQUEST_CANCELLED).user(request.getUsername()).actor(username)
                             .connection(request.getConnectionIdentifier(), request.getConnectionName())
                             .request(request.getId()).period(request.getStarts(), request.getEnds())
-                            .detail("The connection was deleted."));
+                            .detailMessage("DETAIL_CONNECTION_DELETED"));
                 }
                 catch (GuacamoleClientException e) {
                     // Used or over meanwhile
@@ -323,7 +323,7 @@ public class CheckoutService {
         events.publish(Event.of(EventType.CHECKOUT_STARTED).user(username)
                 .connection(Integer.toString(id), target.getName()).checkout(checkout.getId())
                 .period(checkout.getCheckedOut(), checkout.getExpires()).reason(reason).remoteHost(remoteHost)
-                .detail(revealCount > 0 ? "The password was shown." : null));
+                .detailMessage(revealCount > 0 ? "DETAIL_PASSWORD_SHOWN" : null));
 
         return checkout;
 
@@ -439,7 +439,7 @@ public class CheckoutService {
                     : EventType.CHECKOUT_REVOKED).user(checkout.getUsername()).actor(releasedBy)
                     .connection(checkout.getConnectionIdentifier(), checkout.getConnectionName())
                     .checkout(checkout.getId()).remoteHost(releasedHost)
-                    .detail(Checkout.DELETED.equals(releaseReason) ? "The connection was deleted." : null));
+                    .detailMessage(Checkout.DELETED.equals(releaseReason) ? "DETAIL_CONNECTION_DELETED" : null));
             rotationService.checkoutEnded(checkout);
         }
     }
