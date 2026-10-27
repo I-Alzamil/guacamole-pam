@@ -198,6 +198,13 @@ suite() {
     KEY=$(share_key "$(api GET "$A/api/session/tunnels/$ALICE_SESSION/activeConnection/sharingCredentials/$VIEW" \
         "$ALICE_A")")
     check "Alice shares it, read only" yes "$([ -n "$KEY" ] && echo yes)"
+    # As server B does when server A is not heard from for a while
+    SERVER_A=$(sql "SELECT server_id FROM pam_ha_session WHERE tunnel_id = '$ALICE_SESSION'" | tr -d '[:space:]')
+    sql "DELETE FROM pam_ha_server WHERE server_id = '$SERVER_A'; DELETE FROM pam_ha_session WHERE server_id =
+        '$SERVER_A'; DELETE FROM pam_ha_share WHERE session_id NOT IN (SELECT session_id FROM pam_ha_session)" \
+        >/dev/null
+    check "server A not heard from, the other servers remove her session and its share link" 0 "$(share_count)"
+    eventually "...which server A records again when heard from" 1 20 share_count
     SHARED_B=$(curl -s -d "key=$KEY" "$B/api/tokens")
     check_contains "her share link opens on server B" '"pam-ha"' "$SHARED_B"
     SHARED_B=$(json_get "$SHARED_B" "d.get('authToken')")
@@ -292,6 +299,7 @@ suite() {
 
 }
 
+share_count() { sql "SELECT COUNT(*) FROM pam_ha_share" | tr -d '[:space:]'; }
 server_count() { sql "SELECT COUNT(*) FROM pam_ha_server" | tr -d '[:space:]'; }
 
 # recordings URL TOKEN -> how many recordings the last session of the

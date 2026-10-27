@@ -153,6 +153,14 @@ final class SessionStore {
          */
         private volatile boolean recorded;
 
+        /**
+         * Its share links known, by the SHA-256 of their key, with their
+         * sharing profile: recorded again with it if other servers removed
+         * both, as when this server was not heard from for a while. Read and
+         * changed holding {@link #recording}.
+         */
+        private final Map<String, String> shares = new HashMap<>();
+
         Session(Target target, String username, boolean joined, String sharingProfileId, boolean listed,
                 String joinedSessionId) {
             this.target = target;
@@ -650,13 +658,24 @@ final class SessionStore {
      * {@link #share}, so every server opens it.
      */
     void registerShare(String sessionId, String key, String sharingProfileId) throws GuacamoleException {
+        String keyHash = Sql.sha256(key);
         try (Connection connection = database.connect()) {
-            Sql.update(connection, "INSERT INTO pam_ha_share (share_key, session_id, sharing_profile_id,"
-                    + " created) VALUES (?, ?, ?, " + now() + ")", Sql.sha256(key), sessionId, sharingProfileId);
+            insertShare(connection, keyHash, sessionId, sharingProfileId);
         }
         catch (SQLException e) {
             throw new GuacamoleServerException("Unable to record the share link in the database.", e);
         }
+        synchronized (recording) {
+            Session session = sessions.get(sessionId);
+            if (session != null)
+                session.shares.put(keyHash, sharingProfileId);
+        }
+    }
+
+    private void insertShare(Connection connection, String keyHash, String sessionId, String sharingProfileId)
+            throws SQLException {
+        Sql.update(connection, "INSERT INTO pam_ha_share (share_key, session_id, sharing_profile_id, created)"
+                + " VALUES (?, ?, ?, " + now() + ")", keyHash, sessionId, sharingProfileId);
     }
 
     /**
@@ -809,9 +828,25 @@ final class SessionStore {
 
     /**
      * Removes this server's sessions that ended here, and records again
-     * those open here that went missing, or whose details are not recorded.
+     * those open here that went missing, with their share links, or whose
+     * details are not recorded.
      */
     private void setRight(Connection connection) throws SQLException {
+
+        // Share links made on any server, remembered for when they go
+        // missing with their session
+        try (PreparedStatement statement = connection.prepareStatement("SELECT h.share_key, h.session_id,"
+                + " h.sharing_profile_id FROM pam_ha_share h JOIN pam_ha_session s ON s.session_id = h.session_id"
+                + " WHERE s.server_id = ?")) {
+            statement.setString(1, serverId);
+            try (ResultSet results = statement.executeQuery()) {
+                while (results.next()) {
+                    Session session = sessions.get(results.getString(2));
+                    if (session != null)
+                        session.shares.put(results.getString(1), results.getString(3));
+                }
+            }
+        }
 
         Set<String> stored = new HashSet<>();
         try (PreparedStatement statement = connection.prepareStatement(
@@ -834,10 +869,17 @@ final class SessionStore {
                 continue;
             if (!session.recorded && session.details == null)
                 continue;
+            boolean missing = session.recorded && !stored.contains(entry.getKey());
             if (stored.contains(entry.getKey()))
                 Sql.update(connection, "DELETE FROM pam_ha_session WHERE session_id = ?", entry.getKey());
             insert(connection, entry.getKey(), session);
             session.recorded = true;
+            if (missing) {
+                for (Map.Entry<String, String> share : session.shares.entrySet()) {
+                    Sql.update(connection, "DELETE FROM pam_ha_share WHERE share_key = ?", share.getKey());
+                    insertShare(connection, share.getKey(), entry.getKey(), share.getValue());
+                }
+            }
         }
 
     }
