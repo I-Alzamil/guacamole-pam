@@ -17,6 +17,7 @@ angular.module('guacPam').directive('guacSettingsPamPasswordPolicies', [function
             var $translate       = $injector.get('$translate');
             var $window          = $injector.get('$window');
             var guacNotification = $injector.get('guacNotification');
+            var pamFilterText    = $injector.get('pamFilterText');
             var pamService       = $injector.get('pamService');
 
             /**
@@ -54,6 +55,29 @@ angular.module('guacPam').directive('guacSettingsPamPasswordPolicies', [function
             $scope.policies = null;
 
             /**
+             * The rows of the list: the built-in default, as { builtIn,
+             * rules }, then the policies; null while either loads. Those
+             * matching the filter, and what it matches: the name,
+             * description and rules as shown, and the names of what uses
+             * each.
+             */
+            $scope.rows = null;
+            $scope.filteredRows = [];
+            $scope.filteredPolicyProperties = ['pamFilterText'];
+
+            var setRows = function setRows() {
+                if (!$scope.policies || !$scope.defaultRules)
+                    return;
+                var builtIn = pamFilterText({ builtIn : true, rules : $scope.defaultRules }, [
+                    $translate.instant('PAM_PASSWORD_POLICIES.NAME_DEFAULT'),
+                    $translate.instant('PAM_PASSWORD_POLICIES.TEXT_DEFAULT_DESCRIPTION'),
+                    $scope.summary($scope.defaultRules),
+                    $translate.instant('PAM_PASSWORD_POLICIES.INFO_DEFAULT_USERS')
+                ]);
+                $scope.rows = [builtIn].concat($scope.policies);
+            };
+
+            /**
              * The policy being edited (a copy), or null.
              */
             $scope.editing = null;
@@ -69,7 +93,12 @@ angular.module('guacPam').directive('guacSettingsPamPasswordPolicies', [function
 
             var loadPolicies = function loadPolicies() {
                 return pamService.getPasswordPolicies().then(function policiesRetrieved(policies) {
+                    angular.forEach(policies, function addFilterText(policy) {
+                        pamFilterText(policy, [policy.name, policy.description, $scope.summary(policy.rules)]
+                                .concat(policy.platforms || [], policy.connections || []));
+                    });
                     $scope.policies = policies;
+                    setRows();
                 }, guacNotification.SHOW_REQUEST_ERROR);
             };
 
@@ -228,6 +257,7 @@ angular.module('guacPam').directive('guacSettingsPamPasswordPolicies', [function
 
             pamService.getDefaultPasswordRules().then(function defaultRetrieved(rules) {
                 $scope.defaultRules = rules;
+                setRows();
             }, guacNotification.SHOW_REQUEST_ERROR);
 
             loadPolicies();

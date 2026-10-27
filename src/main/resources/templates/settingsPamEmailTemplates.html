@@ -4,12 +4,19 @@
     <div class="settings section">
         <p>{{ 'PAM_EMAIL_TEMPLATES.HELP_LANGUAGES' | translate }}</p>
 
+        <!-- As Guacamole's own toolbars: action buttons, then the filter -->
         <div class="toolbar">
             <div class="action-buttons">
-                <button ng-click="newLanguage()" ng-disabled="!builtIn">{{ 'PAM_EMAIL_TEMPLATES.ACTION_NEW' | translate }}</button>
-                <button ng-click="chooseImport()" ng-disabled="!builtIn">{{ 'PAM_EMAIL_TEMPLATES.ACTION_IMPORT' | translate }}</button>
+                <a class="button pam-new-language" href="" ng-click="builtIn && newLanguage()"
+                   ng-class="{disabled: !builtIn}">{{ 'PAM_EMAIL_TEMPLATES.ACTION_NEW' | translate }}</a>
+                <a class="button pam-import-language" href="" ng-click="builtIn && chooseImport()"
+                   ng-class="{disabled: !builtIn}">{{ 'PAM_EMAIL_TEMPLATES.ACTION_IMPORT' | translate }}</a>
                 <input type="file" accept=".json,application/json" class="pam-email-import" style="display: none">
             </div>
+            <guac-filter filtered-items="filteredLanguages" items="languages"
+                         placeholder="'PAM.FIELD_PLACEHOLDER_FILTER' | translate"
+                         properties="filteredLanguageProperties"
+                         ng-show="languages.length"></guac-filter>
         </div>
 
         <table class="pam-connection-table" ng-class="{loading: !languages}">
@@ -23,7 +30,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr ng-repeat="language in languages" ng-class="{selected: editing.original === language.code}">
+                <tr ng-repeat="language in filteredLanguages" ng-class="{selected: editing.original === language.code}">
                     <td dir="auto">{{ language.name }}</td>
                     <td><code>{{ language.code }}</code></td>
                     <td>
@@ -40,6 +47,9 @@
                         <button ng-if="language.builtIn && language.changed" ng-click="restoreLanguage(language)">{{
                             'PAM_EMAIL_TEMPLATES.ACTION_RESTORE' | translate }}</button>
                     </td>
+                </tr>
+                <tr ng-show="languages.length && !filteredLanguages.length">
+                    <td colspan="5" class="pam-empty">{{ 'PAM.INFO_NO_MATCH' | translate }}</td>
                 </tr>
             </tbody>
         </table>
@@ -108,8 +118,13 @@
                 <!-- Messages -->
                 <h3 class="pam-email-templates-header">{{ 'PAM_EMAIL_TEMPLATES.SECTION_HEADER_MESSAGES' | translate }}</h3>
                 <p class="pam-setting-help">{{ 'PAM_EMAIL_TEMPLATES.HELP_MESSAGES' | translate }}</p>
+                <div class="toolbar">
+                    <guac-filter filtered-items="filteredMessages" items="messages"
+                                 placeholder="'PAM.FIELD_PLACEHOLDER_FILTER' | translate"
+                                 properties="filteredMessageProperties"></guac-filter>
+                </div>
                 <table class="properties pam-setting-table pam-email-messages">
-                    <tr ng-repeat="key in messageKeys">
+                    <tr ng-repeat="message in filteredMessages" ng-init="key = message.key">
                         <th><label for="pam-email-message-{{ key }}"><code>{{ key }}</code></label></th>
                         <td>
                             <input type="text" id="pam-email-message-{{ key }}" dir="auto" maxlength="1000"
@@ -117,6 +132,9 @@
                             <p class="pam-setting-meta" ng-if="editing.language.code !== 'en'">{{ 'PAM_EMAIL_TEMPLATES.INFO_ENGLISH'
                                 | translate:{ TEXT: builtIn.messages[key] } }}</p>
                         </td>
+                    </tr>
+                    <tr ng-show="!filteredMessages.length">
+                        <td colspan="2" class="pam-empty">{{ 'PAM.INFO_NO_MATCH' | translate }}</td>
                     </tr>
                 </table>
 

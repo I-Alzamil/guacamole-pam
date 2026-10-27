@@ -19,7 +19,9 @@ angular.module('guacPam').directive('guacSettingsPamEmailTemplates', [function g
             var $q               = $injector.get('$q');
             var $timeout         = $injector.get('$timeout');
             var $window          = $injector.get('$window');
+            var $translate       = $injector.get('$translate');
             var guacNotification = $injector.get('guacNotification');
+            var pamFilterText    = $injector.get('pamFilterText');
             var pamService       = $injector.get('pamService');
 
             /**
@@ -32,13 +34,20 @@ angular.module('guacPam').directive('guacSettingsPamEmailTemplates', [function g
              * lists them.
              */
             $scope.placeholders = ['summary', 'details', 'action', 'link', 'why', 'event', 'user', 'actor',
-                'connection', 'connection-id', 'request', 'checkout', 'starts', 'ends', 'reason', 'detail',
-                'client-address', 'server', 'time'];
+                'connection', 'connection-id', 'request', 'checkout', 'minutes', 'approvals',
+                'approvals-required', 'starts', 'ends', 'reason', 'detail', 'client-address', 'server', 'time'];
 
             /**
              * Every language, or null while loading.
              */
             $scope.languages = null;
+
+            /**
+             * The languages matching the filter, and what it matches: their
+             * name, code and state as shown.
+             */
+            $scope.filteredLanguages = [];
+            $scope.filteredLanguageProperties = ['pamFilterText'];
 
             /**
              * English as built in, to translate from.
@@ -49,6 +58,14 @@ angular.module('guacPam').directive('guacSettingsPamEmailTemplates', [function g
              * The keys of messages, as English has them.
              */
             $scope.messageKeys = [];
+
+            /**
+             * The messages, as { key }, those matching the filter, and what
+             * it matches: their key and English text.
+             */
+            $scope.messages = [];
+            $scope.filteredMessages = [];
+            $scope.filteredMessageProperties = ['pamFilterText'];
 
             /**
              * The language being edited: its code when loaded ("original",
@@ -75,6 +92,12 @@ angular.module('guacPam').directive('guacSettingsPamEmailTemplates', [function g
 
             var reload = function reload() {
                 return pamService.getEmailLanguages().then(function languagesRead(languages) {
+                    angular.forEach(languages, function addFilterText(language) {
+                        pamFilterText(language, [language.name, language.code, $translate.instant(language.builtIn
+                                ? (language.changed ? 'PAM_EMAIL_TEMPLATES.INFO_BUILT_IN_CHANGED'
+                                    : 'PAM_EMAIL_TEMPLATES.INFO_BUILT_IN') : 'PAM_EMAIL_TEMPLATES.INFO_ADDED'),
+                            language.modifiedBy]);
+                    });
                     $scope.languages = languages;
                 }, guacNotification.SHOW_REQUEST_ERROR);
             };
@@ -82,6 +105,9 @@ angular.module('guacPam').directive('guacSettingsPamEmailTemplates', [function g
             pamService.getBuiltInEmailLanguage().then(function builtInRead(builtIn) {
                 $scope.builtIn = builtIn;
                 $scope.messageKeys = Object.keys(builtIn.messages);
+                $scope.messages = $scope.messageKeys.map(function message(key) {
+                    return pamFilterText({ key : key }, [key, builtIn.messages[key]]);
+                });
             }, guacNotification.SHOW_REQUEST_ERROR);
             reload();
 

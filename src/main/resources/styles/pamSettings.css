@@ -890,13 +890,17 @@ td.pam-truncate {
     height: 60px;
 }
 
-/* Import, export and restoring platforms, and rotating all connections:
-   buttons with icons, as those of Guacamole's own toolbars (images are
-   Guacamole's, or drawn alike) */
+/* Import, export and restoring platforms, rotating all connections, new
+   password policies, and new and imported email languages: buttons with
+   icons, as those of Guacamole's own toolbars (images are Guacamole's, or
+   drawn alike) */
 a.button.pam-import-platforms,
 a.button.pam-export-platforms,
 a.button.pam-restore-platforms,
-a.button.pam-rotate-all {
+a.button.pam-rotate-all,
+a.button.pam-new-policy,
+a.button.pam-new-language,
+a.button.pam-import-language {
     font-size: 0.8em;
     padding-left: 1.8em;
     position: relative;
@@ -905,7 +909,10 @@ a.button.pam-rotate-all {
 a.button.pam-import-platforms:before,
 a.button.pam-export-platforms:before,
 a.button.pam-restore-platforms:before,
-a.button.pam-rotate-all:before {
+a.button.pam-rotate-all:before,
+a.button.pam-new-policy:before,
+a.button.pam-new-language:before,
+a.button.pam-import-language:before {
     content: " ";
     position: absolute;
     width: 1.8em;
@@ -917,8 +924,17 @@ a.button.pam-rotate-all:before {
     background-position: 0.5em 0.45em;
 }
 
-a.button.pam-import-platforms:before {
+a.button.pam-import-platforms:before,
+a.button.pam-import-language:before {
     background-image: url(images/action-icons/guac-file-import.svg);
+}
+
+a.button.pam-new-policy:before {
+    background-image: url(images/action-icons/guac-key.svg);
+}
+
+a.button.pam-new-language:before {
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='64'%20height='64'%3E%3Cpath%20fill='none'%20stroke='%23fff'%20stroke-width='9'%20stroke-linecap='round'%20d='M32%208v48M8%2032h48'/%3E%3C/svg%3E");
 }
 
 a.button.pam-export-platforms:before {
