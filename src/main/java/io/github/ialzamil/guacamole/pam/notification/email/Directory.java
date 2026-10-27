@@ -42,6 +42,11 @@ public class Directory {
      */
     private static final String ROOT_GROUP = "ROOT";
 
+    /**
+     * The longest name of a Guacamole user or group ("guacamole_entity.name").
+     */
+    private static final int MAX_NAME_LENGTH = 128;
+
     public Directory(PamDatabase database) {
         this.database = database;
         this.dialect = database.getDialect();
@@ -170,6 +175,15 @@ public class Directory {
      */
     public void recordLoginGroups(String username, Set<String> groups) throws GuacamoleException {
 
+        // Names longer than Guacamole's match no user or group of it
+        if (username.length() > MAX_NAME_LENGTH)
+            return;
+        Set<String> kept = new TreeSet<>();
+        for (String group : groups) {
+            if (group != null && group.length() <= MAX_NAME_LENGTH)
+                kept.add(group);
+        }
+
         try (Connection connection = database.getConnection()) {
 
             Set<String> stored = new TreeSet<>();
@@ -181,7 +195,7 @@ public class Directory {
                         stored.add(results.getString(1));
                 }
             }
-            if (stored.equals(new TreeSet<>(groups)))
+            if (stored.equals(kept))
                 return;
 
             connection.setAutoCommit(false);
@@ -193,7 +207,7 @@ public class Directory {
                 }
                 try (PreparedStatement statement = connection.prepareStatement(
                         "INSERT INTO pam_login_group (username, group_name) VALUES (?, ?)")) {
-                    for (String group : groups) {
+                    for (String group : kept) {
                         statement.setString(1, username);
                         statement.setString(2, group);
                         statement.addBatch();

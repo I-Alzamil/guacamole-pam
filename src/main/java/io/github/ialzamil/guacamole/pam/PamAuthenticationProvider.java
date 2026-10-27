@@ -255,7 +255,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         }
         catch (GuacamoleException | RuntimeException e) {
             logger.warn("Unable to record the groups of user \"{}\" for emails: {}",
-                    authenticatedUser.getIdentifier(), e.getMessage());
+                    Values.forLog(authenticatedUser.getIdentifier()), e.getMessage());
             logger.debug("Unable to record the groups of a user.", e);
         }
     }
