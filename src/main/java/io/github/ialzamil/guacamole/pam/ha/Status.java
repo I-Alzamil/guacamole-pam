@@ -15,6 +15,10 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * What the status page shows administrators: the servers sharing a
@@ -29,6 +33,11 @@ final class Status {
      * How long to wait for a server whose URL is checked.
      */
     private static final int PING_TIMEOUT_MS = 3000;
+
+    /**
+     * The most servers whose URL is checked at once.
+     */
+    private static final int MAX_PINGS = 8;
 
     /**
      * What checking the URL of a server found.
@@ -110,13 +119,54 @@ final class Status {
             return status;
         }
 
-        if (check) {
-            for (Map<String, Object> server : servers) {
-                if (Boolean.TRUE.equals(server.get("alive")))
-                    server.put("reach", reach((String) server.get("id"), (String) server.get("url"), config));
+        if (check)
+            checkReach(servers, config);
+        return status;
+
+    }
+
+    /**
+     * Sets whether each server running is reached at its URL, asking them
+     * all at once rather than waiting for each in turn.
+     */
+    private static void checkReach(List<Map<String, Object>> servers, Config config) {
+
+        List<Map<String, Object>> alive = new ArrayList<>();
+        for (Map<String, Object> server : servers) {
+            if (Boolean.TRUE.equals(server.get("alive")))
+                alive.add(server);
+        }
+        if (alive.isEmpty())
+            return;
+
+        ExecutorService pings = Executors.newFixedThreadPool(Math.min(alive.size(), MAX_PINGS), runnable -> {
+            Thread thread = new Thread(runnable, "pam-ha-ping");
+            thread.setDaemon(true);
+            return thread;
+        });
+        try {
+            List<Future<Reach>> answers = new ArrayList<>();
+            for (Map<String, Object> server : alive)
+                answers.add(pings.submit(() -> reach((String) server.get("id"), (String) server.get("url"),
+                        config)));
+            for (int i = 0; i < alive.size(); i++) {
+                Reach reach;
+                try {
+                    reach = answers.get(i).get();
+                }
+                catch (ExecutionException e) {
+                    reach = Reach.UNREACHABLE;
+                }
+                catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+                alive.get(i).put("reach", reach);
             }
         }
-        return status;
+        finally {
+            pings.shutdownNow();
+        }
 
     }
 

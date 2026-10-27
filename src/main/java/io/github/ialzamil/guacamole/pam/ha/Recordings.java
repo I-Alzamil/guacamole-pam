@@ -181,10 +181,18 @@ final class Recordings {
 
     }
 
+    /**
+     * Adds a recording found. Its type is read again only if its size
+     * changed, rather than opening every recording at every scan.
+     */
     private void add(Map<String, Entry> found, String historyUuid, String fileName, File file) {
-        if (file.isFile() && file.canRead())
-            found.put(recordingId(historyUuid, fileName), new Entry(historyUuid, fileName, type(file),
-                    file.length()));
+        if (!file.isFile() || !file.canRead())
+            return;
+        String id = recordingId(historyUuid, fileName);
+        long size = file.length();
+        Entry known = listed.get(id);
+        found.put(id, new Entry(historyUuid, fileName, known != null && known.size == size ? known.type
+                : type(file), size));
     }
 
     private static ActivityLog.Type type(String name) {
