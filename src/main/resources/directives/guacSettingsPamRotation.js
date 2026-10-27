@@ -14,6 +14,7 @@ angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSet
             // Required services
             var $document        = $injector.get('$document');
             var $interval        = $injector.get('$interval');
+            var $timeout         = $injector.get('$timeout');
             var $translate       = $injector.get('$translate');
             var guacNotification = $injector.get('guacNotification');
             var pamFilterText    = $injector.get('pamFilterText');
@@ -30,6 +31,32 @@ angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSet
              * for its rotation to end.
              */
             var ROTATE_ALL_CONCURRENCY = 4;
+
+            /**
+             * How long Rotate all waits after a rotation ends before
+             * reloading the list, in milliseconds: those ending meanwhile
+             * share the reload.
+             */
+            var ROTATE_ALL_RELOAD_DELAY = 2000;
+
+            /**
+             * The reload Rotate all is waiting for, or null.
+             */
+            var reloadPending = null;
+
+            var reloadSoon = function reloadSoon() {
+                if (!reloadPending)
+                    reloadPending = $timeout(function reloadDue() {
+                        reloadPending = null;
+                        loadConnections();
+                    }, ROTATE_ALL_RELOAD_DELAY);
+            };
+
+            var cancelReload = function cancelReload() {
+                if (reloadPending)
+                    $timeout.cancel(reloadPending);
+                reloadPending = null;
+            };
 
             /**
              * Identifiers of the connections this page is rotating, kept
@@ -118,6 +145,7 @@ angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSet
 
                     if (!queue.length) {
                         if (!running) {
+                            cancelReload();
                             loadConnections();
                             if (failed)
                                 guacNotification.showStatus({
@@ -141,7 +169,7 @@ angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSet
                     })
                     ['finally'](function rotationRequestEnded() {
                         running--;
-                        loadConnections();
+                        reloadSoon();
                         next();
                     });
 
@@ -229,6 +257,7 @@ angular.module('guacPam').directive('guacSettingsPamRotation', [function guacSet
 
             $scope.$on('$destroy', function settingsPamRotationDestroyed() {
                 $interval.cancel(refresh);
+                cancelReload();
                 $document.off('keydown', closeOnEscape);
             });
 

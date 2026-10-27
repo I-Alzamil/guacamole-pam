@@ -98,16 +98,20 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                 if (($scope.request && $scope.request.pending || $scope.extensionPending()) && !pendingPoll)
                     pendingPoll = $interval(function checkPending() {
                         pamService.getRequest($scope.identifier).then(whileShowing(function requestRetrieved(request) {
+                            var previous = $scope.request;
                             $scope.request = request;
                             if (!request.pending && !$scope.extensionPending()) {
                                 stopPolling();
                                 reloadWhenReserved();
                                 pamRequestService.refresh();
                             }
-                            if (request.mine) {
-                                startCountdown(request.expires);
+                            // The list of requests refreshed only once the
+                            // checkout changed, such as extended: it polls
+                            // on its own otherwise
+                            else if (request.mine && (!previous || previous.expires !== request.expires))
                                 pamRequestService.refresh();
-                            }
+                            if (request.mine)
+                                startCountdown(request.expires);
                         }));
                     }, PENDING_POLL_INTERVAL);
                 else if ($scope.request && !$scope.request.pending && !$scope.extensionPending())

@@ -36,8 +36,28 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
         return request('GET', 'data-source');
     };
 
+    /**
+     * The request for the user's access under way, which those asking
+     * meanwhile share, such as the sections of the Preferences page loading
+     * together, and the token it was made with.
+     */
+    var accessPending = null;
+    var accessToken = null;
+
+    /**
+     * What the user may do with PAM, each caller receiving their own copy.
+     */
     service.getAccess = function getAccess() {
-        return request('GET', 'access');
+        var token = authenticationService.getCurrentToken();
+        if (!accessPending || accessToken !== token) {
+            var pending = request('GET', 'access')['finally'](function accessDone() {
+                if (accessPending === pending)
+                    accessPending = null;
+            });
+            accessPending = pending;
+            accessToken = token;
+        }
+        return accessPending.then(angular.copy);
     };
 
     /**
