@@ -419,6 +419,12 @@
     opacity: 0.75;
 }
 
+/* Guacamole's notifications, such as an error of an action in a PAM dialog,
+   above the dialog */
+guac-modal.global-status-modal {
+    z-index: 31;
+}
+
 /* Password request dialog */
 .pam-request-overlay {
     position: fixed;
