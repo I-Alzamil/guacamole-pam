@@ -72,6 +72,33 @@ public class TacacsClientTest {
         }
     }
 
+    /**
+     * A PASS sent without the shared secret, as anyone on the way could
+     * forge, is refused (RFC 8907, 4.5).
+     */
+    @Test
+    public void refusesAnswersWithoutTheSharedSecret() throws Exception {
+        try (FakeServer server = new FakeServer(SECRET, reply(PASS, ""))) {
+            server.cleartext = true;
+            ChangeOutcome outcome = client.changePassword(target(server, "Old-Pass1"), "New-Pass2");
+            assertFalse(outcome.isCompleted());
+            assertTrue(outcome.getError(), outcome.getError().contains("answered without the shared secret"));
+        }
+    }
+
+    /**
+     * A server passing the login before the new password was asked for
+     * changed nothing.
+     */
+    @Test
+    public void reportsAPassBeforeTheNewPassword() throws Exception {
+        try (FakeServer server = new FakeServer(SECRET, reply(GETDATA, "Old password: "), reply(PASS, ""))) {
+            ChangeOutcome outcome = client.changePassword(target(server, "Old-Pass1"), "New-Pass2");
+            assertFalse(outcome.isCompleted());
+            assertFalse(outcome.isNewPasswordSent());
+        }
+    }
+
     @Test
     public void reportsAServerNotAllowingChanges() throws Exception {
         try (FakeServer server = new FakeServer(SECRET,
@@ -224,6 +251,12 @@ public class TacacsClientTest {
         private volatile int action;
         private volatile String username;
         private volatile boolean aborted;
+
+        /**
+         * Whether replies are sent without the shared secret, flagged
+         * unencrypted, as an attacker on the way could.
+         */
+        private volatile boolean cleartext;
         private final List<String> answers = Collections.synchronizedList(new ArrayList<String>());
 
         FakeServer(String secret, int[]... replies) throws IOException {
@@ -288,8 +321,9 @@ public class TacacsClientTest {
             body.put((byte) reply[0]).put((byte) 0).putShort((short) message.length).putShort((short) 0).put(message);
             sequence++;
             ByteBuffer packet = ByteBuffer.allocate(12 + body.capacity());
-            packet.put((byte) 0xc0).put((byte) 0x01).put((byte) sequence).put((byte) 0).putInt(sessionId)
-                .putInt(body.capacity()).put(TacacsClient.obfuscate(body.array(), sessionId, key, 0xc0, sequence));
+            packet.put((byte) 0xc0).put((byte) 0x01).put((byte) sequence).put((byte) (cleartext ? 0x01 : 0))
+                .putInt(sessionId).putInt(body.capacity())
+                .put(cleartext ? body.array() : TacacsClient.obfuscate(body.array(), sessionId, key, 0xc0, sequence));
             out.write(packet.array());
             out.flush();
         }

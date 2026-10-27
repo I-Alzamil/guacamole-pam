@@ -141,8 +141,12 @@ public class DatabaseClient {
      *     missing.
      */
     public boolean acceptsPassword(DatabaseTarget target, String password) throws Exception {
+        // As other clients: no password is never tried, which would count
+        // as a failed login against the account
+        if (password == null || password.isEmpty())
+            return false;
         try {
-            close(connect(target, target.getUsername(), password == null ? "" : password));
+            close(connect(target, target.getUsername(), password));
             return true;
         }
         catch (SQLException e) {
@@ -655,7 +659,10 @@ public class DatabaseClient {
             }
         }
 
-        return "jdbc:sqlserver://" + target.getHostname() + ":" + target.getPort();
+        // Apart from the URL, where an IPv6 address would be misread
+        properties.setProperty("serverName", target.getHostname());
+        properties.setProperty("portNumber", Integer.toString(target.getPort()));
+        return "jdbc:sqlserver://";
 
     }
 

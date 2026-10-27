@@ -80,7 +80,9 @@ final class NtlmLogin {
         byte[] clientChallenge = new byte[8];
         RANDOM.nextBytes(clientChallenge);
 
-        byte[] responseKey = functions.NTOWFv2(password, user.getName(), user.getDomain());
+        // Upper-cased here, as smbj would in the JVM's locale, where a
+        // Turkish one makes "i" a dotted capital the server never hashes
+        byte[] responseKey = functions.NTOWFv2(password, user.getName().toUpperCase(Locale.ROOT), user.getDomain());
         byte[] ntResponse = functions.getNtV2Response(responseKey, challenge.getServerChallenge(),
                 clientChallenge, time, targetInfo);
 

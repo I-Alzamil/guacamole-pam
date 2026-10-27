@@ -27,6 +27,18 @@ public class TranscriptTest {
         assertTrue(text.endsWith("ok"));
     }
 
+    /**
+     * An old password found within the new one, masked first, would leave
+     * the rest of the new one shown.
+     */
+    @Test
+    public void masksTheLongestFirst() {
+        Transcript transcript = new Transcript(Arrays.asList("7", "Qx7Lm-Secret9"));
+        transcript.append("echo alice:Qx7Lm-Secret9 | chpasswd\n");
+        String shown = transcript.render(text -> text);
+        assertFalse(shown, shown.contains("Lm-Secret"));
+    }
+
     @Test
     public void ignoresMissingPasswords() {
         Transcript transcript = new Transcript(Arrays.asList(null, "", NEW));

@@ -176,9 +176,10 @@ public class SshManagementType implements ManagementType {
             throw new IllegalArgumentException("The connection has neither a password nor a private key.");
 
         List<byte[]> authorities = SshAuthorities.parse(platform.get(CA_KEYS));
+        boolean trustFirst = "true".equals(platform.get(TRUST_FIRST_KEY)) && authorities.isEmpty();
         return new SshTarget(hostname, port, username, password, privateKey,
                 Values.emptyToNull(parameters.get("passphrase")), trustedHostKey(target, !authorities.isEmpty()),
-                "true".equals(platform.get(TRUST_FIRST_KEY)) && authorities.isEmpty(), authorities);
+                trustFirst, authorities);
 
     }
 
@@ -187,7 +188,9 @@ public class SshManagementType implements ManagementType {
      * (unless the platform trusts certificate authorities, so a host given
      * a new key keeps working) the one recorded at the first contact with
      * the host (trust on first use, as with SSH's known_hosts, if the
-     * platform allows it). Only a first contact may accept any key.
+     * platform allows it), kept after it no longer does. Only keys
+     * accepted are recorded: a key refused as untrusted never is. Only a
+     * first contact may accept any key.
      */
     private static String trustedHostKey(Target target, boolean byAuthority) {
 

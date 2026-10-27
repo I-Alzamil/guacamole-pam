@@ -56,7 +56,7 @@ public class WinRmClient {
 
     /**
      * Whether a password was accepted, with the certificate the host
-     * presented while checking.
+     * presented while checking, if it was trusted.
      */
     public static final class Check {
 
@@ -102,9 +102,9 @@ public class WinRmClient {
 
             if (result.getExitCode() != 0 || !result.getOutput().contains(OK))
                 return new ChangeOutcome(false, true, "Windows refused the password change: "
-                        + describe(result), null, session.getPresentedCertificate());
+                        + describe(result), null, session.getTrustedCertificate());
 
-            return new ChangeOutcome(true, true, null, null, session.getPresentedCertificate());
+            return new ChangeOutcome(true, true, null, null, session.getTrustedCertificate());
 
         }
         // Windows refuses accounts that may not use WinRM as it refuses wrong
@@ -115,7 +115,7 @@ public class WinRmClient {
                     : "The host refused the account's sign-in: its current password is wrong, or it may not use"
                         + " WinRM, which Windows allows administrators only. Configure an administrator on the"
                         + " platform to change the passwords of other accounts.", null,
-                    session.getPresentedCertificate());
+                    session.getTrustedCertificate());
         }
         catch (IOException | RuntimeException e) {
             // Once given its input, the script may have run with the new password
@@ -123,7 +123,7 @@ public class WinRmClient {
             if (!useAdmin && !session.isInputSent() && error.contains("Access is denied"))
                 error += " The account may not use WinRM's remote shell, which Windows allows administrators only"
                         + " (unless its RootSDDL grants more): configure an administrator on the platform instead.";
-            return new ChangeOutcome(false, session.isInputSent(), error, null, session.getPresentedCertificate());
+            return new ChangeOutcome(false, session.isInputSent(), error, null, session.getTrustedCertificate());
         }
         finally {
             session.close();
@@ -150,10 +150,10 @@ public class WinRmClient {
                 session.connect();
                 try {
                     session.runPowerShell("'" + OK + "'", "");
-                    return new Check(true, session.getPresentedCertificate());
+                    return new Check(true, session.getTrustedCertificate());
                 }
                 catch (WinRmSession.LoginRefusedException e) {
-                    return new Check(false, session.getPresentedCertificate());
+                    return new Check(false, session.getTrustedCertificate());
                 }
             }
         }
@@ -169,9 +169,9 @@ public class WinRmClient {
                 throw new IOException("The host refused the administrator's credentials.", e);
             }
             if (result.getOutput().contains(VALID))
-                return new Check(true, session.getPresentedCertificate());
+                return new Check(true, session.getTrustedCertificate());
             if (result.getOutput().contains(INVALID))
-                return new Check(false, session.getPresentedCertificate());
+                return new Check(false, session.getTrustedCertificate());
             throw new IOException("Unable to check the password on the host: " + describe(result));
         }
 

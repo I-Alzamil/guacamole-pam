@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.Base64;
+import java.util.concurrent.TimeUnit;
 
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -17,6 +18,11 @@ import org.w3c.dom.NodeList;
  * one, and the login is bound to the host's certificate.
  */
 class WinRmSession implements AutoCloseable {
+
+    /**
+     * Longest a command may run, until it ends or is given up on.
+     */
+    private static final long COMMAND_SECONDS = 120;
 
     /**
      * The output of a command.
@@ -78,11 +84,11 @@ class WinRmSession implements AutoCloseable {
     }
 
     /**
-     * Fingerprint of the certificate the host presented, or null before
-     * the TLS handshake.
+     * Fingerprint of the certificate the host presented, if it was
+     * accepted, or null.
      */
-    String getPresentedCertificate() {
-        return http.getPresentedCertificate();
+    String getTrustedCertificate() {
+        return http.getTrustedCertificate();
     }
 
     /**
@@ -136,7 +142,13 @@ class WinRmSession implements AutoCloseable {
             ByteArrayOutputStream stderr = new ByteArrayOutputStream();
             Integer exitCode = null;
 
+            // Each receive waits up to the operation timeout; a script that
+            // hangs is given up on after COMMAND_SECONDS
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(COMMAND_SECONDS);
             while (exitCode == null) {
+
+                if (System.nanoTime() - deadline > 0)
+                    throw new IOException("The command did not end within " + COMMAND_SECONDS + " seconds.");
 
                 Document received = receive(shellId, commandId);
                 if (received == null)
@@ -152,7 +164,8 @@ class WinRmSession implements AutoCloseable {
                 NodeList states = received.getElementsByTagNameNS(WsMan.NS_SHELL, "CommandState");
                 if (states.getLength() > 0 && ((Element) states.item(0)).getAttribute("State").endsWith("/Done")) {
                     String code = WsMan.text(received, "ExitCode");
-                    exitCode = code == null ? 0 : Integer.parseInt(code);
+                    // Unsigned, as Windows reports codes such as 0xC0000005
+                    exitCode = code == null ? 0 : (int) Long.parseLong(code.trim());
                 }
 
             }

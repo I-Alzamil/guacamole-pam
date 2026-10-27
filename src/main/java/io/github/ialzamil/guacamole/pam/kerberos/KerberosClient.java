@@ -102,6 +102,9 @@ public class KerberosClient {
         catch (KrbException e) {
             return new ChangeOutcome(false, false, describe(e, useAdmin), null, null);
         }
+        catch (RuntimeException e) {
+            return new ChangeOutcome(false, false, "Unable to get a ticket: " + message(e), null, null);
+        }
 
         boolean sent = false;
         try (Socket socket = new Socket()) {
@@ -179,7 +182,7 @@ public class KerberosClient {
 
         }
         catch (KrbException | IOException | RuntimeException e) {
-            return new ChangeOutcome(false, sent, (sent ? "No valid answer from the password change server"
+            return new ChangeOutcome(false, sent, (sent ? "No valid answer from the password change server "
                     : "Unable to reach the password change server ") + target.getKpasswdServer() + ":"
                     + target.getKpasswdPort() + ": " + message(e), null, null);
         }

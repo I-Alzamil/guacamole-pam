@@ -63,8 +63,12 @@ final class Transcript {
      */
     String render(UnaryOperator<String> clean) {
 
+        // The longest first: a secret within another, masked first, would
+        // keep the other from being found
         String result = clean.apply(text.toString());
-        for (String secret : secrets)
+        List<String> longestFirst = new ArrayList<>(secrets);
+        longestFirst.sort((a, b) -> b.length() - a.length());
+        for (String secret : longestFirst)
             result = result.replace(secret, MASK);
 
         if (trimmed)

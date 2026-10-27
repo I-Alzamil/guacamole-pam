@@ -3,12 +3,18 @@ package io.github.ialzamil.guacamole.pam.ssh;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -57,7 +63,13 @@ public class SshClient {
     public ChangeOutcome runSequence(SshTarget target, SequenceScript script,
             Map<String, String> values) {
 
-        PinnedHostKeyRepository hostKeys = hostKeys(target);
+        PinnedHostKeyRepository hostKeys;
+        try {
+            hostKeys = hostKeys(target);
+        }
+        catch (IllegalArgumentException e) {
+            return new ChangeOutcome(false, false, e.getMessage(), null, null);
+        }
         Session session = null;
         ChannelShell channel = null;
         Output output = new Output(values);
@@ -103,7 +115,7 @@ public class SshClient {
                             return new ChangeOutcome(false, newPasswordSent,
                                     "Line " + step.getLine() + ": did not see \"" + step.getValue()
                                     + "\" within " + timeout + " seconds.",
-                                    output.transcript(), hostKeys.getPresentedFingerprint());
+                                    output.transcript(), hostKeys.getTrustedFingerprint());
                         break;
 
                     case CASE:
@@ -124,7 +136,7 @@ public class SshClient {
                             return new ChangeOutcome(false, newPasswordSent,
                                     "Line " + step.getLine() + ": the output matched none of the cases"
                                     + " within " + timeout + " seconds.",
-                                    output.transcript(), hostKeys.getPresentedFingerprint());
+                                    output.transcript(), hostKeys.getTrustedFingerprint());
                         index = choice.getCases().get(matched);
                         break;
 
@@ -135,24 +147,28 @@ public class SshClient {
                         output.settle(in, channel);
                         return new ChangeOutcome(false, newPasswordSent,
                                 "Line " + step.getLine() + ": " + step.getValue(),
-                                output.transcript(), hostKeys.getPresentedFingerprint());
+                                output.transcript(), hostKeys.getTrustedFingerprint());
 
                 }
             }
 
             output.settle(in, channel);
             return new ChangeOutcome(true, newPasswordSent, null,
-                    output.transcript(), hostKeys.getPresentedFingerprint());
+                    output.transcript(), hostKeys.getTrustedFingerprint());
 
         }
         catch (JSchException | IOException e) {
             return new ChangeOutcome(false, newPasswordSent, describe(e, hostKeys),
-                    output.transcript(), hostKeys.getPresentedFingerprint());
+                    output.transcript(), hostKeys.getTrustedFingerprint());
         }
         catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return new ChangeOutcome(false, newPasswordSent, "Interrupted.",
-                    output.transcript(), hostKeys.getPresentedFingerprint());
+                    output.transcript(), hostKeys.getTrustedFingerprint());
+        }
+        catch (RuntimeException e) {
+            return new ChangeOutcome(false, newPasswordSent, "The sequence failed: " + e.getMessage(),
+                    output.transcript(), hostKeys.getTrustedFingerprint());
         }
         finally {
             if (channel != null)
@@ -172,13 +188,23 @@ public class SshClient {
      *     the pinned fingerprint.
      */
     public boolean acceptsPassword(SshTarget target, String password) throws JSchException {
+        return acceptsPassword(target, password, null);
+    }
+
+    /**
+     * As {@link #acceptsPassword(SshTarget, String)}, telling the given
+     * consumer, if any, the fingerprint of the host key accepted.
+     */
+    public boolean acceptsPassword(SshTarget target, String password, Consumer<String> trustedKey)
+            throws JSchException {
 
         if (password == null || password.isEmpty())
             return false;
 
+        PinnedHostKeyRepository hostKeys = hostKeys(target);
         Session session = null;
         try {
-            session = openSession(target, password, false, hostKeys(target));
+            session = openSession(target, password, false, hostKeys);
             return true;
         }
         catch (JSchException e) {
@@ -189,6 +215,8 @@ public class SshClient {
         finally {
             if (session != null)
                 session.disconnect();
+            if (trustedKey != null && hostKeys.getTrustedFingerprint() != null)
+                trustedKey.accept(hostKeys.getTrustedFingerprint());
         }
 
     }
@@ -307,6 +335,17 @@ public class SshClient {
         private final Transcript transcript;
         private final byte[] buffer = new byte[4096];
 
+        /**
+         * Decodes across reads, so a character split between two is kept
+         * whole.
+         */
+        private final CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPLACE).onUnmappableCharacter(CodingErrorAction.REPLACE);
+
+        private final ByteBuffer pending = ByteBuffer.allocate(8192);
+
+        private final CharBuffer decoded = CharBuffer.allocate(8192);
+
         Output(Map<String, String> values) {
             this.transcript = new Transcript(Arrays.asList(
                     values.get(SequenceScript.OLDPASS), values.get(SequenceScript.NEWPASS)));
@@ -322,7 +361,7 @@ public class SshClient {
                 int length = in.read(buffer, 0, Math.min(buffer.length, in.available()));
                 if (length <= 0)
                     break;
-                String text = new String(buffer, 0, length, StandardCharsets.UTF_8);
+                String text = decode(length);
                 step.append(text);
                 if (step.length() > MAX_STEP_OUTPUT)
                     step.delete(0, step.length() - MAX_STEP_OUTPUT);
@@ -330,6 +369,20 @@ public class SshClient {
                 received = true;
             }
             return received;
+        }
+
+        /**
+         * The text of the bytes read, the end of a character cut short kept
+         * for the next read.
+         */
+        private String decode(int length) {
+            pending.put(buffer, 0, length);
+            pending.flip();
+            decoded.clear();
+            decoder.decode(pending, decoded, false);
+            pending.compact();
+            decoded.flip();
+            return decoded.toString();
         }
 
         void startStep() {
@@ -350,7 +403,7 @@ public class SshClient {
         int awaitAny(InputStream in, ChannelShell channel, List<Pattern> patterns, long timeoutMs)
                 throws IOException, InterruptedException {
 
-            long deadline = System.currentTimeMillis() + timeoutMs;
+            long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
             boolean first = true;
             while (true) {
 
@@ -373,7 +426,7 @@ public class SshClient {
 
                 if (channel.isClosed() && in.available() == 0)
                     return -1;
-                if (System.currentTimeMillis() >= deadline)
+                if (System.nanoTime() - deadline >= 0)
                     return -1;
                 Thread.sleep(POLL_INTERVAL_MS);
             }
@@ -385,15 +438,17 @@ public class SshClient {
          * finish before the shell is closed.
          */
         void settle(InputStream in, ChannelShell channel) throws IOException, InterruptedException {
-            long end = System.currentTimeMillis() + SETTLE_MAX_MS;
-            long lastOutput = System.currentTimeMillis();
-            while (System.currentTimeMillis() < end && !channel.isClosed()) {
+            long end = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SETTLE_MAX_MS);
+            long lastOutput = System.nanoTime();
+            while (end - System.nanoTime() > 0 && !channel.isClosed()) {
                 if (pump(in))
-                    lastOutput = System.currentTimeMillis();
-                else if (System.currentTimeMillis() - lastOutput >= SETTLE_QUIET_MS)
+                    lastOutput = System.nanoTime();
+                else if (System.nanoTime() - lastOutput >= TimeUnit.MILLISECONDS.toNanos(SETTLE_QUIET_MS))
                     return;
                 Thread.sleep(POLL_INTERVAL_MS);
             }
+            // Closed by the shell: what it wrote last, for the transcript
+            pump(in);
         }
 
         String transcript() {

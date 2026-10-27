@@ -199,7 +199,7 @@ public final class WinRmTarget {
      * Whether the value is a certificate fingerprint in the form recorded
      * by this type.
      */
-    static boolean isFingerprint(String value) {
+    public static boolean isFingerprint(String value) {
         return value != null && value.matches("([0-9A-F]{2}:){31}[0-9A-F]{2}");
     }
 

@@ -101,6 +101,15 @@ class WinRmHttp implements AutoCloseable {
     }
 
     /**
+     * Fingerprint of the certificate presented, if it was accepted, or
+     * null: the only one to record, so a certificate refused as untrusted
+     * never becomes trusted later.
+     */
+    String getTrustedCertificate() {
+        return certificateCheck.certificate == null ? null : certificateCheck.presented;
+    }
+
+    /**
      * The trusted certificate, once the handshake accepted it.
      */
     X509Certificate getCertificate() {
@@ -187,7 +196,7 @@ class WinRmHttp implements AutoCloseable {
         List<String> encoding = response.getHeaders("transfer-encoding");
         if (!encoding.isEmpty() && encoding.get(0).equalsIgnoreCase("chunked")) {
             ByteArrayOutputStream content = new ByteArrayOutputStream();
-            for (int size; (size = Integer.parseInt(readLine().split(";")[0].trim(), 16)) > 0; ) {
+            for (int size; (size = chunkSize(readLine())) > 0; ) {
                 content.write(readBytes(size, content.size()));
                 readLine();
             }
@@ -205,8 +214,20 @@ class WinRmHttp implements AutoCloseable {
 
     }
 
+    /**
+     * The size a chunk's line gives, in hexadecimal.
+     */
+    private static int chunkSize(String line) throws IOException {
+        try {
+            return Integer.parseInt(line.split(";")[0].trim(), 16);
+        }
+        catch (NumberFormatException e) {
+            throw new IOException("Unreadable chunk size \"" + line + "\".");
+        }
+    }
+
     private byte[] readBytes(int count, int alreadyRead) throws IOException {
-        if (count < 0 || count + alreadyRead > MAX_RESPONSE_BYTES)
+        if (count < 0 || count > MAX_RESPONSE_BYTES - alreadyRead)
             throw new IOException("Response too large.");
         byte[] data = new byte[count];
         int offset = 0;

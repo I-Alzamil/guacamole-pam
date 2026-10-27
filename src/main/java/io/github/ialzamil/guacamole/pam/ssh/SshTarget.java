@@ -39,6 +39,15 @@ public final class SshTarget {
                 trustFirstKey, authorities);
     }
 
+    /**
+     * This target requiring the given host key, such as one trusted on
+     * first use earlier in the same rotation.
+     */
+    public SshTarget withPinnedHostKey(String fingerprint) {
+        return new SshTarget(hostname, port, username, password, privateKey, passphrase, fingerprint,
+                trustFirstKey, authorities);
+    }
+
     public String getHostname() {
         return hostname;
     }

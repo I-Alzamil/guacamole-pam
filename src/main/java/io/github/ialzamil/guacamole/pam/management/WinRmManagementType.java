@@ -151,7 +151,7 @@ public class WinRmManagementType implements ManagementType {
         // Only a certificate fingerprint counts: the same state records the
         // SSH host key, should the connection have been managed over SSH
         String recorded = target.getState().getHostKey();
-        return recorded != null && recorded.matches("([0-9A-F]{2}:){31}[0-9A-F]{2}") ? recorded : null;
+        return WinRmTarget.isFingerprint(recorded) ? recorded : null;
 
     }
 

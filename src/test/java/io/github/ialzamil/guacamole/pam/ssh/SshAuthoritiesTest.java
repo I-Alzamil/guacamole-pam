@@ -32,6 +32,32 @@ public class SshAuthoritiesTest {
         assertEquals(false, new PinnedHostKeyRepository("SHA256:abc", false, "host", 22, keys).hasAuthorities());
     }
 
+    /**
+     * A key refused for want of trust is never reported as one to record;
+     * one accepted is.
+     */
+    @Test
+    public void reportsOnlyAcceptedKeysAsTrusted() {
+        byte[] key = SshAuthorities.parse(CA).get(0);
+        PinnedHostKeyRepository refused = new PinnedHostKeyRepository(null, false);
+        refused.check("host", key);
+        assertEquals(null, refused.getTrustedFingerprint());
+        assertTrue(refused.isUntrusted());
+        PinnedHostKeyRepository firstUse = new PinnedHostKeyRepository(null, true);
+        firstUse.check("host", key);
+        assertEquals(PinnedHostKeyRepository.fingerprint(key), firstUse.getTrustedFingerprint());
+    }
+
+    /**
+     * A fingerprint pasted as "ssh-keygen -lf" prints it.
+     */
+    @Test
+    public void readsAFingerprintAsSshKeygenPrintsIt() {
+        byte[] key = SshAuthorities.parse(CA).get(0);
+        String line = "256 " + PinnedHostKeyRepository.fingerprint(key) + " root@host (ED25519)";
+        assertEquals(com.jcraft.jsch.HostKeyRepository.OK, new PinnedHostKeyRepository(line, false).check("host", key));
+    }
+
     @Test
     public void refusesWhatIsNotAKey() {
         refused("ssh-ed25519");

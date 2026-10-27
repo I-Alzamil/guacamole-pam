@@ -102,8 +102,12 @@ public class TacacsClient {
 
                 switch (reply.status) {
 
+                    // Passing before the new password was sent changed nothing
                     case STATUS_PASS:
-                        return new ChangeOutcome(true, true, null, transcript.toString(), null);
+                        return sent ? new ChangeOutcome(true, true, null, transcript.toString(), null)
+                                : new ChangeOutcome(false, false, "The TACACS+ server accepted the login before the"
+                                        + " new password was asked for: it may not support password changes.",
+                                        transcript.toString(), null);
 
                     case STATUS_FAIL:
                         return new ChangeOutcome(false, sent, "The TACACS+ server refused the change"
@@ -444,8 +448,12 @@ public class TacacsClient {
 
             byte[] body = new byte[length];
             in.readFully(body);
-            if ((flags & FLAG_UNENCRYPTED) == 0)
-                body = obfuscate(body, version, seq);
+            // A shared secret is set: an answer without it could come from
+            // anyone on the way (RFC 8907, 4.5)
+            if ((flags & FLAG_UNENCRYPTED) != 0)
+                throw new Unreadable("The TACACS+ server " + server + " answered without the shared secret, which"
+                        + " is refused: configure the same secret on the server.");
+            body = obfuscate(body, version, seq);
 
             ByteBuffer b = ByteBuffer.wrap(body);
             int status = b.get() & 0xff;

@@ -7,6 +7,8 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.jcraft.jsch.HostKey;
 import com.jcraft.jsch.HostKeyRepository;
@@ -24,6 +26,11 @@ import com.jcraft.jsch.UserInfo;
  */
 class PinnedHostKeyRepository implements HostKeyRepository {
 
+    /**
+     * A SHA-256 fingerprint anywhere in a line.
+     */
+    private static final Pattern SHA256_FINGERPRINT = Pattern.compile("(?i)SHA256:([A-Za-z0-9+/]+)");
+
     private final String pinned;
 
     private final boolean acceptAny;
@@ -36,6 +43,11 @@ class PinnedHostKeyRepository implements HostKeyRepository {
     private volatile String presented;
 
     private volatile String presentedType;
+
+    /**
+     * Whether the key presented was accepted.
+     */
+    private volatile boolean accepted;
 
     PinnedHostKeyRepository(String pinnedFingerprint, boolean acceptAny) {
         this(pinnedFingerprint, acceptAny, null, 0, Collections.<byte[]>emptyList());
@@ -89,13 +101,23 @@ class PinnedHostKeyRepository implements HostKeyRepository {
         return presented;
     }
 
+    /**
+     * Fingerprint of the key presented, if it was accepted, or null: the
+     * only one to record, so a key refused as untrusted never becomes
+     * trusted later.
+     */
+    String getTrustedFingerprint() {
+        return accepted ? presented : null;
+    }
+
     @Override
     public int check(String host, byte[] key) {
         presented = fingerprint(key);
         presentedType = type(key);
-        if (pinned == null)
-            return acceptAny ? OK : NOT_INCLUDED;
-        return pinned.equals(normalize(presented)) ? OK : CHANGED;
+        int result = pinned == null ? (acceptAny ? OK : NOT_INCLUDED)
+                : pinned.equals(normalize(presented)) ? OK : CHANGED;
+        accepted = result == OK;
+        return result;
     }
 
     @Override
@@ -162,8 +184,12 @@ class PinnedHostKeyRepository implements HostKeyRepository {
         if (fingerprint == null || fingerprint.trim().isEmpty())
             return null;
 
+        // As pasted from "ssh-keygen -lf": "256 SHA256:... root@host (ED25519)"
         String value = fingerprint.trim();
-        if (value.regionMatches(true, 0, "SHA256:", 0, 7))
+        Matcher inLine = SHA256_FINGERPRINT.matcher(value);
+        if (inLine.find())
+            value = inLine.group(1);
+        else if (value.regionMatches(true, 0, "SHA256:", 0, 7))
             value = value.substring(7);
 
         while (value.endsWith("="))

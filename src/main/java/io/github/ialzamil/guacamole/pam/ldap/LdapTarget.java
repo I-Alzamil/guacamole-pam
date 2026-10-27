@@ -2,6 +2,8 @@ package io.github.ialzamil.guacamole.pam.ldap;
 
 import java.util.Map;
 
+import io.github.ialzamil.guacamole.pam.Values;
+
 /**
  * A directory account and the server holding it, read from the settings of
  * an LDAP platform combined with the account of a connection.
@@ -97,16 +99,11 @@ public final class LdapTarget {
         if (activeDirectory && encryption == Encryption.NONE)
             throw new IllegalArgumentException("Active Directory only accepts password changes over LDAPS or StartTLS.");
 
-        int port = encryption == Encryption.LDAPS ? 636 : 389;
-        String portValue = value(parameters, PORT);
-        if (portValue != null) {
-            try {
-                port = Integer.parseInt(portValue);
-            }
-            catch (NumberFormatException e) {
-                throw new IllegalArgumentException("Invalid LDAP port \"" + portValue + "\".");
-            }
-        }
+        Integer port = Values.toPort(value(parameters, PORT));
+        if (value(parameters, PORT) != null && port == null)
+            throw new IllegalArgumentException("Invalid LDAP port \"" + value(parameters, PORT) + "\".");
+        if (port == null)
+            port = encryption == Encryption.LDAPS ? 636 : 389;
 
         String adminDn = value(parameters, ADMIN_DN);
         String adminPassword = parameters.get(ADMIN_PASSWORD);
@@ -130,8 +127,7 @@ public final class LdapTarget {
     }
 
     private static String value(Map<String, String> parameters, String name) {
-        String value = parameters.get(name);
-        return value == null || value.trim().isEmpty() ? null : value.trim();
+        return Values.trimToNull(parameters.get(name));
     }
 
     /**
