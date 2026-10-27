@@ -437,10 +437,10 @@ public final class RotationService {
      * knows their connections in use, and could rotate their passwords.
      */
     private void closeManagedSessions() throws GuacamoleException {
+        Set<Integer> managed = connections.listManagedIds();
         for (SessionRegistry.Session session : sessions.getAllLocal()) {
             Integer id = Values.parseId(session.getIdentifier());
-            Target target = id == null ? null : connections.load(id);
-            if (target == null || target.getAttribute(PamAttributes.PLATFORM) == null)
+            if (id == null || !managed.contains(id))
                 continue;
             close(session, "connection " + session.getIdentifier(), "this server is on standby");
         }
@@ -547,7 +547,7 @@ public final class RotationService {
      * rotation.
      */
     private boolean isShown(int id) throws GuacamoleException {
-        return checkouts.listShownSinceRotation(AccountProtocol.NAME).contains(id);
+        return checkouts.isShownSinceRotation(id, AccountProtocol.NAME);
     }
 
     private void rotateDueConnections() {

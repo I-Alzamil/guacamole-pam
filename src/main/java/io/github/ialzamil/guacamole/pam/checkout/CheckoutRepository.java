@@ -353,6 +353,20 @@ public class CheckoutRepository {
      * their policy alone.
      */
     public Set<Integer> listShownSinceRotation(String accountProtocol) throws GuacamoleException {
+        return shownSinceRotation(accountProtocol, null);
+    }
+
+    /**
+     * Whether a checkout showed the password of the given connection, other
+     * than an Account, since its last rotation, as
+     * {@link #listShownSinceRotation} lists them.
+     */
+    public boolean isShownSinceRotation(int connectionId, String accountProtocol) throws GuacamoleException {
+        return !shownSinceRotation(accountProtocol, connectionId).isEmpty();
+    }
+
+    private Set<Integer> shownSinceRotation(String accountProtocol, Integer connectionId)
+            throws GuacamoleException {
 
         Set<Integer> shown = new HashSet<>();
 
@@ -362,9 +376,12 @@ public class CheckoutRepository {
                + " JOIN guacamole_connection c ON c.connection_id = k.connection_id"
                + " LEFT JOIN pam_rotation_state s ON s.connection_id = k.connection_id"
                + " WHERE k.reveal_count > 0 AND c.protocol <> ?"
-               + " AND (s.last_success IS NULL OR k.released IS NULL OR k.released > s.last_success)")) {
+               + " AND (s.last_success IS NULL OR k.released IS NULL OR k.released > s.last_success)"
+               + (connectionId == null ? "" : " AND k.connection_id = ?"))) {
 
             statement.setString(1, accountProtocol);
+            if (connectionId != null)
+                statement.setInt(2, connectionId);
             try (ResultSet results = statement.executeQuery()) {
                 while (results.next())
                     shown.add(results.getInt(1));

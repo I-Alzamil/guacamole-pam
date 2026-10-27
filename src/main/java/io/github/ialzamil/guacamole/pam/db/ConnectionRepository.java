@@ -326,6 +326,26 @@ public class ConnectionRepository {
     }
 
     /**
+     * The identifiers of the connections with a platform.
+     */
+    public Set<Integer> listManagedIds() throws GuacamoleException {
+        Set<Integer> ids = new HashSet<>();
+        try (Connection connection = database.getConnection();
+             PreparedStatement statement = connection.prepareStatement("SELECT connection_id FROM"
+                 + " guacamole_connection_attribute WHERE attribute_name = ? AND attribute_value <> ''")) {
+            statement.setString(1, PamAttributes.PLATFORM);
+            try (ResultSet results = statement.executeQuery()) {
+                while (results.next())
+                    ids.add(results.getInt(1));
+            }
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to list the managed connections.", e);
+        }
+        return ids;
+    }
+
+    /**
      * Returns every connection with a platform, with its PAM attributes and
      * state but without its parameters.
      */
