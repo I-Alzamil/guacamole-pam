@@ -286,7 +286,7 @@ final class Database {
                 withoutComments.append(line).append('\n');
         }
         return Arrays.stream(withoutComments.toString().split(";[ \\t]*\\n"))
-                .map(String::trim).filter(sql -> !sql.isEmpty()).toArray(String[]::new);
+                .map(sql -> sql.trim()).filter(sql -> !sql.isEmpty()).toArray(String[]::new);
     }
 
     private static boolean hasTables(Connection connection) {

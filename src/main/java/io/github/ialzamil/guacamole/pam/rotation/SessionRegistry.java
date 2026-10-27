@@ -232,7 +232,7 @@ class SessionRegistry implements Coordination.Sessions {
         for (Session session : local.values()) {
             Integer id = Values.parseId(session.identifier);
             if (id != null)
-                counts.merge(id, 1, Integer::sum);
+                counts.merge(id, 1, (a, b) -> a + b);
         }
         return counts;
     }

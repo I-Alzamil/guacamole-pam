@@ -336,7 +336,7 @@ final class LoginSync {
 
                 Login login = read(hash);
                 session = login == null ? null : build(in, login);
-                if (session == null) {
+                if (login == null || session == null) {
                     if (misses.size() > 10000)
                         misses.clear();
                     misses.put(hash, System.currentTimeMillis() + MISS_MS);

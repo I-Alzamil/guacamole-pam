@@ -516,9 +516,9 @@ final class SessionStore {
                 String connectionId = results.getString(1);
                 String group = results.getString(2);
                 if (connectionId != null)
-                    read.merge(new Target(Target.Kind.CONNECTION, connectionId), results.getInt(3), Integer::sum);
+                    read.merge(new Target(Target.Kind.CONNECTION, connectionId), results.getInt(3), (a, b) -> a + b);
                 if (group != null)
-                    read.merge(new Target(Target.Kind.CONNECTION_GROUP, group), results.getInt(3), Integer::sum);
+                    read.merge(new Target(Target.Kind.CONNECTION_GROUP, group), results.getInt(3), (a, b) -> a + b);
             }
 
         }
