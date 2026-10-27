@@ -123,6 +123,7 @@ public class EmailTextTest {
     public void eachKindHasItsTemplate() {
         assertEquals(EmailTemplates.Kind.APPROVAL, EmailTemplates.Kind.of(EventType.REQUEST_SUBMITTED));
         assertEquals(EmailTemplates.Kind.DECISION, EmailTemplates.Kind.of(EventType.REQUEST_DENIED));
+        assertEquals(EmailTemplates.Kind.DECISION, EmailTemplates.Kind.of(EventType.REQUEST_EXPIRED));
         assertEquals(EmailTemplates.Kind.ENDED, EmailTemplates.Kind.of(EventType.CHECKOUT_EXPIRED));
         assertEquals(EmailTemplates.Kind.OTHER, EmailTemplates.Kind.of(EventType.SESSION_STARTED));
     }

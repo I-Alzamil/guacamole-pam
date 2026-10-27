@@ -177,6 +177,7 @@ final class EmailText {
             case REQUEST_GRANTED:
                 return role == Audience.Role.OWN
                         ? message(event.getStarts() != null ? "ACTION_OPEN_DURING" : "ACTION_OPEN") : null;
+            case REQUEST_EXPIRED:
             case CHECKOUT_EXPIRED:
             case CHECKOUT_REVOKED:
                 return role == Audience.Role.OWN ? message("ACTION_REQUEST_AGAIN") : null;

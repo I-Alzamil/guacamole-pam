@@ -26,6 +26,9 @@ import io.github.ialzamil.guacamole.pam.checkout.Checkout;
 import io.github.ialzamil.guacamole.pam.db.PamDatabase;
 import io.github.ialzamil.guacamole.pam.db.SearchPattern;
 import io.github.ialzamil.guacamole.pam.db.SqlDialect;
+import io.github.ialzamil.guacamole.pam.notification.Event;
+import io.github.ialzamil.guacamole.pam.notification.EventType;
+import io.github.ialzamil.guacamole.pam.notification.Events;
 
 /**
  * Storage of requests needing approval ("pam_request") and their
@@ -83,9 +86,12 @@ public class ApprovalRepository {
 
     private final SqlDialect dialect;
 
-    public ApprovalRepository(PamDatabase database) {
+    private final Events events;
+
+    public ApprovalRepository(PamDatabase database, Events events) {
         this.database = database;
         this.dialect = database.getDialect();
+        this.events = events;
     }
 
     /**
@@ -854,7 +860,8 @@ public class ApprovalRepository {
      * of the time asked for ahead of time, or of the checkout an extension
      * would extend): always before a decision, at
      * most once a minute before a read, so reads may show a request for up
-     * to a minute past its expiry.
+     * to a minute past its expiry. Each is expired, and reported, by one
+     * server, the first to update it.
      */
     private void expireStale(boolean always) throws GuacamoleException {
 
@@ -862,29 +869,63 @@ public class ApprovalRepository {
         if (!always && now - lastExpiry < EXPIRY_CHECK_MS)
             return;
 
-        try (Connection connection = database.getConnection();
-             PreparedStatement statement = connection.prepareStatement(
-                 "UPDATE pam_request SET status = 'EXPIRED', decided = " + dialect.now()
-               + " WHERE status = 'PENDING' AND ((ends IS NULL AND requested < " + dialect.plusSeconds(dialect.now(), "?")
-               + ") OR ends <= " + dialect.now()
-               + " OR extends_checkout IN (SELECT checkout_id FROM pam_checkout"
-               + "   WHERE released IS NOT NULL OR expires <= " + dialect.now() + "))"
-               + " AND (decided_by IS NULL OR decided < " + dialect.plusSeconds(dialect.now(), "?") + ")")) {
-            statement.setInt(1, -PENDING_HOURS * 3600);
-            statement.setInt(2, -CLAIM_SECONDS);
-            statement.executeUpdate();
+        // Unless a server claimed completing it lately
+        String stale = "status = 'PENDING' AND ((ends IS NULL AND requested < "
+                + dialect.plusSeconds(dialect.now(), Integer.toString(-PENDING_HOURS * 3600)) + ") OR ends <= "
+                + dialect.now() + " OR extends_checkout IN (SELECT checkout_id FROM pam_checkout"
+                + "   WHERE released IS NOT NULL OR expires <= " + dialect.now() + "))"
+                + " AND (decided_by IS NULL OR decided < "
+                + dialect.plusSeconds(dialect.now(), Integer.toString(-CLAIM_SECONDS)) + ")";
+
+        List<Integer> expired = new ArrayList<>();
+        try (Connection connection = database.getConnection()) {
+
+            List<Integer> due = new ArrayList<>();
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT request_id FROM pam_request WHERE " + stale);
+                 ResultSet results = statement.executeQuery()) {
+                while (results.next())
+                    due.add(results.getInt(1));
+            }
+
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE pam_request SET status = 'EXPIRED', decided = " + dialect.now()
+                  + " WHERE request_id = ? AND " + stale)) {
+                for (int id : due) {
+                    statement.setInt(1, id);
+                    if (statement.executeUpdate() == 1)
+                        expired.add(id);
+                }
+            }
+
         }
         catch (SQLException e) {
             throw new GuacamoleServerException("Unable to expire requests.", e);
         }
 
         lastExpiry = now;
+        if (!expired.isEmpty())
+            reportExpired(expired);
 
     }
 
     private static long decidedOrRequested(ApprovalRequest request) {
         Long decided = request.getDecided();
         return decided != null ? decided : request.getRequested();
+    }
+
+    private void reportExpired(List<Integer> expired) {
+        try {
+            for (ApprovalRequest request : query(SELECT + " WHERE r.request_id IN " + SqlDialect.in(expired))) {
+                events.publish(Event.of(EventType.REQUEST_EXPIRED).user(request.getUsername())
+                        .connection(request.getConnectionIdentifier(), request.getConnectionName())
+                        .request(request.getId()).checkout(request.getExtendsCheckout())
+                        .period(request.getStarts(), request.getEnds()));
+            }
+        }
+        catch (GuacamoleException | RuntimeException e) {
+            logger.warn("Unable to report {} requests that expired: {}", expired.size(), e.getMessage());
+        }
     }
 
     private void requirePending(Connection connection, int requestId)

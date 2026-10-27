@@ -229,6 +229,18 @@ check_contains "...saying why" "This address receives what Guacamole administrat
     "$(mails text | grep -F "soc@example.org|" | tail -1 | cut -d'|' -f3-)"
 api DELETE "$PAM/requests/$GATED/pending" "$NOBODY" >/dev/null
 
+api POST "$PAM/requests/$GATED" "$USER" '{"reason":"T46 left pending"}' >/dev/null
+sql "UPDATE pam_request SET requested = $(sql_ago 90000) WHERE username = 't46-user' AND status = 'PENDING'" >/dev/null
+# Expired before any decision, such as asking again
+api POST "$PAM/requests/$GATED" "$NOBODY" '{"reason":"T46 after expiry"}' >/dev/null
+EXPIRED="of \"t46-user\" for \"t46 gated ssh\" expired before it was decided."
+check "a request expiring undecided goes to its requester and approvers" \
+    "soc@example.org t46-admin@example.org t46-approver2@example.org t46-approver@example.org t46-user@example.org" \
+    "$(mailed_to "$EXPIRED")"
+check_contains "...telling the requester to ask again" "To use it again, request it again in Guacamole" \
+    "$(mails text | grep -F "t46-user@example.org|" | grep -F "$EXPIRED" | tail -1 | cut -d'|' -f3-)"
+api DELETE "$PAM/requests/$GATED/pending" "$NOBODY" >/dev/null
+
 # ---------------------------------------------------------------- templates
 LANGS="$PAM/email-languages"
 section "Email templates: English"

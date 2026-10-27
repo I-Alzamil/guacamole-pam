@@ -728,7 +728,7 @@
         "KIND_APPROVAL": "Requests awaiting approval",
         "HELP_KIND_APPROVAL": "A request awaiting approval, and another approver's approval of one: to approvers and administrators.",
         "KIND_DECISION": "Decisions",
-        "HELP_KIND_DECISION": "A request approved or denied: to its requester, the other approvers and administrators.",
+        "HELP_KIND_DECISION": "A request approved or denied, or expired undecided: to its requester, the other approvers and administrators.",
         "KIND_ENDED": "Access ending",
         "HELP_KIND_ENDED": "A checkout expired, or ended by someone else: to its holder and administrators.",
         "KIND_OTHER": "Everything else",

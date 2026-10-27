@@ -50,9 +50,9 @@ public final class EmailTemplates {
         APPROVAL("approval", EventType.REQUEST_SUBMITTED, EventType.REQUEST_APPROVED),
 
         /**
-         * A request granted or denied.
+         * A request granted or denied, or expired undecided.
          */
-        DECISION("decision", EventType.REQUEST_GRANTED, EventType.REQUEST_DENIED),
+        DECISION("decision", EventType.REQUEST_GRANTED, EventType.REQUEST_DENIED, EventType.REQUEST_EXPIRED),
 
         /**
          * A checkout expired, or ended by someone else.

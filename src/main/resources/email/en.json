@@ -12,6 +12,7 @@
         "SUMMARY_REQUEST_DENIED": "User \"{actor}\" denied the request of \"{user}\" for \"{connection}\".",
         "SUMMARY_REQUEST_REJECTED": "Request {request} of \"{user}\" for \"{connection}\" was rejected.",
         "SUMMARY_REQUEST_CANCELLED": "Request {request} of \"{user}\" for \"{connection}\" was cancelled.",
+        "SUMMARY_REQUEST_EXPIRED": "Request {request} of \"{user}\" for \"{connection}\" expired before it was decided.",
         "SUMMARY_CHECKOUT_STARTED": "User \"{user}\" checked out \"{connection}\".",
         "SUMMARY_CHECKOUT_EXTENDED": "The checkout of \"{connection}\" by \"{user}\" was extended.",
         "SUMMARY_CHECKOUT_RELEASED": "User \"{user}\" released \"{connection}\".",

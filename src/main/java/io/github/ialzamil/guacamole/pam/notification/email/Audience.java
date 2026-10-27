@@ -15,10 +15,11 @@ import io.github.ialzamil.guacamole.pam.notification.Event;
  *
  * <ul>
  * <li>the user it concerns ({@link Role#OWN}): when their request is
- * granted, denied or rejected, and when their checkout expires or is ended by
+ * granted, denied, rejected or left to expire, and when their checkout expires or is ended by
  * someone else;</li>
  * <li>the approvers of its connection ({@link Role#APPROVER}): a request
- * awaiting their approval, and another approver's decision on one;</li>
+ * awaiting their approval, another approver's decision on one, and one
+ * expiring undecided;</li>
  * <li>administrators ({@link Role#ADMINISTRATOR}): every event.</li>
  * </ul>
  *
@@ -104,6 +105,7 @@ final class Audience {
 
             case REQUEST_GRANTED:
             case REQUEST_DENIED:
+            case REQUEST_EXPIRED:
                 if (notByThem)
                     candidates.get(Role.OWN).add(user);
                 approvers(event, source, candidates);

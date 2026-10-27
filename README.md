@@ -586,10 +586,10 @@ sends the events that happened on it, so with the HA module each event is
 sent once.
 
 Events are rotations (succeeded or failed); requests submitted, approved,
-granted, denied and cancelled; checkouts started, extended, released,
-expired and revoked; passwords viewed; sessions started and ended; a server
-going on standby and working again; and changes to the PAM settings.
-Passwords are never sent.
+granted, denied, cancelled and expired undecided; checkouts started,
+extended, released, expired and revoked; passwords viewed; sessions started
+and ended; a server going on standby and working again; and changes to the
+PAM settings. Passwords are never sent.
 
 - **Transport**: TLS (RFC 5425, the default, port 6514) checks that the
   server's certificate is trusted and names the host set; paste the CA
@@ -625,10 +625,12 @@ your mail server, to those they concern, at the email address of their
 Guacamole profile. It's off by default.
 
 - **Administrators** receive every event (the same as syslog).
-- **Approvers** receive requests awaiting their approval, and the other
-  approvers' approvals and denials of requests for their connections.
-- **Users** receive the approval or denial of their requests, and the end
-  of their access: expired, or ended by an administrator.
+- **Approvers** receive requests awaiting their approval, the other
+  approvers' approvals and denials of requests for their connections, and
+  those requests expiring undecided.
+- **Users** receive the approval or denial of their requests, or their
+  expiry undecided, and the end of their access: expired, or ended by an
+  administrator.
 - Nobody is emailed what they did themselves. Each user receives an event
   once, and can turn each kind off under **Preferences → Email
   notifications**, which shows the address emails go to.

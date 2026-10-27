@@ -181,7 +181,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         secretMigration = new SecretMigration(database, platforms, connections, connectionSecrets, settings, secrets);
         rotationService = new RotationService(database, coordination, platforms, passwordPolicies, connections,
                 checkouts, events);
-        approvals = new ApprovalRepository(database);
+        approvals = new ApprovalRepository(database, events);
         approvers = new ApproverDirectory(database);
         badgePreferences = new BadgePreferences(database);
         emailLanguages = new EmailLanguages(database, coordination, events);

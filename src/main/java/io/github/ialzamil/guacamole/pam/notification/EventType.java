@@ -34,6 +34,11 @@ public enum EventType {
 
     REQUEST_CANCELLED(6),
 
+    /**
+     * Left pending until it could no longer be granted.
+     */
+    REQUEST_EXPIRED(6),
+
     CHECKOUT_STARTED(5),
     CHECKOUT_EXTENDED(6),
     CHECKOUT_RELEASED(6),

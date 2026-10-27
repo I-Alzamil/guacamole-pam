@@ -68,6 +68,9 @@ public class AudienceTest {
         // Rejected as it overlaps a reservation: by no one, still theirs
         assertEquals("abe=approvals admin=everything ann=approvals bob=own root=approvals",
                 audience(Event.of(EventType.REQUEST_DENIED).user("bob").connection("7", "web")));
+        // Expired undecided: by no one
+        assertEquals("abe=approvals admin=everything ann=approvals bob=own root=approvals",
+                audience(Event.of(EventType.REQUEST_EXPIRED).user("bob").connection("7", "web")));
         // A partial approval: not yet the requester's concern
         assertEquals("abe=approvals admin=everything root=approvals",
                 audience(Event.of(EventType.REQUEST_APPROVED).user("bob").actor("ann").connection("7", "web")));
