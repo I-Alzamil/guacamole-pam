@@ -111,7 +111,8 @@ why, and Guacamole works exactly as without it.
 The extension has its own version (`1.0.0`, following semantic versioning),
 and each build is made for one Guacamole release, 1.6.0 for now: Guacamole
 skips extensions built for another release. To build for another release, set
-`guacamole.version` in `pom.xml`.
+`guacamole.version` in `pom.xml`. [CHANGELOG.md](CHANGELOG.md) lists what each
+release changes.
 
 ## Installation
 
@@ -406,8 +407,7 @@ pam-encryption-key: <the key>
 ```
 
 Existing secrets are encrypted shortly after the start, and new ones as
-they're saved. Without a key, secrets are stored unencrypted, as in earlier
-versions.
+they're saved. Without a key, secrets are stored unencrypted.
 
 **Back up the key.** Without it, encrypted secrets can't be recovered. For
 Accounts whose password is rotated, the extension is the only holder of the
@@ -567,11 +567,12 @@ encrypted like other stored secrets, and never shown again: leave the field
 empty to keep one, or tick **Remove**. **Restore defaults** resets one
 section.
 
-They used to be set in `guacamole.properties` (`pam-admin-bypass-requests`,
-`pam-extensions-enabled`, `pam-max-extensions`, or their `PAM_*` variables in
-the Docker image). A value still set there is imported once, by the first
-server reading the settings, unless the setting was already decided in the
-database; from then on it's ignored, with a warning in the log until removed.
+Three of them can also be given in `guacamole.properties`
+(`pam-admin-bypass-requests`, `pam-extensions-enabled`, `pam-max-extensions`,
+or their `PAM_*` variables in the Docker image), to set them up front. A
+value set there is imported once, by the first server reading the settings,
+unless the setting was already decided in the database; from then on it's
+ignored, with a warning in the log until removed.
 
 Some settings stay in each server's `guacamole.properties`, as they're needed
 to reach the database, or protect what it stores: `pam-database`,
