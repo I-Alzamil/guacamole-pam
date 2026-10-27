@@ -34,9 +34,15 @@ angular.module('guacPam').factory('pamBadgeCounter', ['$injector', function pamB
         counter.refresh = function refresh() {
             if (!timer)
                 return;
+            // Applied only if counting was not stopped or started again
+            // meanwhile, as for another user
+            var counting = timer;
             return fetchCount().then(function counted(value) {
-                count = timer ? value || 0 : 0;
+                if (timer === counting)
+                    count = value || 0;
             }, function countFailed(error) {
+                if (timer !== counting)
+                    return;
                 // Logged out, or the session ended: started again at login
                 if (error && error.type === 'PERMISSION_DENIED')
                     counter.stop();

@@ -6,7 +6,6 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
     // Required services
     var $q                    = $injector.get('$q');
     var authenticationService = $injector.get('authenticationService');
-    var requestService        = $injector.get('requestService');
 
     var service = {};
 
@@ -18,10 +17,12 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
         if (!authenticationService.getCurrentToken())
             return $q.reject({ type : 'PERMISSION_DENIED', message : 'Not logged in.' });
 
-        return requestService({
+        // The token in its header, as Guacamole sends it, never in the
+        // address, which access logs and proxies record
+        return authenticationService.request({
             method : method,
             url    : 'api/session/ext/pam/' + path,
-            params : angular.extend({ token : authenticationService.getCurrentToken() }, params),
+            params : params,
             data   : data
         });
 

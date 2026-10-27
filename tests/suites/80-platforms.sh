@@ -106,6 +106,6 @@ on_cleanup "cleanup_platform 'Windows'; rename_platform 't2 renamed default' 'Wi
 R=$(api POST "$PAM/platforms/defaults" "$ADMIN")
 check "the missing one is added back" "imported: Unix=SKIPPED macOS=SKIPPED Windows=CREATED" "$(outcomes "$R")"
 check "...as a new platform" yes "$([ -n "$(platform_id "Windows")" ] && [ "$(platform_id "Windows")" != "$WINDOWS" ] && echo yes)"
-check_contains "...with its script" "net user <USER> *" "$(platform_field "Windows" "d['settings']['script']")"
+check_contains "...with its script" "net user \"<USER>\" *" "$(platform_field "Windows" "d['settings']['script']")"
 check "a user who is not an administrator cannot restore them" 403 \
     "$(status_of "$(api POST "$PAM/platforms/defaults" "$USER_TOKEN")")"

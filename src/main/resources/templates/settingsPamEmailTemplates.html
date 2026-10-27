@@ -76,7 +76,7 @@
                 <p class="pam-setting-help">{{ 'PAM_EMAIL_TEMPLATES.HELP_TEMPLATES' | translate }}</p>
                 <dl class="pam-placeholders">
                     <dt ng-repeat-start="placeholder in placeholders"><code>{{ '{' + placeholder + '}' }}</code></dt>
-                    <dd ng-repeat-end>{{ 'PAM_EMAIL_TEMPLATES.PLACEHOLDER_' + (placeholder.replace('-', '_') | uppercase) | translate }}</dd>
+                    <dd ng-repeat-end>{{ 'PAM_EMAIL_TEMPLATES.PLACEHOLDER_' + (placeholder.replace(/-/g, '_') | uppercase) | translate }}</dd>
                 </dl>
 
                 <div class="pam-email-kind" ng-repeat="kind in kinds">

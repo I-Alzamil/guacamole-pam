@@ -295,7 +295,7 @@ CREATE TABLE IF NOT EXISTS pam_email_language (
 
 );
 
--- Last, so the default platforms above are only added to a fresh install, and
--- so the extension can tell the schema is complete (PamDatabase.SCHEMA_VERSION)
+-- Last, so the extension can tell the schema is complete, and that a fresh
+-- install was made, adding the default platforms (PamDatabase.SCHEMA_VERSION)
 INSERT INTO pam_schema_version (version) VALUES (1)
 ON CONFLICT (version) DO NOTHING;

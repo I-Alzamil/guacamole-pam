@@ -302,9 +302,14 @@ angular.module('guacPam').directive('guacSettingsPamApprovals', [function guacSe
             $scope.confirmDeny = function confirmDeny() {
                 var dialog = $scope.dialog;
                 decide(dialog.request, function sendDenial() {
+                    dialog.error = null;
                     return pamService.deny(dialog.request.id, dialog.reason.trim()).then(function denied() {
                         if ($scope.dialog === dialog)
                             $scope.dialog = null;
+                    }, function denialFailed(error) {
+                        // Shown in the dialog, as Guacamole's own would be
+                        // under it
+                        dialog.error = (error && error.message) || 'Request failed.';
                     });
                 });
             };

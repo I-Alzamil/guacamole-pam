@@ -97,7 +97,7 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
             var pollWhilePending = function pollWhilePending() {
                 if (($scope.request && $scope.request.pending || $scope.extensionPending()) && !pendingPoll)
                     pendingPoll = $interval(function checkPending() {
-                        pamService.getRequest($scope.identifier).then(function requestRetrieved(request) {
+                        pamService.getRequest($scope.identifier).then(whileShowing(function requestRetrieved(request) {
                             $scope.request = request;
                             if (!request.pending && !$scope.extensionPending()) {
                                 stopPolling();
@@ -108,7 +108,7 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                                 startCountdown(request.expires);
                                 pamRequestService.refresh();
                             }
-                        });
+                        }));
                     }, PENDING_POLL_INTERVAL);
                 else if ($scope.request && !$scope.request.pending && !$scope.extensionPending())
                     stopPolling();
@@ -342,9 +342,23 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                 $scope.error = (error && error.message) || 'Request failed.';
             };
 
+            /**
+             * The given callback, applied only while the dialog still shows
+             * the connection it was asked for: an answer arriving once the
+             * dialog closed, or shows another, is dropped.
+             */
+            var whileShowing = function whileShowing(callback) {
+                var identifier = $scope.identifier;
+                return function applyWhileShowing(value) {
+                    if ($scope.identifier === identifier && identifier !== null)
+                        return callback(value);
+                    return value;
+                };
+            };
+
             var load = function load() {
                 $scope.busy = true;
-                return pamService.getRequest($scope.identifier).then(function requestRetrieved(request) {
+                return pamService.getRequest($scope.identifier).then(whileShowing(function requestRetrieved(request) {
                     $scope.request = request;
                     if (request.mine)
                         startCountdown(request.expires);
@@ -353,7 +367,7 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                     pollWhilePending();
                     reloadWhenReserved();
                     return request;
-                }, showError)['finally'](function loaded() {
+                }), whileShowing(showError))['finally'](function loaded() {
                     $scope.busy = false;
                 });
             };
@@ -370,10 +384,15 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
             $scope.$on('pamRequestOpen', function open(event, identifier) {
                 $scope.close();
                 $scope.identifier = identifier;
-                load().then(function requestLoaded(request) {
+                load().then(whileShowing(function requestLoaded(request) {
                     if (checksOutOnOpen(request))
                         $scope.requestPassword();
-                });
+                }));
+            });
+
+            // Never left open, with a password, once the user logged out
+            $scope.$on('guacLogout', function loggedOut() {
+                $scope.close();
             });
 
             $scope.close = function close() {
@@ -402,7 +421,7 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                 var starts = $scope.isLater() && $scope.form.starts ? $scope.form.starts.getTime() : null;
                 var periods = $scope.canRequest() ? $scope.form.periods : 1;
                 pamService.requestPassword($scope.identifier, $scope.form.reason, starts, periods)
-                .then(function requested(result) {
+                .then(whileShowing(function requested(result) {
 
                     resetForm();
 
@@ -422,10 +441,10 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                     startCountdown(result.expires);
                     pamRequestService.refresh();
 
-                }, function requestFailed(error) {
+                }), whileShowing(function requestFailed(error) {
                     showError(error);
                     load();
-                })['finally'](function requested() {
+                }))['finally'](function requested() {
                     $scope.busy = false;
                 });
 
@@ -504,12 +523,12 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                 $scope.busy = true;
                 $scope.error = null;
 
-                pamService.revealPassword($scope.identifier).then(function revealed(grant) {
+                pamService.revealPassword($scope.identifier).then(whileShowing(function revealed(grant) {
                     $scope.grant = grant;
-                }, function revealFailed(error) {
+                }), whileShowing(function revealFailed(error) {
                     showError(error);
                     load();
-                })['finally'](function revealDone() {
+                }))['finally'](function revealDone() {
                     $scope.busy = false;
                 });
 

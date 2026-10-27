@@ -44,7 +44,7 @@
                 </td>
                 <td>{{server.url || ('PAM_HA.INFO_NOT_SET' | translate)}}</td>
                 <td>{{server.version || '?'}}</td>
-                <td>{{server.started | date:'medium'}}</td>
+                <td>{{server.started | date:'medium'}} {{server.started | pamZone}}</td>
                 <td>{{'PAM_HA.INFO_SECONDS_AGO' | translate:{SECONDS: server.lastSeenSeconds} }}</td>
                 <td>{{server.sessions}}</td>
                 <td>{{server.recordings}}</td>

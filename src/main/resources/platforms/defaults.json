@@ -7,7 +7,7 @@
       "description": "Linux, BSD and other Unix systems: the connection account changes its own password with passwd, root included.",
       "type": "ssh",
       "settings": {
-        "script": "# Changes the password of the connection account itself. passwd asks\n# for the current password first, unless the account is root.\npasswd\n@case (?i)\\b(current|old|existing)\\b[^:\\n]*password:\n<OLDPASS>\n@expect assword:\n@case (?i)\\bnew\\b[^:\\n]*password:\n@end\n<NEWPASS>\n@expect assword:\n<NEWPASS>\n@regex (?i)(success|(?<!not |un)(updated|changed)\\b|\\bdone\\b)\n"
+        "script": "# Changes the password of the connection account itself. passwd asks\n# for the current password first, unless the account is root.\npasswd\n@case (?i)\\b(current|old|existing)\\b[^:\\n]*password:\n<OLDPASS>\n@expect assword:\n@case (?i)\\bnew\\b[^:\\n]*password:\n@end\n<NEWPASS>\n@expect assword:\n<NEWPASS>\n@regex (?i)((?<!un)\\bsuccess|(?<!not |un|not been )\\b(updated|changed)\\b|\\bdone\\b)\n"
       },
       "policy": {}
     },
@@ -25,7 +25,7 @@
       "description": "Windows OpenSSH with cmd.exe as the default shell. The account must be a local administrator.",
       "type": "ssh",
       "settings": {
-        "script": "# Changes the password of the connection account itself.\n@timeout 20\n@expect >\nnet user <USER> *\n@expect password\n<NEWPASS>\n@expect password\n<NEWPASS>\n@expect successfully\n"
+        "script": "# Changes the password of the connection account itself.\n@timeout 20\n@expect >\nnet user \"<USER>\" *\n@expect password\n<NEWPASS>\n@expect password\n<NEWPASS>\n@expect successfully\n"
       },
       "policy": {}
     }

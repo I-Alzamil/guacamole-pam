@@ -143,8 +143,15 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
              */
             var passwordPolicyNames = {};
 
+            /**
+             * Resolved once the names are read, which exports wait for:
+             * without them, platforms would be exported without their
+             * policy.
+             */
+            var policyNamesRead = null;
+
             var loadPlatforms = function loadPlatforms() {
-                pamService.getPasswordPolicies().then(function policiesRetrieved(policies) {
+                policyNamesRead = pamService.getPasswordPolicies().then(function policiesRetrieved(policies) {
                     passwordPolicyNames = {};
                     angular.forEach(policies, function addName(policy) {
                         passwordPolicyNames[policy.id] = policy.name;
@@ -352,6 +359,12 @@ angular.module('guacPam').directive('guacSettingsPamPlatforms', [function guacSe
 
                 if (!$scope.filteredPlatforms.length)
                     return;
+
+                policyNamesRead.then(download, guacNotification.SHOW_REQUEST_ERROR);
+
+            };
+
+            var download = function download() {
 
                 var file = {
                     format    : EXPORT_FORMAT,

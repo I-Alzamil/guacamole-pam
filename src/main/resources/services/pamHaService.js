@@ -37,11 +37,18 @@ angular.module('guacPam').factory('pamHaService', ['$injector', function pamHaSe
                 return found.then(function checked(result) {
                     return result || service.getStatus(dataSource).then(function statusRead() {
                         return dataSource;
-                    }, function statusRefused() {
-                        return null;
+                    }, function statusRefused(error) {
+                        // Refused: not theirs to see. Anything else, such as
+                        // a server restarting, is looked for again later
+                        if (error && error.type === 'PERMISSION_DENIED')
+                            return null;
+                        return $q.reject(error);
                     });
                 });
-            }, $q.resolve(null));
+            }, $q.resolve(null))['catch'](function notFound() {
+                delete dataSources[token];
+                return null;
+            });
         }
         return dataSources[token];
 

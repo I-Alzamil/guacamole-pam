@@ -47,6 +47,17 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
     var MAX_REFRESH_DELAY = 3600000;
 
     /**
+     * Least delay before the next refresh, in milliseconds.
+     */
+    var MIN_REFRESH_DELAY = 5000;
+
+    /**
+     * Counts logins and logouts, so a refresh started before one is not
+     * applied after it.
+     */
+    var generation = 0;
+
+    /**
      * Timer of the next automatic refresh, or null.
      */
     var nextRefresh = null;
@@ -70,8 +81,10 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
             else if (entry.reservation)
                 wait = Math.max(0, (entry.reservation.starts > Date.now() ? entry.reservation.starts
                         : entry.reservation.ends) - Date.now()) + 1000;
+            // Never sooner than MIN_REFRESH_DELAY: with the browser's clock
+            // ahead of the server's, the end it waits for looks past
             if (wait !== null)
-                wait = Math.min(wait, MAX_REFRESH_DELAY);
+                wait = Math.max(MIN_REFRESH_DELAY, Math.min(wait, MAX_REFRESH_DELAY));
             if (wait !== null && (delay === null || wait < delay))
                 delay = wait;
         });
@@ -93,7 +106,10 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
         var loadDataSource = dataSource !== null ? $q.resolve({ identifier : dataSource })
                 : pamService.getDataSource();
 
-        refreshing = $q.all([loadDataSource, pamService.getRequests()]).then(function requestsRetrieved(results) {
+        var started = generation;
+        var current = $q.all([loadDataSource, pamService.getRequests()]).then(function requestsRetrieved(results) {
+            if (started !== generation)
+                return;
             dataSource = results[0].identifier;
             var requests = results[1];
             var identifiers = {};
@@ -114,11 +130,14 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
             requestable = identifiers;
             scheduleRefresh();
         }, function requestsFailed() {
-            requestable = requestable || {};
+            if (started === generation)
+                requestable = requestable || {};
         })['finally'](function refreshDone() {
-            refreshing = null;
+            if (refreshing === current)
+                refreshing = null;
         });
 
+        refreshing = current;
         return refreshing;
 
     };
@@ -187,8 +206,10 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
     };
 
     service.clear = function clear() {
+        generation++;
         $timeout.cancel(nextRefresh);
         nextRefresh = null;
+        refreshing = null;
         requestable = null;
         dataSource = null;
     };

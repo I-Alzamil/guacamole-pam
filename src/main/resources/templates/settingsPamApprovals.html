@@ -269,6 +269,7 @@
                 <label for="pam-deny-reason">{{ 'PAM_APPROVALS.FIELD_DENY_REASON' | translate }}</label>
                 <textarea id="pam-deny-reason" ng-model="dialog.reason" maxlength="500" rows="3"
                           ng-disabled="busy[dialog.request.id]"></textarea>
+                <p class="pam-request-error" ng-show="dialog.error">{{ dialog.error }}</p>
             </div>
 
             <div class="pam-request-actions" ng-if="dialog.deny">
