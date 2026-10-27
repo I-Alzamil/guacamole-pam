@@ -237,8 +237,27 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
             return context;
 
         dataSourceContexts.put(authenticatedUser, context);
+        recordLoginGroups(authenticatedUser);
         return new PamUserContextDecorator(context, rotationService, checkoutService, connectionSecrets);
 
+    }
+
+    /**
+     * Keeps the groups the user logged in with, for emails to the members
+     * of groups. Never refuses the login.
+     */
+    private void recordLoginGroups(AuthenticatedUser authenticatedUser) {
+        if (AuthenticatedUser.ANONYMOUS_IDENTIFIER.equals(authenticatedUser.getIdentifier()))
+            return;
+        try {
+            emailDirectory.recordLoginGroups(authenticatedUser.getIdentifier(),
+                    authenticatedUser.getEffectiveUserGroups());
+        }
+        catch (GuacamoleException | RuntimeException e) {
+            logger.warn("Unable to record the groups of user \"{}\" for emails: {}",
+                    authenticatedUser.getIdentifier(), e.getMessage());
+            logger.debug("Unable to record the groups of a user.", e);
+        }
     }
 
     /**

@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
@@ -24,10 +25,11 @@ import io.github.ialzamil.guacamole.pam.db.SqlDialect;
  * Who receives emails, read from Guacamole's own tables of the managed data
  * source: the administrators, the approvers of a connection, and their
  * email addresses (the "Email address" of their Guacamole profile, which
- * Guacamole keeps in "guacamole_user"). Only
- * enabled users, and memberships of enabled groups stored there, count:
- * groups a user belongs to only through another extension, such as LDAP,
- * are not known here.
+ * Guacamole keeps in "guacamole_user"). Only enabled users, and
+ * memberships of enabled groups, count: those stored there, and those
+ * another extension, such as LDAP, gave a user at their last login, kept
+ * in "pam_login_group".
+ *
  */
 public class Directory {
 
@@ -162,6 +164,57 @@ public class Directory {
     }
 
     /**
+     * Keeps the groups a user belongs to as they logged in, which other
+     * extensions, such as LDAP, may give, for the next emails: replaced if
+     * they changed.
+     */
+    public void recordLoginGroups(String username, Set<String> groups) throws GuacamoleException {
+
+        try (Connection connection = database.getConnection()) {
+
+            Set<String> stored = new TreeSet<>();
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT group_name FROM pam_login_group WHERE username = ?")) {
+                statement.setString(1, username);
+                try (ResultSet results = statement.executeQuery()) {
+                    while (results.next())
+                        stored.add(results.getString(1));
+                }
+            }
+            if (stored.equals(new TreeSet<>(groups)))
+                return;
+
+            connection.setAutoCommit(false);
+            try {
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "DELETE FROM pam_login_group WHERE username = ?")) {
+                    statement.setString(1, username);
+                    statement.executeUpdate();
+                }
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "INSERT INTO pam_login_group (username, group_name) VALUES (?, ?)")) {
+                    for (String group : groups) {
+                        statement.setString(1, username);
+                        statement.setString(2, group);
+                        statement.addBatch();
+                    }
+                    statement.executeBatch();
+                }
+                connection.commit();
+            }
+            catch (SQLException e) {
+                connection.rollback();
+                throw e;
+            }
+
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to record the groups of a user.", e);
+        }
+
+    }
+
+    /**
      * The email address of each of the given users who has one, by
      * username.
      */
@@ -198,9 +251,9 @@ public class Directory {
 
     /**
      * Usernames of the enabled users among the given entities, and among
-     * the members of the enabled groups among them, at any depth. Followed
-     * level by level, so a group belonging to itself through others ends the
-     * search.
+     * the members of the enabled groups among them, at any depth, members
+     * at their last login included. Followed level by level, so a group
+     * belonging to itself through others ends the search.
      */
     private Set<String> getUsersOf(Connection connection, Set<Integer> entities) throws SQLException {
 
@@ -213,6 +266,15 @@ public class Directory {
             try (PreparedStatement statement = connection.prepareStatement(
                     "SELECT e.name FROM guacamole_entity e JOIN guacamole_user u ON u.entity_id = e.entity_id"
                   + " WHERE e.entity_id IN " + SqlDialect.in(level) + " AND u.disabled = " + dialect.bool(false));
+                 ResultSet results = statement.executeQuery()) {
+                while (results.next())
+                    users.add(results.getString(1));
+            }
+
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT l.username FROM pam_login_group l JOIN guacamole_entity e ON e.name = l.group_name"
+                  + " JOIN guacamole_user_group g ON g.entity_id = e.entity_id"
+                  + " WHERE e.entity_id IN " + SqlDialect.in(level) + " AND g.disabled = " + dialect.bool(false));
                  ResultSet results = statement.executeQuery()) {
                 while (results.next())
                     users.add(results.getString(1));

@@ -172,6 +172,18 @@ CREATE TABLE IF NOT EXISTS pam_user_preference (
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- The groups each user belonged to at their last login, as every
+-- extension gave them, such as LDAP: emails to the members of a group reach
+-- those Guacamole's own tables do not list
+CREATE TABLE IF NOT EXISTS pam_login_group (
+
+  username    varchar(128)  NOT NULL,
+  group_name  varchar(128)  NOT NULL,
+
+  PRIMARY KEY (username, group_name)
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS pam_session (
 
   session_id    varchar(36)   NOT NULL,

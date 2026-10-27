@@ -686,9 +686,12 @@ administrators like other setting changes.
 
 Approvers and administrators are found in Guacamole's database: users and
 groups with the approval permission or the **Administer system**
-permission, with their group memberships stored there. Users who belong to
-a group only through another extension, such as LDAP, aren't found through
-it; give them the permission directly, or through a group in the database.
+permission, and the members of those groups. Memberships stored in the
+database count, and so do those another extension, such as LDAP, gave a
+user when they last logged in (kept in `pam_login_group`): a group of the
+same name in the database, holding the permission, then reaches them. A
+user who left such a group still receives its emails until they next log
+in.
 
 ### Password policies
 

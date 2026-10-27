@@ -241,6 +241,18 @@ check_contains "...telling the requester to ask again" "To use it again, request
     "$(mails text | grep -F "t46-user@example.org|" | grep -F "$EXPIRED" | tail -1 | cut -d'|' -f3-)"
 api DELETE "$PAM/requests/$GATED/pending" "$NOBODY" >/dev/null
 
+on_cleanup "sql \"DELETE FROM pam_login_group WHERE username LIKE 't46-%'\" >/dev/null"
+check "a member of a group logs in: their groups are kept, for emails" t46-approvers \
+    "$(sql "SELECT group_name FROM pam_login_group WHERE username = 't46-approver2'" | tr -d '[:space:]')"
+create_user t46-ldap t46-ldap-pw '{"guac-email-address":"t46-ldap@example.org"}'
+# A group another extension, such as LDAP, gave at login, which the
+# database does not list
+sql "INSERT INTO pam_login_group (username, group_name) VALUES ('t46-ldap', 't46-approvers')" >/dev/null
+api POST "$PAM/requests/$GATED" "$NOBODY" '{"reason":"T46 login groups"}' >/dev/null
+check "a request goes to who belonged to an approving group at their last login, through another extension" yes \
+    "$(mailed t46-ldap@example.org "User \"t46-nobody\" requested \"t46 gated ssh\"")"
+api DELETE "$PAM/requests/$GATED/pending" "$NOBODY" >/dev/null
+
 # ---------------------------------------------------------------- templates
 LANGS="$PAM/email-languages"
 section "Email templates: English"

@@ -186,6 +186,19 @@ CREATE TABLE pam_user_preference (
 
 );
 
+-- The groups each user belonged to at their last login, as every
+-- extension gave them, such as LDAP: emails to the members of a group reach
+-- those Guacamole's own tables do not list
+IF OBJECT_ID(N'pam_login_group', N'U') IS NULL
+CREATE TABLE pam_login_group (
+
+  username    nvarchar(128) NOT NULL,
+  group_name  nvarchar(128) NOT NULL,
+
+  CONSTRAINT pam_login_group_pkey PRIMARY KEY (username, group_name)
+
+);
+
 IF OBJECT_ID(N'pam_session', N'U') IS NULL
 CREATE TABLE pam_session (
 

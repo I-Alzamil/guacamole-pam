@@ -228,6 +228,18 @@ CREATE TABLE IF NOT EXISTS pam_user_preference (
 
 );
 
+-- The groups each user belonged to at their last login, as every
+-- extension gave them, such as LDAP: emails to the members of a group reach
+-- those Guacamole's own tables do not list
+CREATE TABLE IF NOT EXISTS pam_login_group (
+
+  username    varchar(128)  NOT NULL,
+  group_name  varchar(128)  NOT NULL,
+
+  PRIMARY KEY (username, group_name)
+
+);
+
 -- Sessions open on managed connections, so a server starting finds those a
 -- stopped one left open, and with the HA module so all servers can tell
 -- whether a connection is in use: each then refreshes the heartbeat of its
