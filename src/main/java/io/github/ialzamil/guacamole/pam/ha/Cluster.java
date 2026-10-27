@@ -176,8 +176,10 @@ final class Cluster {
         started = false;
         logins.shutdown();
         executor.shutdownNow();
-        for (SessionStore store : stores.values())
+        for (SessionStore store : stores.values()) {
             store.shutdown();
+            store.getDatabase().close();
+        }
     }
 
     private static String hostname() {

@@ -3,26 +3,35 @@ package io.github.ialzamil.guacamole.pam.ha;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
+
+import javax.sql.DataSource;
 
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
 import org.apache.guacamole.environment.Environment;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+
 /**
  * The Guacamole database of one data source, reached with the properties
  * and the driver of Guacamole's own authentication for that database, as it
  * reaches it: the same host, port, database, user and encryption settings.
- * Each operation opens a connection of its own: there are few of them (a
- * heartbeat every few seconds, and one per session or login opened or
- * closed), and this extension then holds no connection while idle.
+ * Connections come from a small pool of their own: a heartbeat every few
+ * seconds, and a few per session or login opened or closed, each holding
+ * one at a time, so the pool never waits on itself.
  */
 final class Database {
 
@@ -36,6 +45,12 @@ final class Database {
      * mid-query never answers, and would hold the heartbeat forever.
      */
     private static final int SOCKET_TIMEOUT_SECONDS = 30;
+
+    /**
+     * The most connections open at once, and those kept open while idle.
+     */
+    private static final int MAX_CONNECTIONS = 10;
+    private static final int MIN_IDLE_CONNECTIONS = 1;
 
     /**
      * This extension's tables.
@@ -53,6 +68,10 @@ final class Database {
     private final Properties connectionProperties;
 
     private Driver driver;
+
+    private HikariDataSource pool;
+
+    private boolean closed;
 
     private Database(DatabaseType type, String driverClass, String url, Properties connectionProperties) {
         this.type = type;
@@ -258,15 +277,104 @@ final class Database {
     }
 
     /**
+     * A connection from the pool, opened on first use; closing it returns
+     * it.
+     */
+    Connection connect() throws SQLException {
+        return pool().getConnection();
+    }
+
+    private synchronized HikariDataSource pool() throws SQLException {
+        if (closed)
+            throw new SQLException("The connections to the " + type.getIdentifier() + " database are closed.");
+        if (pool == null) {
+            HikariConfig config = new HikariConfig();
+            config.setPoolName("guacamole-pam-ha-" + type.getIdentifier());
+            config.setDataSource(new DriverSource());
+            config.setMaximumPoolSize(MAX_CONNECTIONS);
+            config.setMinimumIdle(MIN_IDLE_CONNECTIONS);
+            config.setConnectionTimeout(TimeUnit.SECONDS.toMillis(CONNECT_TIMEOUT_SECONDS));
+            // Connect on first use, not here: the database may be down
+            config.setInitializationFailTimeout(-1);
+            pool = new HikariDataSource(config);
+        }
+        return pool;
+    }
+
+    /**
+     * Closes the pool's connections. Later requests for one fail.
+     */
+    synchronized void close() {
+        closed = true;
+        if (pool != null)
+            pool.close();
+        pool = null;
+    }
+
+    /**
      * Opens a connection, loading the driver on first use: Guacamole's
      * database authentication installs it where every extension can load
      * it.
      */
-    Connection connect() throws SQLException {
+    private Connection open() throws SQLException {
         Connection connection = driver().connect(url, connectionProperties);
         if (connection == null)
             throw new SQLException("The driver " + driverClass + " does not accept " + url + ".");
         return connection;
+    }
+
+    /**
+     * Where the pool opens its connections.
+     */
+    private final class DriverSource implements DataSource {
+
+        private PrintWriter logWriter;
+
+        @Override
+        public Connection getConnection() throws SQLException {
+            return open();
+        }
+
+        @Override
+        public Connection getConnection(String username, String password) throws SQLException {
+            throw new SQLFeatureNotSupportedException("The database user is that of Guacamole's properties.");
+        }
+
+        @Override
+        public PrintWriter getLogWriter() {
+            return logWriter;
+        }
+
+        @Override
+        public void setLogWriter(PrintWriter out) {
+            logWriter = out;
+        }
+
+        @Override
+        public void setLoginTimeout(int seconds) {
+            // Set by the connection properties
+        }
+
+        @Override
+        public int getLoginTimeout() {
+            return CONNECT_TIMEOUT_SECONDS;
+        }
+
+        @Override
+        public Logger getParentLogger() throws SQLFeatureNotSupportedException {
+            throw new SQLFeatureNotSupportedException();
+        }
+
+        @Override
+        public <T> T unwrap(Class<T> iface) throws SQLException {
+            throw new SQLException("Not a wrapper.");
+        }
+
+        @Override
+        public boolean isWrapperFor(Class<?> iface) {
+            return false;
+        }
+
     }
 
     private synchronized Driver driver() throws SQLException {
