@@ -17,6 +17,8 @@ import org.apache.guacamole.GuacamoleClientException;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleResourceNotFoundException;
 import org.apache.guacamole.GuacamoleServerException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.github.ialzamil.guacamole.pam.AccountProtocol;
 import io.github.ialzamil.guacamole.pam.checkout.Checkout;
@@ -35,6 +37,8 @@ import io.github.ialzamil.guacamole.pam.db.SqlDialect;
  */
 public class ApprovalRepository {
 
+    private static final Logger logger = LoggerFactory.getLogger(ApprovalRepository.class);
+
     private static final String ALREADY_PENDING = "You already have a request for this password awaiting approval.";
 
     /**
@@ -47,21 +51,27 @@ public class ApprovalRepository {
      */
     private static final long EXPIRY_CHECK_MS = 60000;
 
+    /**
+     * How long a claim of completing a request keeps it from expiring.
+     */
+    static final int CLAIM_SECONDS = 300;
+
     private volatile long lastExpiry = 0;
 
     /**
-     * The connection's current name, or the one it had once deleted.
+     * The connection's current name, or the one it had once deleted; and
+     * for an Account only, the account it holds, which other connections'
+     * usernames, hidden from those who may not edit them, are not.
      */
     private static final String SELECT = "SELECT r.request_id, r.connection_id,"
             + " coalesce(c.connection_name, r.connection_name),"
             + " (SELECT parameter_value FROM guacamole_connection_parameter p"
-            + "   WHERE p.connection_id = r.connection_id AND p.parameter_name = '" + AccountProtocol.USERNAME + "'),"
+            + "   WHERE p.connection_id = r.connection_id AND p.parameter_name = '" + AccountProtocol.USERNAME + "'"
+            + "   AND c.protocol = '" + AccountProtocol.NAME + "'),"
             + " r.username, r.reason, r.requested, r.approvals_required, r.status, r.decided, r.decided_by,"
             + " r.checkout_id, r.decision_reason, r.remote_host, r.starts, r.ends, r.decided_host,"
             + " r.periods, r.extends_checkout, r.extension_minutes"
             + " FROM pam_request r LEFT JOIN guacamole_connection c ON c.connection_id = r.connection_id";
-
-
 
     private final PamDatabase database;
 
@@ -577,7 +587,9 @@ public class ApprovalRepository {
      * reservation, or the other, refused, would withdraw an approval the
      * request was completed with. The claim is held as the request's
      * decider, which is unset while it is pending, until it is approved or
-     * the claim released.
+     * the claim released, and when it was claimed as when it was decided:
+     * denials, cancellations and expiry leave a claimed request alone, but
+     * expiry only for {@link #CLAIM_SECONDS}, should its server stop.
      *
      * @return
      *     Whether the approver claimed it: false if another approver did, or
@@ -586,7 +598,7 @@ public class ApprovalRepository {
     public boolean claimCompletion(int requestId, String approver) throws GuacamoleException {
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
-                 "UPDATE pam_request SET decided_by = ?"
+                 "UPDATE pam_request SET decided_by = ?, decided = " + dialect.now()
                + " WHERE request_id = ? AND status = 'PENDING' AND decided_by IS NULL")) {
             statement.setString(1, approver);
             statement.setInt(2, requestId);
@@ -602,7 +614,7 @@ public class ApprovalRepository {
      * not be completed.
      */
     public void releaseCompletion(int requestId, String approver) throws GuacamoleException {
-        update("UPDATE pam_request SET decided_by = NULL WHERE request_id = ? AND status = 'PENDING'"
+        update("UPDATE pam_request SET decided_by = NULL, decided = NULL WHERE request_id = ? AND status = 'PENDING'"
                 + " AND decided_by = ?", requestId, approver);
     }
 
@@ -617,7 +629,8 @@ public class ApprovalRepository {
             statement.setString(1, approver);
             statement.setInt(2, checkoutId);
             statement.setInt(3, requestId);
-            statement.executeUpdate();
+            if (statement.executeUpdate() == 0)
+                logger.warn("Request {} started checkout {} but was no longer pending.", requestId, checkoutId);
         }
         catch (SQLException e) {
             throw new GuacamoleServerException("Unable to record the approval.", e);
@@ -716,7 +729,8 @@ public class ApprovalRepository {
 
         try (PreparedStatement statement = connection.prepareStatement(
                 "UPDATE pam_request SET status = 'DENIED', decided = " + dialect.now() + ", decided_by = NULL,"
-              + " decision_reason = ? WHERE status = 'PENDING' AND request_id IN " + SqlDialect.in(rejected))) {
+              + " decision_reason = ? WHERE status = 'PENDING' AND decided_by IS NULL AND request_id IN "
+              + SqlDialect.in(rejected))) {
             statement.setString(1, "Rejected automatically: the time asked for overlaps that of \""
                     + reserved.getUsername() + "\" (request " + reserved.getId() + "), approved first, and"
                     + " this is held by one user at a time. Please request another time.");
@@ -799,7 +813,8 @@ public class ApprovalRepository {
         try (Connection connection = database.getConnection();
              PreparedStatement statement = connection.prepareStatement(
                  "UPDATE pam_request SET status = ?, decided = " + dialect.now() + ", decided_by = ?,"
-               + " decided_host = ?, decision_reason = ? WHERE request_id = ? AND status = 'PENDING'")) {
+               + " decided_host = ?, decision_reason = ? WHERE request_id = ? AND status = 'PENDING'"
+               + " AND decided_by IS NULL")) {
 
             statement.setString(1, status);
             statement.setString(2, decidedBy);
@@ -807,7 +822,8 @@ public class ApprovalRepository {
             statement.setString(4, reason);
             statement.setInt(5, requestId);
             if (statement.executeUpdate() == 0)
-                throw new GuacamoleClientException("This request is no longer awaiting approval.");
+                throw new GuacamoleClientException("This request is no longer awaiting approval, or is being"
+                        + " approved right now.");
 
         }
         catch (SQLException e) {
@@ -835,8 +851,10 @@ public class ApprovalRepository {
                + " WHERE status = 'PENDING' AND ((ends IS NULL AND requested < " + dialect.plusSeconds(dialect.now(), "?")
                + ") OR ends <= " + dialect.now()
                + " OR extends_checkout IN (SELECT checkout_id FROM pam_checkout"
-               + "   WHERE released IS NOT NULL OR expires <= " + dialect.now() + "))")) {
+               + "   WHERE released IS NOT NULL OR expires <= " + dialect.now() + "))"
+               + " AND (decided_by IS NULL OR decided < " + dialect.plusSeconds(dialect.now(), "?") + ")")) {
             statement.setInt(1, -PENDING_HOURS * 3600);
+            statement.setInt(2, -CLAIM_SECONDS);
             statement.executeUpdate();
         }
         catch (SQLException e) {

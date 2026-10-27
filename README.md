@@ -471,6 +471,8 @@ such as `connection-secret:17:private-key`), `setting-secret:<setting>` (from
   - how it checks the server: SSH's host key, RDP's security mode and
     certificate settings, Kubernetes' TLS settings; and where Telnet types
     the credentials (its prompt patterns);
+  - what it runs as the account when a session opens: SSH's command, RDP's
+    initial program and RemoteApp, Kubernetes' command;
   - its protocol, and the guacd it is opened through (guacd receives the
     password).
 

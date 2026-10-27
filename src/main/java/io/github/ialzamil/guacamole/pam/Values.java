@@ -20,13 +20,19 @@ public final class Values {
     }
 
     /**
-     * A value for a log line, its control characters and line breaks as
-     * spaces: names and reasons come from users, messages from servers, and
-     * would otherwise start lines of their own.
+     * A value for a log line, its control characters (C0 and C1, such as
+     * NEL), line breaks and text direction overrides as spaces: names and
+     * reasons come from users, messages from servers, and would otherwise
+     * start lines of their own, or disguise what a line says.
      */
     public static String forLog(String value) {
-        return value == null ? null : value.replaceAll("[\\p{Cntrl}\\u2028\\u2029]+", " ");
+        return value == null ? null : value.replaceAll(UNPRINTABLE, " ");
     }
+
+    /**
+     * What {@link #forLog} replaces.
+     */
+    public static final String UNPRINTABLE = "[\\p{Cc}\\u2028\\u2029\\u202A-\\u202E\\u2066-\\u2069]+";
 
     /**
      * The value, or null if it is missing or empty. For passwords and other

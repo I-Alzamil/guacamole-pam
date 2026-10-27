@@ -1,5 +1,6 @@
 package io.github.ialzamil.guacamole.pam;
 
+import java.util.Collections;
 import java.util.Map;
 
 import com.google.common.collect.MapMaker;
@@ -112,12 +113,13 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
     private final String managedDataSource;
 
     /**
-     * The managed data source's UserContext of each session, used for permission checks.
-     * Keys are weak and compared by identity, so entries vanish with their
-     * session.
+     * The managed data source's UserContext of each session, used for
+     * permission checks. Keys are compared by identity; keys and values are
+     * weak, as each context refers to its user, and the session holds both:
+     * entries vanish with their session.
      */
     private final Map<AuthenticatedUser, UserContext> dataSourceContexts =
-            new MapMaker().weakKeys().makeMap();
+            new MapMaker().weakKeys().weakValues().makeMap();
 
     /**
      * Whether the extension is active: false without a Guacamole database
@@ -346,7 +348,10 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
      */
     public Approver getApprover(AuthenticatedUser authenticatedUser) throws GuacamoleException {
         String username = getUsername(authenticatedUser);
-        return new Approver(username, isAdministrator(authenticatedUser),
+        // Administrators may decide on any request: theirs are not read
+        if (isAdministrator(authenticatedUser))
+            return new Approver(username, true, Collections.<String>emptySet());
+        return new Approver(username, false,
                 approvers.getApprovableConnections(username, authenticatedUser.getEffectiveUserGroups()));
     }
 

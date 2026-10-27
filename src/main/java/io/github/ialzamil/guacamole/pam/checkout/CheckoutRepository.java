@@ -96,8 +96,11 @@ public class CheckoutRepository {
                     }
                 }
 
+                // Those past their time limit, ended at the next look, hold
+                // nothing
                 for (Checkout active : query(connection, SELECT
-                        + " WHERE k.connection_id = ? AND k.released IS NULL", connectionId)) {
+                        + " WHERE k.connection_id = ? AND k.released IS NULL AND k.expires > " + dialect.now(),
+                        connectionId)) {
 
                     if (active.getUsername().equals(username))
                         throw new GuacamoleClientException("You already hold this password.");
@@ -190,11 +193,22 @@ public class CheckoutRepository {
     }
 
     /**
-     * Returns every active checkout of a connection.
+     * Returns every checkout of a connection not ended yet, those past their
+     * time limit included: until ended, their sessions may still be open,
+     * so rotations and deletions count them.
      */
     public List<Checkout> listActive(int connectionId) throws GuacamoleException {
         return query(SELECT + " WHERE k.connection_id = ? AND k.released IS NULL ORDER BY k.checked_out",
                 connectionId);
+    }
+
+    /**
+     * Returns the checkouts of a connection held now: not ended, and within
+     * their time limit, as users see them.
+     */
+    public List<Checkout> listCurrent(int connectionId) throws GuacamoleException {
+        return query(SELECT + " WHERE k.connection_id = ? AND k.released IS NULL AND k.expires > " + dialect.now()
+                + " ORDER BY k.checked_out", connectionId);
     }
 
     /**
@@ -233,7 +247,8 @@ public class CheckoutRepository {
              PreparedStatement statement = connection.prepareStatement(
                  "SELECT k.connection_id, count(*) FROM pam_checkout k"
                + " JOIN guacamole_connection c ON c.connection_id = k.connection_id"
-               + " WHERE k.released IS NULL AND c.protocol = ? GROUP BY k.connection_id")) {
+               + " WHERE k.released IS NULL AND k.expires > " + dialect.now() + " AND c.protocol = ?"
+               + " GROUP BY k.connection_id")) {
 
             statement.setString(1, accountProtocol);
             try (ResultSet results = statement.executeQuery()) {
@@ -250,8 +265,19 @@ public class CheckoutRepository {
 
     }
 
+    /**
+     * Returns every checkout not ended yet, those past their time limit
+     * included (see {@link #listActive(int)}).
+     */
     public List<Checkout> listActive() throws GuacamoleException {
         return query(SELECT + " WHERE k.released IS NULL ORDER BY k.expires");
+    }
+
+    /**
+     * Returns every checkout held now, as users see them.
+     */
+    public List<Checkout> listCurrent() throws GuacamoleException {
+        return query(SELECT + " WHERE k.released IS NULL AND k.expires > " + dialect.now() + " ORDER BY k.expires");
     }
 
     /**
@@ -367,26 +393,30 @@ public class CheckoutRepository {
      */
     public Checkout extend(int checkoutId, int minutes) throws GuacamoleException {
 
+        // Its connection read apart, before the transaction: on MySQL, its
+        // first read fixes what it sees, which must follow the lock
+        Checkout first = get(checkoutId);
+        if (first == null || first.getConnectionIdentifier() == null || first.getReleased() != null)
+            throw new GuacamoleClientException("This checkout has ended.");
+        int connectionId = Integer.parseInt(first.getConnectionIdentifier());
+
         try (Connection connection = database.getConnection()) {
 
             connection.setAutoCommit(false);
             try {
 
-                Checkout checkout = get(connection, checkoutId);
-                if (checkout == null || checkout.getConnectionIdentifier() == null || checkout.getReleased() != null)
-                    throw new GuacamoleClientException("This checkout has ended.");
-
                 // Serializes with checkouts and requests of this connection
                 try (PreparedStatement statement = connection.prepareStatement(
                         "SELECT connection_id FROM " + dialect.lockingRead("guacamole_connection")
                       + " WHERE connection_id = ?" + dialect.forUpdate())) {
-                    statement.setInt(1, Integer.parseInt(checkout.getConnectionIdentifier()));
+                    statement.setInt(1, connectionId);
                     statement.executeQuery().close();
                 }
 
                 // Read again, now that nothing else can change it
-                checkout = get(connection, checkoutId);
-                if (checkout.getReleased() != null || checkout.getExpires() <= System.currentTimeMillis())
+                Checkout checkout = get(connection, checkoutId);
+                if (checkout == null || checkout.getConnectionIdentifier() == null || checkout.getReleased() != null
+                        || checkout.getExpires() <= System.currentTimeMillis())
                     throw new GuacamoleClientException("This checkout has ended.");
                 if (checkout.getExtensions() >= checkout.getMaxExtensions())
                     throw new GuacamoleClientException("This checkout cannot be extended any more.");
@@ -396,7 +426,7 @@ public class CheckoutRepository {
                     try (PreparedStatement statement = connection.prepareStatement(
                             "SELECT username, starts FROM pam_request WHERE connection_id = ? AND username <> ?"
                           + " AND " + ApprovalRepository.reserved(dialect, "") + " ORDER BY starts")) {
-                        statement.setInt(1, Integer.parseInt(checkout.getConnectionIdentifier()));
+                        statement.setInt(1, connectionId);
                         statement.setString(2, checkout.getUsername());
                         try (ResultSet results = statement.executeQuery()) {
                             if (results.next()) {
@@ -415,7 +445,8 @@ public class CheckoutRepository {
                       + " WHERE checkout_id = ? AND released IS NULL")) {
                     SqlDialect.setTimestamp(statement, 1, expires);
                     statement.setInt(2, checkoutId);
-                    statement.executeUpdate();
+                    if (statement.executeUpdate() == 0)
+                        throw new GuacamoleClientException("This checkout has ended.");
                 }
 
                 connection.commit();

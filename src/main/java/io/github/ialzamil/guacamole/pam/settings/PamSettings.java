@@ -541,6 +541,12 @@ public class PamSettings {
             catch (SQLException e) {
                 throw new GuacamoleServerException("Unable to import the settings from guacamole.properties.", e);
             }
+            catch (GuacamoleException e) {
+                // A secret that cannot be stored, such as with a wrong key:
+                // the other settings still apply
+                logger.warn("\"{}\" in guacamole.properties cannot be imported: {}", setting.getName(),
+                        e.getMessage());
+            }
 
         }
 

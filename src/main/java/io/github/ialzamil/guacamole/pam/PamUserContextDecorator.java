@@ -30,7 +30,9 @@ import org.apache.guacamole.net.auth.permission.SystemPermission;
 import org.apache.guacamole.protocol.GuacamoleClientInformation;
 import org.apache.guacamole.protocol.GuacamoleConfiguration;
 
+import io.github.ialzamil.guacamole.pam.approval.ApproverDirectory;
 import io.github.ialzamil.guacamole.pam.checkout.CheckoutService;
+import io.github.ialzamil.guacamole.pam.db.ConnectionRepository;
 import io.github.ialzamil.guacamole.pam.db.ConnectionSecrets;
 import io.github.ialzamil.guacamole.pam.rotation.RotationService;
 
@@ -54,8 +56,7 @@ public class PamUserContextDecorator extends DelegatingUserContext {
     /**
      * Attributes of the approval permission.
      */
-    private static final List<String> APPROVER_ATTRIBUTES = Arrays.asList(
-            PamAttributes.APPROVER, PamAttributes.APPROVER_CONNECTIONS, PamAttributes.APPROVER_CONNECTION_GROUPS);
+    private static final List<String> APPROVER_ATTRIBUTES = ApproverDirectory.APPROVAL_ATTRIBUTES;
 
     private final RotationService rotationService;
 
@@ -185,6 +186,12 @@ public class PamUserContextDecorator extends DelegatingUserContext {
                         && !isAdministrator())
                     throw new GuacamoleSecurityException(MANAGED_PARAMETERS_REFUSED);
 
+                // Approvers may be given by connection group
+                if (stored != null && !Objects.equals(stored.getParentIdentifier(), object.getParentIdentifier())
+                        && ConnectionRepository.needsApproval(stored.getAttributes().get(PamAttributes.APPROVALS_REQUIRED))
+                        && !isAdministrator())
+                    throw new GuacamoleSecurityException(MOVE_REFUSED);
+
             }
 
             @Override
@@ -202,11 +209,24 @@ public class PamUserContextDecorator extends DelegatingUserContext {
     @Override
     public Directory<ConnectionGroup> getConnectionGroupDirectory() throws GuacamoleException {
 
-        return new DecoratingDirectory<ConnectionGroup>(super.getConnectionGroupDirectory()) {
+        final Directory<ConnectionGroup> groups = super.getConnectionGroupDirectory();
+
+        return new DecoratingDirectory<ConnectionGroup>(groups) {
 
             @Override
             protected ConnectionGroup decorate(ConnectionGroup object) {
                 return new CheckedConnectionGroup(object);
+            }
+
+            // Moving a group moves the connections within it, whose
+            // approvers may be given by connection group
+            @Override
+            public void update(ConnectionGroup object) throws GuacamoleException {
+                ConnectionGroup stored = object.getIdentifier() == null ? null : groups.get(object.getIdentifier());
+                if (stored != null && !Objects.equals(stored.getParentIdentifier(), object.getParentIdentifier())
+                        && !isAdministrator() && checkoutService.anyNeedsApprovalWithin(object.getIdentifier()))
+                    throw new GuacamoleSecurityException(MOVE_REFUSED);
+                super.update(object);
             }
 
             @Override
@@ -242,11 +262,14 @@ public class PamUserContextDecorator extends DelegatingUserContext {
             if (getType() != ConnectionGroup.Type.BALANCING)
                 return getDelegateConnectionGroup().connect(info, tokens);
 
-            checkoutService.requireBalanceable(getName(), getConnectionIdentifiers());
+            // All of them, not only those the user may read: Guacamole
+            // balances over them all
+            List<String> balanced = checkoutService.listBalanced(getIdentifier());
+            checkoutService.requireBalanceable(getName(), balanced);
 
             // Guacamole shows users no detail of a server error, only logs it
             Map<String, String> withSecrets = new HashMap<>(tokens);
-            for (String identifier : getConnectionIdentifiers()) {
+            for (String identifier : balanced) {
                 Integer id = Values.parseId(identifier);
                 try {
                     if (id != null)
@@ -276,10 +299,15 @@ public class PamUserContextDecorator extends DelegatingUserContext {
     private static final String CONNECTION_CHANGE_REFUSED =
             "Only administrators can change password management or access requests.";
 
+    private static final String MOVE_REFUSED =
+            "Only administrators can move a connection requiring approval, or a group containing one: its group"
+            + " may decide who approves it.";
+
     private static final String MANAGED_PARAMETERS_REFUSED =
             "Only administrators can change the credentials of a connection whose password is managed, where it"
             + " connects (hostname, port, gateway, SFTP or repeater), how it checks the server (host key or"
-            + " certificates), its protocol or its guacd.";
+            + " certificates), what it runs as the account (command, initial program or RemoteApp), its"
+            + " protocol or its guacd.";
 
     /**
      * Whether the user of this context is an administrator now: read again
@@ -301,13 +329,7 @@ public class PamUserContextDecorator extends DelegatingUserContext {
         if (getDelegateUserContext().getConnectionDirectory().get(identifier) == null)
             return false;
 
-        try {
-            checkoutService.requireAccess(identifier, self().getIdentifier(), isAdministrator());
-            return true;
-        }
-        catch (GuacamoleSecurityException e) {
-            return false;
-        }
+        return checkoutService.mayKeepSession(identifier, self().getIdentifier(), isAdministrator());
 
     }
 

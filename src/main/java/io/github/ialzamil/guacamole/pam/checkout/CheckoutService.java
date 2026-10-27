@@ -161,6 +161,43 @@ public class CheckoutService {
     }
 
     /**
+     * Whether a session opened on a connection may stay open: as
+     * {@link #requireAccess} decides, but on standby too (sessions of
+     * managed connections are closed apart, once another server works),
+     * and without logging an administrator bypassing requests again.
+     */
+    public boolean mayKeepSession(String identifier, String username, boolean administrator)
+            throws GuacamoleException {
+
+        Integer id = Values.parseId(identifier);
+        Target target = id == null ? null : connections.load(id);
+        if (target == null || !CheckoutRules.requiresRequest(target))
+            return true;
+
+        return checkouts.getActive(id, username) != null || rules.bypassesRequests(administrator);
+
+    }
+
+    /**
+     * Whether any connection within the connection group, at any depth,
+     * requires approvals.
+     */
+    public boolean anyNeedsApprovalWithin(String groupIdentifier) throws GuacamoleException {
+        Integer id = Values.parseId(groupIdentifier);
+        return id != null && connections.anyNeedsApprovalWithin(id);
+    }
+
+    /**
+     * The identifiers of the connections a balancing group may open: all
+     * within it, whatever the user may read, as Guacamole balances over
+     * them all.
+     */
+    public List<String> listBalanced(String groupIdentifier) throws GuacamoleException {
+        Integer id = Values.parseId(groupIdentifier);
+        return id == null ? Collections.<String>emptyList() : connections.listWithin(id);
+    }
+
+    /**
      * Refuses connecting through a balancing connection group if any of its
      * connections is an Account, requires a request, or is managed: the
      * connection Guacamole picks would be opened without its checks, and its
@@ -339,7 +376,7 @@ public class CheckoutService {
     }
 
     public List<Checkout> listActive() throws GuacamoleException {
-        return checkouts.listActive();
+        return checkouts.listCurrent();
     }
 
     /**
@@ -389,8 +426,10 @@ public class CheckoutService {
      */
     private void end(Checkout checkout, String releaseReason, String releasedBy, String releasedHost)
             throws GuacamoleException {
+        boolean released = checkouts.release(checkout.getId(), releaseReason, releasedBy, releasedHost);
+        // After the release, so a count made meanwhile is not kept
         holderCounts = null;
-        if (checkouts.release(checkout.getId(), releaseReason, releasedBy, releasedHost)) {
+        if (released) {
             logger.info("Checkout {} of \"{}\" by user \"{}\" ended: {} by \"{}\".", checkout.getId(),
                     Values.forLog(checkout.getConnectionName()), checkout.getUsername(), releaseReason, releasedBy);
             events.publish(Event.of(Checkout.RELEASED.equals(releaseReason) ? EventType.CHECKOUT_RELEASED

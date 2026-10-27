@@ -43,7 +43,7 @@ check "setup: editor and connections exist" yes "$([ -n "$EDITOR" ] && [ -n "$MA
 
 # ---------------------------------------------------------------- managed connections
 section "An editor cannot change whose password is managed, or where it goes"
-REFUSED_PARAMS="403 Only administrators can change the credentials of a connection whose password is managed, where it connects (hostname, port, gateway, SFTP or repeater), how it checks the server (host key or certificates), its protocol or its guacd."
+REFUSED_PARAMS="403 Only administrators can change the credentials of a connection whose password is managed, where it connects (hostname, port, gateway, SFTP or repeater), how it checks the server (host key or certificates), what it runs as the account (command, initial program or RemoteApp), its protocol or its guacd."
 REFUSED_ATTRS="403 Only administrators can change password management or access requests."
 outcome() { printf '%s %s' "$(status_of "$1")" "$(message_of "$1")" | sed 's/ $//'; }
 
@@ -70,6 +70,10 @@ check "RDP: SFTP to another host" "$REFUSED_PARAMS" \
 check "RDP: certificates ignored" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_RDP" '{"ignore-cert":"true"}')")"
 check "RDP: domain" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_RDP" '{"domain":"OTHER"}')")"
 check "VNC: a repeater" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_VNC" '{"dest-host":"evil.example"}')")"
+check "SSH: a command, run as the account" "$REFUSED_PARAMS" \
+    "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_SSH" '{"command":"echo key >> ~/.ssh/authorized_keys; bash"}')")"
+check "RDP: an initial program" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_RDP" '{"initial-program":"cmd.exe /c evil"}')")"
+check "RDP: a RemoteApp" "$REFUSED_PARAMS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED_RDP" '{"remote-app":"||cmd"}')")"
 check "the managed SSH password is unchanged" unused "$(parameter "$MANAGED_SSH" password)"
 check "the RDP connection has no gateway" "" "$(parameter "$MANAGED_RDP" gateway-hostname)"
 check "managed: platform removed" "$REFUSED_ATTRS" "$(outcome "$(edit_connection "$EDITOR" "$MANAGED" '' '{"pam-platform":null}')")"
@@ -129,6 +133,40 @@ check_contains "a group over a managed connection is refused" "403 Connection gr
 check "a group over unchecked connections connects" 200 "$(tunnel "$VIEWER" "$BALANCED_OPEN" g)"
 check "a folder's connection opens as usual" 200 "$(tunnel "$VIEWER" "$IN_FOLDER" c)"
 check "the connection tree still loads" 200 "$(status_of "$(api GET "$DATA/connectionGroups/ROOT/tree" "$VIEWER")")"
+
+# Only the group readable: Guacamole balances over every connection in it
+create_group BALANCED_HIDDEN '{"name":"t2 balancing hidden","parentIdentifier":"ROOT","type":"BALANCING","attributes":{}}'
+ssh_in IN_HIDDEN "t2 in hidden" "$BALANCED_HIDDEN" '{}'
+grant t2-viewer "[{\"op\":\"add\",\"path\":\"/connectionGroupPermissions/$BALANCED_HIDDEN\",\"value\":\"READ\"}]"
+check_contains "a group over a connection requiring a request, the user may not read, is refused too" \
+    "403 Connection group \"t2 balancing hidden\" balances over" "$(tunnel "$VIEWER" "$BALANCED_HIDDEN" g)"
+
+# Approvers may be given by connection group: moving one changes who approves
+section "Moving what requires approval"
+create_group MOVE_FROM '{"name":"t2 move from","parentIdentifier":"ROOT","type":"ORGANIZATIONAL","attributes":{}}'
+create_group MOVE_TO '{"name":"t2 move to","parentIdentifier":"ROOT","type":"ORGANIZATIONAL","attributes":{}}'
+create_group MOVE_INNER "{\"name\":\"t2 move inner\",\"parentIdentifier\":\"$MOVE_FROM\",\"type\":\"ORGANIZATIONAL\",\"attributes\":{}}"
+create_connection APPROVED_C "{\"name\":\"t2 needs approval\",\"parentIdentifier\":\"$MOVE_INNER\",\"protocol\":\"ssh\",
+    \"parameters\":{\"hostname\":\"mysshtest\",\"port\":\"22\"},\"attributes\":{\"pam-approvals-required\":\"1\"}}"
+create_connection PLAIN_C "{\"name\":\"t2 no approval\",\"parentIdentifier\":\"$MOVE_FROM\",\"protocol\":\"ssh\",
+    \"parameters\":{\"hostname\":\"mysshtest\",\"port\":\"22\"},\"attributes\":{}}"
+P='['
+for g in $MOVE_FROM $MOVE_TO $MOVE_INNER; do P="$P{\"op\":\"add\",\"path\":\"/connectionGroupPermissions/$g\",\"value\":\"READ\"},{\"op\":\"add\",\"path\":\"/connectionGroupPermissions/$g\",\"value\":\"UPDATE\"},"; done
+for c in $APPROVED_C $PLAIN_C; do P="$P{\"op\":\"add\",\"path\":\"/connectionPermissions/$c\",\"value\":\"READ\"},{\"op\":\"add\",\"path\":\"/connectionPermissions/$c\",\"value\":\"UPDATE\"},"; done
+grant t2-editor "${P%,}]"
+moved() { # TOKEN KIND ID PARENT -> status and message of moving it
+    local kind=$2 body
+    body=$(curl -s "$DATA/$kind/$3?token=$ADMIN" | python3 -I -c "import sys,json;d=json.load(sys.stdin);d['parentIdentifier']=sys.argv[1];print(json.dumps(d))" "$4")
+    [ "$kind" = connections ] && body=$(python3 -I -c "import sys,json;d=json.loads(sys.argv[1]);d['parameters']=json.loads(sys.argv[2]);print(json.dumps(d))" "$body" "$(curl -s "$DATA/connections/$3/parameters?token=$ADMIN")")
+    outcome "$(api PUT "$DATA/$kind/$3" "$1" "$body")"
+}
+MOVE_REFUSED="403 Only administrators can move a connection requiring approval, or a group containing one: its group may decide who approves it."
+check "an editor cannot move a connection requiring approval" "$MOVE_REFUSED" "$(moved "$EDITOR" connections "$APPROVED_C" "$MOVE_TO")"
+check "...nor a group containing one, at any depth" "$MOVE_REFUSED" "$(moved "$EDITOR" connectionGroups "$MOVE_INNER" "$MOVE_TO")"
+check "...nor its parent" "$MOVE_REFUSED" "$(moved "$EDITOR" connectionGroups "$MOVE_FROM" "$MOVE_TO")"
+check "...but moves a connection requiring none" 204 "$(moved "$EDITOR" connections "$PLAIN_C" "$MOVE_TO" | cut -c1-3)"
+check "an administrator moves a connection requiring approval" 204 "$(moved "$ADMIN" connections "$APPROVED_C" "$MOVE_TO" | cut -c1-3)"
+moved "$ADMIN" connections "$APPROVED_C" "$MOVE_INNER" >/dev/null
 
 # ---------------------------------------------------------------- administrator endpoints
 section "Administrator endpoints and secrets"

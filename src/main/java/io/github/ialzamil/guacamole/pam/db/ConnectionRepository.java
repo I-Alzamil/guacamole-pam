@@ -9,9 +9,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.GuacamoleServerException;
@@ -240,6 +242,87 @@ public class ConnectionRepository {
             throw new GuacamoleServerException("Unable to read connection " + connectionId + ".", e);
         }
 
+    }
+
+    /**
+     * The identifiers of every connection directly within a connection
+     * group, whatever the user may read: those a balancing group may open.
+     */
+    public List<String> listWithin(int groupId) throws GuacamoleException {
+        List<String> identifiers = new ArrayList<>();
+        try (Connection connection = database.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                 "SELECT connection_id FROM guacamole_connection WHERE parent_id = ?")) {
+            statement.setInt(1, groupId);
+            try (ResultSet results = statement.executeQuery()) {
+                while (results.next())
+                    identifiers.add(Integer.toString(results.getInt(1)));
+            }
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to list the connections of group " + groupId + ".", e);
+        }
+        return identifiers;
+    }
+
+    /**
+     * Whether any connection within a connection group, at any depth,
+     * requires approvals: approvers may be given by connection group, so
+     * moving the group changes who approves them.
+     */
+    public boolean anyNeedsApprovalWithin(int groupId) throws GuacamoleException {
+
+        try (Connection connection = database.getConnection()) {
+
+            // The group and every group below it, level by level
+            Set<Integer> groups = new HashSet<>(Collections.singleton(groupId));
+            Set<Integer> level = new HashSet<>(groups);
+            while (!level.isEmpty()) {
+                Set<Integer> next = new HashSet<>();
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT connection_group_id FROM guacamole_connection_group WHERE parent_id IN "
+                      + SqlDialect.in(level));
+                     ResultSet results = statement.executeQuery()) {
+                    while (results.next()) {
+                        if (groups.add(results.getInt(1)))
+                            next.add(results.getInt(1));
+                    }
+                }
+                level = next;
+            }
+
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT a.attribute_value FROM guacamole_connection c"
+                  + " JOIN guacamole_connection_attribute a ON a.connection_id = c.connection_id"
+                  + " WHERE a.attribute_name = ? AND c.parent_id IN " + SqlDialect.in(groups))) {
+                statement.setString(1, PamAttributes.APPROVALS_REQUIRED);
+                try (ResultSet results = statement.executeQuery()) {
+                    while (results.next()) {
+                        if (needsApproval(results.getString(1)))
+                            return true;
+                    }
+                }
+            }
+            return false;
+
+        }
+        catch (SQLException e) {
+            throw new GuacamoleServerException("Unable to read the connections of group " + groupId + ".", e);
+        }
+
+    }
+
+    /**
+     * Whether a value of {@link PamAttributes#APPROVALS_REQUIRED} requires
+     * any approval.
+     */
+    public static boolean needsApproval(String approvalsRequired) {
+        try {
+            return approvalsRequired != null && Integer.parseInt(approvalsRequired.trim()) > 0;
+        }
+        catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     /**

@@ -41,8 +41,8 @@ public class ApproverDirectory {
     /**
      * Attributes deciding who may approve.
      */
-    private static final List<String> APPROVAL_ATTRIBUTES = Arrays.asList(PamAttributes.APPROVER,
-            PamAttributes.APPROVER_CONNECTIONS, PamAttributes.APPROVER_CONNECTION_GROUPS);
+    public static final List<String> APPROVAL_ATTRIBUTES = Collections.unmodifiableList(Arrays.asList(
+            PamAttributes.APPROVER, PamAttributes.APPROVER_CONNECTIONS, PamAttributes.APPROVER_CONNECTION_GROUPS));
 
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<List<String>>() { };
 
@@ -95,9 +95,14 @@ public class ApproverDirectory {
             }
             grants.add(own);
 
-            // ...and those of the groups the user belongs to
-            Set<Integer> memberOf = entity == null ? new HashSet<>() : getGroupsOf(connection, entity);
-            memberOf.addAll(getGroupsNamed(connection, reportedGroups));
+            // ...and those of the groups the user belongs to, with the
+            // groups those belong to: the reported ones' too, as Guacamole
+            // follows them
+            Set<Integer> start = getGroupsNamed(connection, reportedGroups);
+            Set<Integer> memberOf = new HashSet<>(start);
+            if (entity != null)
+                start.add(entity);
+            memberOf.addAll(getGroupsOf(connection, start));
             grants.addAll(getGroupAttributes(connection, memberOf));
 
             // Connections and connection groups listed by those granting the
@@ -122,14 +127,14 @@ public class ApproverDirectory {
     }
 
     /**
-     * Returns the entity ids of the enabled groups the given entity belongs
+     * Returns the entity ids of the enabled groups the given entities belong
      * to, directly or through nested groups. Followed level by level, so a
      * group belonging to itself through others ends the search.
      */
-    private Set<Integer> getGroupsOf(Connection connection, int entity) throws SQLException {
+    private Set<Integer> getGroupsOf(Connection connection, Set<Integer> entities) throws SQLException {
 
         Set<Integer> found = new HashSet<>();
-        Set<Integer> level = Collections.singleton(entity);
+        Set<Integer> level = entities;
 
         while (!level.isEmpty()) {
 

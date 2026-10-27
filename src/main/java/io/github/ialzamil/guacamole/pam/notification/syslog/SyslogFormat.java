@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Map;
 
+import io.github.ialzamil.guacamole.pam.Values;
 import io.github.ialzamil.guacamole.pam.notification.Event;
 import io.github.ialzamil.guacamole.pam.notification.Summary;
 
@@ -100,7 +101,7 @@ public final class SyslogFormat {
         StringBuilder line = new StringBuilder(value.length());
         for (char c : value.toCharArray())
             line.append(Character.isISOControl(c) ? ' ' : c);
-        return line.toString();
+        return line.toString().replaceAll(Values.UNPRINTABLE, " ");
     }
 
     private static String escape(String value) {

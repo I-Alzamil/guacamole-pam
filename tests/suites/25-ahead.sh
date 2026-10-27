@@ -153,3 +153,17 @@ check "...approved" 200 "$(status_of "$(api POST "$PAM/approvals/$BOB_ID/approve
 check "the connection is deleted" 204 "$(status_of "$(api DELETE "$DATA/connections/$DOOMED" "$ADMIN")")"
 check "...and the reservation with it" "CANCELLED $GUAC_ADMIN" \
     "$(sql "SELECT status, decided_by FROM pam_request WHERE request_id = $BOB_ID" | tr '\t' ' ')"
+
+# ---------------------------------------------------------------- holding it now
+section "Asking ahead while holding it now"
+api POST "$PAM/requests/$ACCOUNT" "$ALICE" '{"reason":"T25 now"}' >/dev/null
+api POST "$PAM/approvals/$(pending_of t25-alice)/approve" "$APPROVER" >/dev/null
+check "Alice holds the Account now" 1 \
+    "$(sql "SELECT COUNT(*) FROM pam_checkout WHERE connection_id = $ACCOUNT AND username = 't25-alice' AND released IS NULL")"
+REVEALS=$(sql "SELECT reveal_count FROM pam_checkout WHERE connection_id = $ACCOUNT AND username = 't25-alice' AND released IS NULL")
+check "...and asks for it tomorrow too: a request, not her checkout again" 202 \
+    "$(status_of "$(ask_ahead "$ALICE" "T25 tomorrow" "$(in_ms 86400)")")"
+check "...awaiting approval, for tomorrow" "yes $REVEALS" \
+    "$([ -n "$(sql "SELECT request_id FROM pam_request WHERE connection_id = $ACCOUNT AND username = 't25-alice' AND status = 'PENDING' AND starts IS NOT NULL")" ] && echo yes) $(sql "SELECT reveal_count FROM pam_checkout WHERE connection_id = $ACCOUNT AND username = 't25-alice' AND released IS NULL")"
+api DELETE "$PAM/requests/$ACCOUNT/pending" "$ALICE" >/dev/null
+api POST "$PAM/requests/$ACCOUNT/release" "$ALICE" >/dev/null

@@ -19,8 +19,9 @@ import java.util.Set;
  * account's new password after the next rotation; or have guacd send the
  * password to a host of their choosing (another host, an RDP gateway, an
  * SFTP server, a VNC repeater), or to any host claiming to be the server
- * (no host key, certificates ignored). So is the password itself, which
- * the platform may not be able to set again once replaced.
+ * (no host key, certificates ignored); or have sessions run a command of
+ * theirs as the account. So is the password itself, which the platform may
+ * not be able to set again once replaced.
  *
  * So are its protocol and the guacd it is opened through: guacd receives
  * every parameter with the password in place of its token, so another guacd
@@ -32,15 +33,18 @@ public final class ProtectedFields {
     /**
      * Parameters of managed connections only administrators may change,
      * besides those starting with {@link #MANAGED_PARAMETER_PREFIXES}: the
-     * credentials, where they are sent, how the server is verified, and
-     * where Telnet types them.
+     * credentials, where they are sent, how the server is verified, where
+     * Telnet types them, and what runs as the account when a session opens
+     * (an editor could otherwise have the next holder's session run a
+     * command of theirs as the account, such as adding their own key).
      */
     public static final List<String> MANAGED_PARAMETERS = Collections.unmodifiableList(Arrays.asList(
             "username", "password", "domain", "private-key", "passphrase",
             "hostname", "port", "dest-host", "dest-port", "enable-sftp",
             "host-key", "security", "disable-auth", "ignore-cert", "cert-tofu", "cert-fingerprints",
             "use-ssl", "ca-cert", "client-cert", "client-key",
-            "username-regex", "password-regex"));
+            "username-regex", "password-regex",
+            "command", "initial-program", "remote-app", "remote-app-dir", "remote-app-args", "exec-command"));
 
     /**
      * Prefixes of further protected parameters: the RDP gateway, and SFTP

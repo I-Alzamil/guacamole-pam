@@ -7,6 +7,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
+import io.github.ialzamil.guacamole.pam.Values;
 import io.github.ialzamil.guacamole.pam.notification.Event;
 import io.github.ialzamil.guacamole.pam.notification.EventType;
 import io.github.ialzamil.guacamole.pam.notification.Summary;
@@ -158,7 +159,7 @@ final class EmailText {
      * adds lines, nor headers to a subject.
      */
     private static String oneLine(String value) {
-        return value == null ? null : value.replaceAll("[\\p{Cntrl}\\u2028\\u2029]+", " ");
+        return value == null ? null : value.replaceAll(Values.UNPRINTABLE, " ");
     }
 
     private String time(Long millis) {

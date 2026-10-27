@@ -63,9 +63,20 @@ public final class CheckoutRules {
     static final int MAX_APPROVALS = 10;
 
     static String validateReason(String reason) throws GuacamoleClientException {
+        return validateReason(reason, "Please give a reason for your request.");
+    }
+
+    /**
+     * A reason as recorded, of a request or a denial: trimmed, required,
+     * and limited in length.
+     *
+     * @param missing
+     *     What to say if there is none.
+     */
+    public static String validateReason(String reason, String missing) throws GuacamoleClientException {
         String trimmed = reason == null ? "" : reason.trim();
         if (trimmed.isEmpty())
-            throw new GuacamoleClientException("Please give a reason for your request.");
+            throw new GuacamoleClientException(missing);
         if (trimmed.length() > MAX_REASON_LENGTH)
             throw new GuacamoleClientException("The reason is limited to " + MAX_REASON_LENGTH + " characters.");
         return trimmed;

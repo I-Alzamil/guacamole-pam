@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 
 import io.github.ialzamil.guacamole.pam.Values;
 import io.github.ialzamil.guacamole.pam.checkout.Checkout;
+import io.github.ialzamil.guacamole.pam.checkout.CheckoutRules;
 import io.github.ialzamil.guacamole.pam.checkout.RequestService;
 import io.github.ialzamil.guacamole.pam.notification.Event;
 import io.github.ialzamil.guacamole.pam.notification.EventType;
@@ -129,8 +130,10 @@ public class ApprovalService {
                     : request.getStarts() != null ? "The access cannot be reserved: "
                     : "The checkout cannot start now: ") + e.getMessage());
         }
-        catch (GuacamoleException e) {
+        catch (GuacamoleException | RuntimeException e) {
+            // Its approval withdrawn too, so the approver can try again
             approvals.releaseCompletion(requestId, approver.getUsername());
+            approvals.withdrawApproval(requestId, approver.getUsername());
             throw e;
         }
 
@@ -146,11 +149,6 @@ public class ApprovalService {
     }
 
     /**
-     * Longest reason for a denial, as for requests.
-     */
-    private static final int MAX_REASON_LENGTH = 500;
-
-    /**
      * Denies a request, with the reason shown to its requester. One denial
      * is enough to reject it.
      *
@@ -164,11 +162,7 @@ public class ApprovalService {
     public void deny(int requestId, Approver approver, String reason, String remoteHost) throws GuacamoleException {
 
         requestService.requireActive();
-        String trimmed = reason == null ? "" : reason.trim();
-        if (trimmed.isEmpty())
-            throw new GuacamoleClientException("Please give a reason for the denial.");
-        if (trimmed.length() > MAX_REASON_LENGTH)
-            throw new GuacamoleClientException("The reason is limited to " + MAX_REASON_LENGTH + " characters.");
+        String trimmed = CheckoutRules.validateReason(reason, "Please give a reason for the denial.");
 
         ApprovalRequest request = requireQualified(requestId, approver);
         if (request.getUsername().equals(approver.getUsername()))

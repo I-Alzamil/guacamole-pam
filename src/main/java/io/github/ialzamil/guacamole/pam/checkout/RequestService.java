@@ -114,7 +114,7 @@ public class RequestService {
 
         // Read once for every connection, not once per connection
         Map<Integer, List<Checkout>> active = new HashMap<>();
-        for (Checkout checkout : checkouts.listActive()) {
+        for (Checkout checkout : checkouts.listCurrent()) {
             Integer id = Values.parseId(checkout.getConnectionIdentifier());
             if (id != null)
                 active.computeIfAbsent(id, key -> new ArrayList<>()).add(checkout);
@@ -191,7 +191,8 @@ public class RequestService {
                 throw new GuacamoleClientException("No password is stored for this account yet.");
         }
 
-        Checkout checkout = checkouts.getActive(id, username);
+        // Their checkout now, unless they ask for a time ahead
+        Checkout checkout = starts == null ? checkouts.getActive(id, username) : null;
         if (checkout != null)
             return showAgain(target, username, checkout);
 
@@ -412,8 +413,15 @@ public class RequestService {
             try {
                 grantExtension(request, username);
             }
-            catch (GuacamoleClientException e) {
-                approvals.decide(request.getId(), ApprovalRequest.CANCELLED, username, remoteHost);
+            catch (GuacamoleException | RuntimeException e) {
+                // Not left pending, awaiting an approval it never needed
+                try {
+                    approvals.decide(request.getId(), ApprovalRequest.CANCELLED, username, remoteHost);
+                }
+                catch (GuacamoleException cancelFailed) {
+                    logger.warn("Unable to cancel request {}, which could not extend checkout {}: {}",
+                            request.getId(), checkout.getId(), cancelFailed.getMessage());
+                }
                 throw e;
             }
             approvals.markApproved(request.getId(), checkout.getId(), username);
@@ -530,7 +538,7 @@ public class RequestService {
                             + "\" now.");
             }
         }
-        for (Checkout active : checkouts.listActive(target.getId())) {
+        for (Checkout active : checkouts.listCurrent(target.getId())) {
             if (active.isExclusive())
                 throw new GuacamoleClientException("This is checked out by \""
                         + active.getUsername() + "\" until it is released or expires.");
@@ -544,7 +552,7 @@ public class RequestService {
             throws GuacamoleException {
         int id = target.getId();
         boolean approval = !administrator && CheckoutRules.getApprovalsRequired(target) > 0;
-        return toRequest(target, platform, username, administrator, checkouts.listActive(id),
+        return toRequest(target, platform, username, administrator, checkouts.listCurrent(id),
                 approval ? approvals.getPending(id, username) : null,
                 approval ? approvals.getLatest(id, username) : null, approvals.listReservations(id));
     }
