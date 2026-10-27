@@ -193,7 +193,8 @@ sessions in memory, and reads the settings again only after changing them.
 
 Each server keeps its own pool of up to 10 database connections, besides
 Guacamole's own, plus one held for the lock and one for each rotation
-running with the HA module. Change the limit with
+running with the HA module, whose own pool holds up to 10 more (one while
+idle). Change the limit with
 `pam-database-max-connections` in `guacamole.properties`, keeping the total
 across servers within the database's own limit (`max_connections` on
 PostgreSQL and MySQL). The lock needs the database's own locks to reach the
