@@ -115,7 +115,7 @@ public final class RotationService {
      * Where the pending password can be read, in messages.
      */
     private static final String PENDING_HINT = " (encrypted if \"pam-encryption-key\" is set: see \"Reading an"
-            + " encrypted secret\" in the README)";
+            + " encrypted secret\" in docs/encryption.md)";
 
     private final PamDatabase database;
 

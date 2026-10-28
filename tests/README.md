@@ -49,9 +49,9 @@ lab/lab.sh app --ha services   # --ha: a second server, both with the HA module,
 `lab.sh seed` is not needed: suites create what they use.
 
 The suites run against whichever database `lab.sh` started: PostgreSQL by
-default, or `PAM_DB=mysql`, `mariadb` or `sqlserver` (see the main README's
-Development section). Queries they make directly go through `sql` in
-`lab/database.sh`, so every suite runs on each of them.
+default, or `PAM_DB=mysql`, `mariadb` or `sqlserver` (see
+[docs/development.md](../docs/development.md)). Queries they make directly go
+through `sql` in `lab/database.sh`, so every suite runs on each of them.
 
 Importing settings from `guacamole.properties` needs a server started with
 them, so it's checked by hand: start another Guacamole on the lab's database
