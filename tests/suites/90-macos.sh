@@ -28,10 +28,17 @@ keychain_opens() {
 }
 
 section "macOS: the account's password and its login keychain's"
+# The suite changes the account's password and deletes its login keychain:
+# it stops here unless the account is the throwaway one it needs
+FAILED_BEFORE=$T2_FAILED
 check "precondition: the account's password is known" yes "$(mac_accepts "$T2_MACOS_USER" "$T2_MACOS_PASSWORD")"
 check "precondition: its login keychain uses the same password" yes "$(keychain_opens "$T2_MACOS_PASSWORD" "$T2_MACOS_PASSWORD")"
 check "precondition: it is not an administrator" no \
     "$(mac_run "$T2_MACOS_PASSWORD" 'id -Gn' | tr ' ' '\n' | grep -qx admin && echo yes || echo no)"
+if [ "$T2_FAILED" -ne "$FAILED_BEFORE" ]; then
+    section "Stopped: $T2_MACOS_USER is not a throwaway standard account, so it is left unchanged"
+    return 0
+fi
 
 MACOS=$(platform_id "macOS")
 MAC_HOST_KEY=$(ssh-keyscan -t ed25519 "$T2_MACOS_HOST" 2>/dev/null | ssh-keygen -lf - | awk '{print $2}')
