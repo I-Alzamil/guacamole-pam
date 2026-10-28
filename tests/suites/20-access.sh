@@ -204,6 +204,14 @@ check "the open connection needs no request" 200 "$(tunnel "$REQUESTER" "$OPEN" 
 check_contains "an Account refuses any session, as forbidden (which the web UI explains)" "403 This is an Account" "$(tunnel "$REQUESTER" "$ACCOUNT" c)"
 check "the requester checks out the gated connection" 200 "$(status_of "$(api POST "$PAM/requests/$GATED" "$REQUESTER" '{"reason":"T2 maintenance"}')")"
 check "...and can now open it" 200 "$(tunnel "$REQUESTER" "$GATED" c)"
+# The browser counts down by the server's time, not by its own clock
+check "the server's time is that its checkout ends by, the duration before its end" yes \
+    "$(json_get "$(api GET "$PAM/requests/$GATED" "$REQUESTER" | cut -d' ' -f2-)" \
+        "d['expires'], d['durationMinutes']" | tr -d '(),' | {
+        read -r expires minutes
+        now=$(json_get "$(api GET "$PAM/time" "$REQUESTER" | cut -d' ' -f2-)" "d['now']")
+        left=$(( (expires - now) / 1000 ))
+        [ "$left" -gt $(( minutes * 60 - 30 )) ] && [ "$left" -le $(( minutes * 60 )) ] && echo yes || echo "$left s left"; })"
 ACTIVE=$(curl -s "$PAM/checkouts/active?token=$ADMIN" | python3 -I -c "
 import sys,json
 m=[c['id'] for c in json.load(sys.stdin) if c['username']=='t2-requester' and c['connectionIdentifier']==sys.argv[1]]

@@ -9,7 +9,7 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
 
     var service = {};
 
-    var request = function request(method, path, data, params) {
+    var send = function send(method, path, data, params) {
 
         // Once logged out, or once the session ended on the server, never
         // ask without a token: Guacamole 1.6 may then end the session of
@@ -26,6 +26,64 @@ angular.module('guacPam').factory('pamService', ['$injector', function pamServic
             data   : data
         });
 
+    };
+
+    /**
+     * How often the server's clock is compared with the browser's, in
+     * milliseconds.
+     */
+    var CLOCK_CHECK_INTERVAL = 300000;
+
+    /**
+     * How far the server's clock (the database's, which the times of
+     * checkouts and requests follow) is ahead of the browser's, in
+     * milliseconds, as last measured; when, by the browser's clock, or null
+     * until measured; and the measure under way, or null.
+     */
+    var clockOffset = 0;
+    var clockChecked = null;
+    var clockPending = null;
+
+    /**
+     * Measures the server's clock again if not measured lately. Resolves
+     * once done, even if it fails (the last difference is then kept).
+     */
+    var syncClock = function syncClock() {
+        if (clockPending)
+            return clockPending;
+        // Either way, as the browser's clock may have been set back
+        if (clockChecked !== null && Math.abs(Date.now() - clockChecked) < CLOCK_CHECK_INTERVAL)
+            return $q.resolve();
+        var sent = Date.now();
+        var pending = send('GET', 'time').then(function timeRetrieved(time) {
+            var received = Date.now();
+            clockOffset = time.now - Math.round((sent + received) / 2);
+            clockChecked = received;
+        }, angular.noop)['finally'](function clockSynced() {
+            if (clockPending === pending)
+                clockPending = null;
+        });
+        clockPending = pending;
+        return pending;
+    };
+
+    /**
+     * Calls the API once the server's clock is known, so what it returns
+     * is compared with {@link service.now}.
+     */
+    var request = function request(method, path, data, params) {
+        return syncClock().then(function clockKnown() {
+            return send(method, path, data, params);
+        });
+    };
+
+    /**
+     * The server's time now, in milliseconds since the epoch: what the times
+     * the API returns are compared with, rather than the browser's clock,
+     * which may differ from the server's.
+     */
+    service.now = function now() {
+        return Date.now() + clockOffset;
     };
 
     /**

@@ -75,14 +75,14 @@ angular.module('guacPam').factory('pamRequestService', ['$injector', function pa
         angular.forEach(requestable, function checkEntry(entry) {
             var wait = null;
             if (entry.mine && entry.expires)
-                wait = Math.max(0, entry.expires - Date.now()) + 1000;
+                wait = Math.max(0, entry.expires - pamService.now()) + 1000;
             else if (entry.pending)
                 wait = PENDING_POLL_INTERVAL;
             else if (entry.reservation)
-                wait = Math.max(0, (entry.reservation.starts > Date.now() ? entry.reservation.starts
-                        : entry.reservation.ends) - Date.now()) + 1000;
-            // Never sooner than MIN_REFRESH_DELAY: with the browser's clock
-            // ahead of the server's, the end it waits for looks past
+                wait = Math.max(0, (entry.reservation.starts > pamService.now() ? entry.reservation.starts
+                        : entry.reservation.ends) - pamService.now()) + 1000;
+            // Never sooner than MIN_REFRESH_DELAY: an end just past, until
+            // the server sees it so, would refresh over and over
             if (wait !== null)
                 wait = Math.max(MIN_REFRESH_DELAY, Math.min(wait, MAX_REFRESH_DELAY));
             if (wait !== null && (delay === null || wait < delay))

@@ -25,6 +25,7 @@ angular.module('guacPam').directive('pamConnectionStatus', [function pamConnecti
 
             var $filter           = $injector.get('$filter');
             var pamRequestService = $injector.get('pamRequestService');
+            var pamService        = $injector.get('pamService');
 
             var entry = function entry() {
                 return $scope.item ? pamRequestService.getEntry($scope.item.identifier) : null;
@@ -42,11 +43,11 @@ angular.module('guacPam').directive('pamConnectionStatus', [function pamConnecti
                 var current = entry();
                 if (!current)
                     return null;
-                if (current.mine && (!current.expires || current.expires > Date.now()))
+                if (current.mine && (!current.expires || current.expires > pamService.now()))
                     return 'held';
                 if (current.pending)
                     return 'pending';
-                if (current.reservation && current.reservation.ends > Date.now())
+                if (current.reservation && current.reservation.ends > pamService.now())
                     return 'reserved';
                 return null;
             };

@@ -23,6 +23,7 @@ import io.github.ialzamil.guacamole.pam.approval.ApprovalRepository;
 import io.github.ialzamil.guacamole.pam.approval.ApprovalRequest;
 import io.github.ialzamil.guacamole.pam.db.ConnectionRepository.Target;
 import io.github.ialzamil.guacamole.pam.db.ConnectionRepository;
+import io.github.ialzamil.guacamole.pam.db.PamDatabase;
 import io.github.ialzamil.guacamole.pam.notification.Event;
 import io.github.ialzamil.guacamole.pam.notification.EventType;
 import io.github.ialzamil.guacamole.pam.notification.Events;
@@ -48,6 +49,8 @@ public class RequestService {
 
     private static final Logger logger = LoggerFactory.getLogger(RequestService.class);
 
+    private final PamDatabase database;
+
     private final ConnectionRepository connections;
 
     private final PlatformRepository platforms;
@@ -64,9 +67,10 @@ public class RequestService {
 
     private final Events events;
 
-    public RequestService(ConnectionRepository connections, PlatformRepository platforms,
+    public RequestService(PamDatabase database, ConnectionRepository connections, PlatformRepository platforms,
             CheckoutRepository checkouts, ApprovalRepository approvals, RotationService rotationService,
             CheckoutService checkoutService, Events events) {
+        this.database = database;
         this.events = events;
         this.connections = connections;
         this.platforms = platforms;
@@ -198,7 +202,7 @@ public class RequestService {
 
         // The user's reservation, once it started
         ApprovalRequest reservation = starts == null ? approvals.getReservation(id, username) : null;
-        if (reservation != null && reservation.getStarts() <= System.currentTimeMillis())
+        if (reservation != null && reservation.getStarts() <= database.now())
             return useReservation(target, username, remoteHost, reservation);
 
         int approvalsRequired = administrator ? 0 : CheckoutRules.getApprovalsRequired(target);
@@ -260,7 +264,7 @@ public class RequestService {
         if (starts == null)
             requireAvailable(target, username);
         else {
-            CheckoutRules.validateStart(starts);
+            CheckoutRules.validateStart(starts, database.now());
             long end = starts + CheckoutRules.getDuration(target) * 60000L * periods;
             ends = end;
             when = ", from " + Instant.ofEpochMilli(starts) + " to " + Instant.ofEpochMilli(end);
@@ -532,7 +536,7 @@ public class RequestService {
      */
     private void requireAvailable(Target target, String username) throws GuacamoleException {
         if (CheckoutRules.isExclusive(target)) {
-            long now = System.currentTimeMillis();
+            long now = database.now();
             for (ApprovalRequest reservation : approvals.listReservations(target.getId())) {
                 if (!reservation.getUsername().equals(username) && reservation.getStarts() <= now)
                     throw new GuacamoleClientException("This is reserved by \"" + reservation.getUsername()

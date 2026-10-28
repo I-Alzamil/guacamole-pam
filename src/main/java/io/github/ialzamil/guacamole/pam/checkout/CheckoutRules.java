@@ -84,10 +84,9 @@ public final class CheckoutRules {
 
     /**
      * Refuses a start of access requested ahead of time that is past, or too
-     * far ahead.
+     * far ahead, of the given time (the database's).
      */
-    static void validateStart(long starts) throws GuacamoleClientException {
-        long now = System.currentTimeMillis();
+    static void validateStart(long starts, long now) throws GuacamoleClientException {
         if (starts < now - START_TOLERANCE_MS)
             throw new GuacamoleClientException("Please choose a start in the future.");
         if (starts > now + MAX_DAYS_AHEAD * 24L * 3600000L)

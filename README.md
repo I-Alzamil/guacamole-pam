@@ -126,6 +126,12 @@ named `pam_*`, from `schema/postgresql.sql`, `schema/mysql.sql` or
 "Unix", "macOS" and "Windows". Later starts find the tables and leave them
 alone. On MySQL and SQL Server, the extension stores its times in UTC.
 
+Times of checkouts and requests follow the database's clock, whatever the
+clocks of Guacamole's server or of the browsers say: a checkout counts down
+in the browser by the server's time. The log warns when the database's clock
+is more than 5 seconds from Guacamole's server's; keep both synchronized
+(NTP) all the same, as Guacamole's own times follow its server's.
+
 ### If Guacamole's database user may not create tables
 
 Guacamole's installation guide grants its database user only

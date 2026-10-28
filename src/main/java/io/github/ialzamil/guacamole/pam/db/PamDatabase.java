@@ -10,6 +10,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -78,6 +79,18 @@ public class PamDatabase {
     private static final long SCHEMA_LOCK_WAIT_MS = 30000;
     private static final long SCHEMA_LOCK_RETRY_MS = 250;
 
+    /**
+     * How often the database's clock is compared with this server's, in
+     * milliseconds.
+     */
+    private static final long CLOCK_CHECK_MS = 300000;
+
+    /**
+     * How far the database's clock may be from this server's, in
+     * milliseconds, before a warning is logged.
+     */
+    private static final long CLOCK_WARNING_MS = 5000;
+
     private final DatabaseSettings settings;
 
     private final SqlDialect dialect;
@@ -107,6 +120,20 @@ public class PamDatabase {
     private boolean closed = false;
 
     private volatile boolean schemaReady = false;
+
+    /**
+     * How far the database's clock is ahead of this server's, in
+     * milliseconds, as last measured, and when this server's clock said it
+     * was measured (0 until it was).
+     */
+    private volatile long clockOffset = 0;
+    private volatile long clockChecked = 0;
+
+    /**
+     * Whether a thread is measuring the database's clock, so others go on
+     * with the last difference measured rather than wait.
+     */
+    private final AtomicBoolean checkingClock = new AtomicBoolean();
 
     /**
      * Run once the schema script created the tables of a fresh install.
@@ -159,6 +186,69 @@ public class PamDatabase {
      */
     public SqlDialect getDialect() {
         return dialect;
+    }
+
+    /**
+     * The database's time now, in milliseconds since the epoch: the clock
+     * that times stored in the database are written by, and compared with,
+     * which this server's clock and the browsers' may differ from. Taken
+     * from this server's clock, corrected by the difference last measured,
+     * which is measured again every {@link #CLOCK_CHECK_MS}. Until it can
+     * be measured, this server's time.
+     */
+    public long now() {
+        if (isClockCheckDue() && checkingClock.compareAndSet(false, true)) {
+            try {
+                checkClock();
+            }
+            finally {
+                checkingClock.set(false);
+            }
+        }
+        return System.currentTimeMillis() + clockOffset;
+    }
+
+    /**
+     * Whether the database's clock was not measured lately, by this server's
+     * clock, which may also have been set back since.
+     */
+    private boolean isClockCheckDue() {
+        return Math.abs(System.currentTimeMillis() - clockChecked) >= CLOCK_CHECK_MS;
+    }
+
+    /**
+     * Measures the database's clock, over a connection of its own: callers
+     * may hold a pooled connection, and never ask for another.
+     */
+    private void checkClock() {
+
+        if (!isClockCheckDue())
+            return;
+
+        // Not measured again before CLOCK_CHECK_MS, even if this fails
+        clockChecked = System.currentTimeMillis();
+        try (Connection connection = connectDirectly();
+             Statement statement = connection.createStatement()) {
+
+            // Halfway through the query, not counting the connection's setup
+            long before = System.currentTimeMillis();
+            long time;
+            try (ResultSet results = statement.executeQuery("SELECT " + dialect.now())) {
+                if (!results.next())
+                    return;
+                time = SqlDialect.getTimestamp(results, 1).getTime();
+            }
+            long offset = time - (before + System.currentTimeMillis()) / 2;
+            if (Math.abs(offset) > CLOCK_WARNING_MS && Math.abs(clockOffset) <= CLOCK_WARNING_MS)
+                logger.warn("The clock of the PAM database is {} seconds {} this server's. PAM uses the"
+                        + " database's, but both should be synchronized (NTP).",
+                        Math.abs(offset) / 1000, offset > 0 ? "ahead of" : "behind");
+            clockOffset = offset;
+        }
+        catch (SQLException e) {
+            logger.debug("Unable to read the time of the PAM database: {}", e.getMessage());
+        }
+
     }
 
     private synchronized HikariDataSource pool() throws GuacamoleServerException {

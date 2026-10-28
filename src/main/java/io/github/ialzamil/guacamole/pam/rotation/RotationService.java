@@ -117,6 +117,8 @@ public final class RotationService {
     private static final String PENDING_HINT = " (encrypted if \"pam-encryption-key\" is set: see \"Reading an"
             + " encrypted secret\" in the README)";
 
+    private final PamDatabase database;
+
     private final PlatformRepository platforms;
 
     private final PasswordPolicyRepository passwordPolicies;
@@ -162,6 +164,7 @@ public final class RotationService {
     public RotationService(PamDatabase database, Coordination coordination, PlatformRepository platforms,
             PasswordPolicyRepository passwordPolicies, ConnectionRepository connections, CheckoutRepository checkouts,
             Events events) {
+        this.database = database;
         this.platforms = platforms;
         this.passwordPolicies = passwordPolicies;
         this.connections = connections;
@@ -612,7 +615,7 @@ public final class RotationService {
      * Whether a periodic rotation of the connection is due, and a failed one
      * may be retried.
      */
-    private static boolean isDue(Target target, Map<String, Platform> all) {
+    private boolean isDue(Target target, Map<String, Platform> all) {
 
         EffectivePolicy policy = EffectivePolicy.of(all.get(target.getAttribute(PamAttributes.PLATFORM)), target);
         if (!Platform.MODE_PERIODIC.equals(policy.getMode()))
@@ -624,19 +627,19 @@ public final class RotationService {
 
         ConnectionRepository.State state = target.getState();
         long lastSuccess = state.getLastSuccess() == null ? 0 : state.getLastSuccess().getTime();
-        return System.currentTimeMillis() >= lastSuccess + TimeUnit.HOURS.toMillis(hours) && isRetryAllowed(target);
+        return database.now() >= lastSuccess + TimeUnit.HOURS.toMillis(hours) && isRetryAllowed(target);
 
     }
 
     /**
      * Whether an automatic rotation may be tried now: the last attempt
-     * succeeded, or failed long enough ago.
+     * succeeded, or failed long enough ago. Its times are the database's.
      */
-    private static boolean isRetryAllowed(Target target) {
+    private boolean isRetryAllowed(Target target) {
         ConnectionRepository.State state = target.getState();
         long lastSuccess = state.getLastSuccess() == null ? 0 : state.getLastSuccess().getTime();
         long lastAttempt = state.getLastAttempt() == null ? 0 : state.getLastAttempt().getTime();
-        return System.currentTimeMillis() >= lastAttempt + RETRY_DELAY_MS || lastAttempt <= lastSuccess;
+        return database.now() >= lastAttempt + RETRY_DELAY_MS || lastAttempt <= lastSuccess;
     }
 
     /**

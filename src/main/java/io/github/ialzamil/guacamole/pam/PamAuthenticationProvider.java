@@ -190,7 +190,7 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
         events.add(new EmailNotifier(settings, emailDirectory, emailPreferences, emailLanguages));
         checkoutService = new CheckoutService(connections, checkouts, platforms, approvals, rotationService,
                 settings, events);
-        requestService = new RequestService(connections, platforms, checkouts, approvals, rotationService,
+        requestService = new RequestService(database, connections, platforms, checkouts, approvals, rotationService,
                 checkoutService, events);
         approvalService = new ApprovalService(approvals, requestService, events);
 
@@ -297,6 +297,14 @@ public class PamAuthenticationProvider extends AbstractAuthenticationProvider {
      */
     public String getManagedDataSource() {
         return managedDataSource;
+    }
+
+    /**
+     * The database's time now, in milliseconds since the epoch, which the
+     * times of checkouts and requests are written by and compared with.
+     */
+    public long now() {
+        return database.now();
     }
 
     public PlatformRepository getPlatforms() {

@@ -66,7 +66,7 @@ angular.module('guacPam').directive('guacSettingsPamHistory', [function guacSett
              * is still active.
              */
             var getDuration = function getDuration(checkout) {
-                return Math.max(0, (checkout.released || Date.now()) - checkout.checkedOut);
+                return Math.max(0, (checkout.released || pamService.now()) - checkout.checkedOut);
             };
 
             /**

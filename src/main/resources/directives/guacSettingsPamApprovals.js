@@ -243,7 +243,7 @@ angular.module('guacPam').directive('guacSettingsPamApprovals', [function guacSe
              */
             $scope.isUnused = function isUnused(request) {
                 return request.status === 'APPROVED' && !!request.starts && !request.checkoutId
-                    && request.ends <= Date.now();
+                    && request.ends <= pamService.now();
             };
 
             /**

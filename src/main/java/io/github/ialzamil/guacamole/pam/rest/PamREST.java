@@ -96,6 +96,17 @@ public class PamREST extends PamResource {
     }
 
     /**
+     * The server's time now ("now", in milliseconds since the epoch): that
+     * of the database, which the times of checkouts and requests follow, so
+     * the browser counts down to them by it rather than by its own clock.
+     */
+    @GET
+    @Path("time")
+    public Map<String, Long> getTime() {
+        return Collections.singletonMap("now", provider.now());
+    }
+
+    /**
      * Whether the current user may manage platforms and rotations, whether
      * they are an approver, which notification badges they want ("badges",
      * by name), whether the HA module runs ("ha"), and their emails

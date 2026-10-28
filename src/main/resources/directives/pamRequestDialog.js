@@ -124,7 +124,7 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
              */
             $scope.reservationStarted = function reservationStarted() {
                 var reservation = $scope.request && $scope.request.reservation;
-                return !!reservation && reservation.starts <= Date.now();
+                return !!reservation && reservation.starts <= pamService.now();
             };
 
             /**
@@ -132,7 +132,7 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
              */
             $scope.reservedNow = function reservedNow() {
                 var request = $scope.request;
-                return !!request && !!request.reservedBy && request.reservedFrom <= Date.now();
+                return !!request && !!request.reservedBy && request.reservedFrom <= pamService.now();
             };
 
             /**
@@ -186,7 +186,7 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                 var format = function format(time) {
                     return $filter('date')(time, 'yyyy-MM-ddTHH:mm');
                 };
-                var now = Date.now();
+                var now = pamService.now();
                 return { min : format(now), max : format(now + MAX_DAYS_AHEAD * 24 * 3600 * 1000) };
             };
 
@@ -295,7 +295,7 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
              * Resets the form, picking the start of the next hour for later.
              */
             var resetForm = function resetForm() {
-                var next = new Date();
+                var next = new Date(pamService.now());
                 next.setHours(next.getHours() + 1, 0, 0, 0);
                 $scope.form.reason = '';
                 $scope.form.when = 'now';
@@ -312,7 +312,7 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
                 $interval.cancel(reservationTimer);
                 reservationTimer = null;
                 var reservation = $scope.request && $scope.request.reservation;
-                var wait = reservation ? reservation.starts - Date.now() : -1;
+                var wait = reservation ? reservation.starts - pamService.now() : -1;
                 if (wait > 0 && wait < 24 * 3600 * 1000)
                     reservationTimer = $interval(load, wait + 1000, 1);
             };
@@ -331,7 +331,7 @@ angular.module('guacPam').directive('pamRequestDialog', [function pamRequestDial
             var startCountdown = function startCountdown(expires) {
                 stopCountdown();
                 var tick = function tick() {
-                    $scope.remaining = Math.max(0, Math.round((expires - Date.now()) / 1000));
+                    $scope.remaining = Math.max(0, Math.round((expires - pamService.now()) / 1000));
                     if ($scope.remaining === 0) {
                         stopCountdown();
                         forgetPassword();

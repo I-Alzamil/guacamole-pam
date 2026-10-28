@@ -433,7 +433,7 @@ public class CheckoutRepository {
                 // Read again, now that nothing else can change it
                 Checkout checkout = get(connection, checkoutId);
                 if (checkout == null || checkout.getConnectionIdentifier() == null || checkout.getReleased() != null
-                        || checkout.getExpires() <= System.currentTimeMillis())
+                        || checkout.getExpires() <= database.now())
                     throw new GuacamoleClientException("This checkout has ended.");
                 if (checkout.getExtensions() >= checkout.getMaxExtensions())
                     throw new GuacamoleClientException("This checkout cannot be extended any more.");

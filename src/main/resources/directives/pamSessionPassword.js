@@ -62,7 +62,7 @@ angular.module('guacPam').directive('pamSessionPassword', [function pamSessionPa
             $scope.isShown = function isShown() {
                 var entry = $scope.entry();
                 return !!entry && !entry.account && entry.passwordShown && entry.mine
-                    && (!entry.expires || entry.expires > Date.now());
+                    && (!entry.expires || entry.expires > pamService.now());
             };
 
             var forget = function forget() {
