@@ -4,10 +4,11 @@ Notable changes of each release. Versions follow
 [semantic versioning](https://semver.org/); each is built for one Guacamole
 release, named below.
 
-## 1.0.0 (2026-10-27)
+## 1.0.0 (2026-10-28)
 
 The first release, for Guacamole 1.6.0, on PostgreSQL, MySQL, MariaDB or SQL
-Server. See the [README](README.md) for installing and using it.
+Server. See the [README](README.md), and the guides in [docs](docs), for
+installing and using it.
 
 ### Password rotation
 
@@ -48,7 +49,7 @@ Server. See the [README](README.md) for installing and using it.
   requesters, each able to turn each kind off. Their templates and languages
   are edited, imported and exported on their own tab; English is built in.
 
-### Several servers
+### Multi-instance support
 
 - Without the HA module, one server works and the others wait on standby,
   taking over once it stops.
