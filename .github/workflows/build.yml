@@ -29,8 +29,8 @@ jobs:
       matrix:
         java: [11, 17, 21]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
@@ -39,7 +39,7 @@ jobs:
         run: mvn --batch-mode --no-transfer-progress verify
       - name: Keep the jar
         if: matrix.java == 17
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: guacamole-pam
           path: target/guacamole-pam-*.jar
@@ -49,8 +49,8 @@ jobs:
     name: Known vulnerabilities
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 17
@@ -62,7 +62,7 @@ jobs:
     name: Lab and test scripts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check shell syntax
         run: |
           find build.sh check-dependencies.sh lab tests -name '*.sh' -print0 | xargs -0 -n1 bash -n
