@@ -70,10 +70,10 @@ class SessionRegistry implements Coordination.Sessions {
         private final SessionAccess access;
 
         /**
-         * When it started, by the database's clock where it was recorded, so
-         * it compares with the end of checkouts.
+         * When it started, by the database's clock (where it was recorded,
+         * if it was), so it compares with the end of checkouts.
          */
-        private volatile long started = System.currentTimeMillis();
+        private volatile long started;
 
         private volatile boolean recorded = false;
 
@@ -128,6 +128,8 @@ class SessionRegistry implements Coordination.Sessions {
     void started(String identifier, String username, GuacamoleTunnel tunnel, SessionAccess access) {
 
         Session session = new Session(identifier, username, tunnel, access);
+        // Until recorded, or if it never is: by the database's clock too
+        session.started = database.now();
         local.put(tunnel, session);
 
         if (Values.parseId(identifier) == null)
