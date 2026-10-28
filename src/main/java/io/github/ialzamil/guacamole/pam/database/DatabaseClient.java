@@ -261,8 +261,8 @@ public class DatabaseClient {
                 }
                 result.passed("It has CREATE USER, so it may change other accounts' passwords.");
                 if (isMariaDb(connection)) {
-                    try (Statement statement = connection.createStatement();
-                         ResultSet results = statement.executeQuery("SELECT 1 FROM mysql.global_priv LIMIT 1")) {
+                    try (Statement statement = connection.createStatement()) {
+                        statement.executeQuery("SELECT 1 FROM mysql.global_priv LIMIT 1").close();
                         result.passed("It may read accounts' authentication methods, which MariaDB needs kept.");
                     }
                     catch (SQLException e) {

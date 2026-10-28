@@ -169,10 +169,6 @@ final class Tunnels {
     }
 
     /**
-     * Whether a host name is this server itself, which other servers reach
-     * by another name.
-     */
-    /**
      * Closes a tunnel, if any, ignoring a failure to.
      */
     static void closeQuietly(GuacamoleTunnel tunnel) {

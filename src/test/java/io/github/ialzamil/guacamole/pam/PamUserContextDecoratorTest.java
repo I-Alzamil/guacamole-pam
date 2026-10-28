@@ -189,7 +189,9 @@ public class PamUserContextDecoratorTest {
             return null;
         }
 
+        // Still declared by Guacamole's Connection, though deprecated
         @Override
+        @Deprecated
         public java.util.List<? extends ConnectionRecord> getHistory() {
             return Collections.emptyList();
         }
