@@ -12,7 +12,9 @@ requests.
   or Account requires a request, so their access is in the history like
   anyone else's. To let administrators connect and check out Accounts without
   any request instead (logged), tick **Administrators bypass requests** on
-  the **PAM Settings** tab.
+  the **PAM Settings** tab. To have their requests and extensions need the
+  connection's approvals, as anyone else's do, tick **Administrators need
+  approvals** there instead; they can't approve their own.
 - **Extensions are allowed by default**, twice per checkout. Each
   connection's *Access requests* section can allow or refuse them, and set
   how many and how long. The default for every connection is set on the

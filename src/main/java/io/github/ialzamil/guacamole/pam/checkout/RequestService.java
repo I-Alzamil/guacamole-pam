@@ -205,10 +205,10 @@ public class RequestService {
         if (reservation != null && reservation.getStarts() <= database.now())
             return useReservation(target, username, remoteHost, reservation);
 
-        int approvalsRequired = administrator ? 0 : CheckoutRules.getApprovalsRequired(target);
+        int approvalsRequired = rules.getApprovalsRequired(target, administrator);
         if (starts != null && approvalsRequired == 0)
             throw new GuacamoleClientException("Only access needing approval is requested ahead of time.");
-        if (administrator && CheckoutRules.getApprovalsRequired(target) > 0)
+        if (rules.skipsApprovals(administrator) && CheckoutRules.getApprovalsRequired(target) > 0)
             logger.info("Administrator \"{}\" bypasses the approval of \"{}\".", username,
                     Values.forLog(target.getName()));
 
@@ -399,7 +399,7 @@ public class RequestService {
             trimmed = ADMIN_BYPASS_REASON;
         else
             trimmed = CheckoutRules.validateReason(reason);
-        int approvalsRequired = administrator ? 0 : CheckoutRules.getApprovalsRequired(target);
+        int approvalsRequired = rules.getApprovalsRequired(target, administrator);
         int minutes = CheckoutRules.getExtensionMinutes(target);
 
         ApprovalRequest request = approvals.createExtension(checkout, username, remoteHost, trimmed,
@@ -571,7 +571,7 @@ public class RequestService {
             List<Checkout> active, ApprovalRequest pending, ApprovalRequest latest,
             List<ApprovalRequest> reservations) throws GuacamoleException {
 
-        int approvalsRequired = administrator ? 0 : CheckoutRules.getApprovalsRequired(target);
+        int approvalsRequired = rules.getApprovalsRequired(target, administrator);
         boolean account = CheckoutRules.isAccount(target);
 
         Checkout own = null;

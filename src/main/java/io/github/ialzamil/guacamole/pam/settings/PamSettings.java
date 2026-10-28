@@ -62,6 +62,14 @@ public class PamSettings {
     public static final Setting ADMIN_BYPASS_REQUESTS = Setting.bool(Setting.Section.GENERAL, "pam-admin-bypass-requests", false);
 
     /**
+     * Whether administrators' requests need approvals, as anyone else's do,
+     * rather than being granted at once. Has no effect while they bypass
+     * requests.
+     */
+    public static final Setting ADMIN_REQUIRE_APPROVALS = Setting.bool(Setting.Section.GENERAL,
+            "pam-admin-require-approvals", false);
+
+    /**
      * Whether holders may extend their checkouts, unless a connection says
      * otherwise.
      */
@@ -76,7 +84,7 @@ public class PamSettings {
     /**
      * Every setting, in the order the settings page shows them.
      */
-    public static final List<Setting> ALL = all(Arrays.asList(ADMIN_BYPASS_REQUESTS, EXTENSIONS_ENABLED,
+    public static final List<Setting> ALL = all(Arrays.asList(ADMIN_BYPASS_REQUESTS, ADMIN_REQUIRE_APPROVALS, EXTENSIONS_ENABLED,
             MAX_EXTENSIONS), SyslogSettings.ALL, EmailSettings.ALL);
 
     @SafeVarargs
@@ -251,6 +259,10 @@ public class PamSettings {
 
     public boolean isAdminBypassRequests() throws GuacamoleException {
         return (Boolean) get(ADMIN_BYPASS_REQUESTS);
+    }
+
+    public boolean isAdminRequireApprovals() throws GuacamoleException {
+        return (Boolean) get(ADMIN_REQUIRE_APPROVALS);
     }
 
     public boolean isExtensionsEnabled() throws GuacamoleException {

@@ -102,6 +102,24 @@ public final class CheckoutRules {
     }
 
     /**
+     * Whether the user, an administrator or not, is granted what needs
+     * approval without it: administrators are, unless their requests need
+     * approvals ("pam-admin-require-approvals"), and always when they
+     * bypass requests.
+     */
+    boolean skipsApprovals(boolean administrator) throws GuacamoleException {
+        return administrator && (settings.isAdminBypassRequests() || !settings.isAdminRequireApprovals());
+    }
+
+    /**
+     * How many approvals the user's requests, and extensions, of the
+     * connection need.
+     */
+    int getApprovalsRequired(Target target, boolean administrator) throws GuacamoleException {
+        return skipsApprovals(administrator) ? 0 : getApprovalsRequired(target);
+    }
+
+    /**
      * Whether the connection is an Account, checked out for its password.
      */
     public static boolean isAccount(Target target) {

@@ -33,7 +33,8 @@ Server. See the [README](README.md) for installing and using it.
 - Access requests with a reason, time-limited checkouts, and sessions closed
   when they end.
 - Approval by one or more distinct approvers, chosen per connection or
-  connection group, users or groups.
+  connection group, users or groups. Administrators skip approvals, unless
+  set to need them, or bypass requests altogether if allowed.
 - Requests ahead of time, reserving the connection; extensions of a checkout,
   approved like requests.
 - Viewing the password, rotated once the holder is done.

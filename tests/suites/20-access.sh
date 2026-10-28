@@ -258,6 +258,32 @@ check "...but gets the password without approvals" "200 $ACCOUNT_PASSWORD" "$(st
 api POST "$PAM/requests/$ACCOUNT/release" "$ADMIN" >/dev/null
 check_contains "an administrator also needs a checkout to connect" "403 You must request access" "$(tunnel "$ADMIN" "$GATED" c)"
 
+section "Administrators needing approvals (pam-admin-require-approvals)"
+admin_approvals() { api PUT "$PAM/settings" "$ADMIN" "{\"pam-admin-require-approvals\":$1}" >/dev/null; }
+admin_approvals true
+on_cleanup admin_approvals null
+R=$(api POST "$PAM/requests/$ACCOUNT" "$ADMIN" '{"reason":"T2 admin approval"}')
+check "an administrator's request now awaits approval (202)" 202 "$(status_of "$R")"
+ADMIN_ID=$(curl -s "$PAM/approvals/pending?token=$APPROVER1" | python3 -I -c "
+import sys,json
+m=[r['id'] for r in json.load(sys.stdin) if r['username']==sys.argv[1]]
+print(m[0] if m else '')" "$GUAC_ADMIN")
+R=$(api POST "$PAM/approvals/${ADMIN_ID:-0}/approve" "$ADMIN")
+check "...which the administrator cannot approve themselves" "400 You cannot approve your own request." \
+    "$(status_of "$R") $(message_of "$R")"
+api POST "$PAM/approvals/$ADMIN_ID/approve" "$APPROVER1" >/dev/null
+check "...and one approval of the two is not enough" 202 \
+    "$(status_of "$(api POST "$PAM/requests/$ACCOUNT" "$ADMIN" '{"reason":"T2 admin approval"}')")"
+api POST "$PAM/approvals/$ADMIN_ID/approve" "$APPROVER2" >/dev/null
+GRANT=$(api POST "$PAM/requests/$ACCOUNT" "$ADMIN" '{}')
+check "...the second one grants it" "200 $ACCOUNT_PASSWORD" "$(status_of "$GRANT") $(json_get "${GRANT#* }" "d.get('password')")"
+api POST "$PAM/requests/$ACCOUNT/release" "$ADMIN" >/dev/null
+api PUT "$PAM/settings" "$ADMIN" '{"pam-admin-bypass-requests":true}' >/dev/null
+check "letting administrators bypass requests overrides it" yes \
+    "$(json_get "$(api GET "$PAM/requests/$ACCOUNT" "$ADMIN" | cut -d' ' -f2-)" "'yes' if d['bypass'] and d['approvalsRequired'] == 0 else d")"
+api PUT "$PAM/settings" "$ADMIN" '{"pam-admin-bypass-requests":null}' >/dev/null
+admin_approvals null
+
 # ---------------------------------------------------------------- deletion
 section "Deleting a connection keeps its history"
 # Created without a cleanup: deleting it is the test. Its history stays, so

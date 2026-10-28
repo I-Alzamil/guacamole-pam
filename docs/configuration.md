@@ -4,17 +4,18 @@
 
 The **PAM Settings** tab (administrators only) holds the settings shared by
 every Guacamole server using the database: whether administrators bypass
-requests, and whether and how many times checkouts may be extended by
-default. They're stored in the database (`pam_setting`), apply without a
+requests, or need approvals, and whether and how many times checkouts may be
+extended by default. They're stored in the database (`pam_setting`), apply without a
 restart, and reach every server within 5 seconds. Each change is logged with
 who made it. Secrets set there, such as a mail server's password, are
 encrypted like other stored secrets, and never shown again: leave the field
 empty to keep one, or tick **Remove**. **Restore defaults** resets one
 section.
 
-Three of them can also be given in `guacamole.properties`
-(`pam-admin-bypass-requests`, `pam-extensions-enabled`, `pam-max-extensions`,
-or their `PAM_*` variables in the Docker image), to set them up front. A
+Four of them can also be given in `guacamole.properties`
+(`pam-admin-bypass-requests`, `pam-admin-require-approvals`,
+`pam-extensions-enabled`, `pam-max-extensions`, or their `PAM_*` variables in
+the Docker image), to set them up front. A
 value set there is imported once, by the first server reading the settings,
 unless the setting was already decided in the database; from then on it's
 ignored, with a warning in the log until removed.

@@ -536,9 +536,11 @@
     "PAM_SETTINGS": {
         "ACTION_RESTORE_DEFAULTS": "Restore defaults",
         "FIELD_HEADER_ADMIN_BYPASS_REQUESTS": "Administrators bypass requests:",
+        "FIELD_HEADER_ADMIN_REQUIRE_APPROVALS": "Administrators need approvals:",
         "FIELD_HEADER_EXTENSIONS_ENABLED": "Allow extensions:",
         "FIELD_HEADER_MAX_EXTENSIONS": "Extensions per checkout:",
-        "HELP_ADMIN_BYPASS_REQUESTS": "Administrators connect to connections, and check out Accounts, without a request, which is logged. Otherwise they skip approvals only, and give a reason like anyone else.",
+        "HELP_ADMIN_BYPASS_REQUESTS": "Administrators connect to connections, and check out Accounts, without a request, which is logged. Otherwise they give a reason like anyone else, and skip approvals unless they need them.",
+        "HELP_ADMIN_REQUIRE_APPROVALS": "Administrators' requests, and extensions, need the approvals of the connection, as anyone else's do, from other approvers. Otherwise administrators are granted access at once. Has no effect while administrators bypass requests.",
         "HELP_EXTENSIONS_ENABLED": "Whether holders may extend their checkouts, for connections leaving it to this setting.",
         "HELP_MAX_EXTENSIONS": "How many times a checkout may be extended, for connections leaving it to this setting. Requests may also ask for up to one more than this many time limits at once.",
         "HELP_SHARED": "Shared by every Guacamole server using this database, and applied to all of them within seconds, without a restart. Connections can override some of them.",
